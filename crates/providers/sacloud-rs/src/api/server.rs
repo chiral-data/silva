@@ -1,13 +1,36 @@
+//! Sakura Internet API - Server
 //! https://manual.sakura.ad.jp/cloud-api/1.1/server/index.html
 //!
-//! API                                 Parameters              Response
-//! ---------------------------------------------------------------------------
-//! GET     /server                     -                       ServerList
-//! POST    /server                     Params                  ServerCreated
-//! GET     /server/:serverid           -                       ServerQuery
-//! GET     /server/:serverid/power
-//! PUT     /server/:serverid/power
-//! DELETE  /server/:serverid/power     ParamsDeleteServer
+//! - [ ] GET    /privatehost                         - 専有ホスト契約を検索・一覧を取得
+//! - [ ] POST   /privatehost                         - 専有ホスト契約を作成
+//! - [ ] GET    /privatehost/:privatehostid          - 該当IDの専有ホスト契約情報を取得
+//! - [ ] PUT    /privatehost/:privatehostid          - 専有ホスト契約情報を更新
+//! - [ ] DELETE /privatehost/:privatehostid          - 該当IDの専有ホスト契約を削除
+//! - [x] GET    /server                              - サーバを検索・一覧を取得
+//! - [x] POST   /server                              - サーバを作成
+//! - [ ] GET    /server/:serverid                    - 該当IDのサーバ情報を取得
+//! - [x] PUT    /server/:serverid                    - サーバ情報を更新
+//! - [ ] DELETE /server/:serverid                    - 該当IDのサーバを削除
+//! - [ ] GET    /server/:serverid/cdrom              - 該当IDのサーバに挿入されたISOイメージの状態を取得
+//! - [ ] PUT    /server/:serverid/cdrom              - 該当IDのサーバにISOイメージを挿入
+//! - [ ] DELETE /server/:serverid/cdrom              - 該当IDのサーバからISOイメージを排出
+//! - [ ] GET    /server/:serverid/interface          - 該当IDのサーバが備えるインタフェースを取得
+//! - [ ] PUT    /server/:serverid/keyboard           - 該当IDのサーバのキーボードを押下
+//! - [ ] GET    /server/:serverid/monitor            - 該当IDのサーバのリソースモニタ情報を取得
+//! - [ ] PUT    /server/:serverid/mouse/:mouseindex  - 該当IDのサーバのマウスを操作
+//! - [ ] PUT    /server/:serverid/plan               - 該当IDのサーバのプランを変更
+//! - [x] GET    /server/:serverid/power              - 該当IDのサーバの起動状態を取得
+//! - [x] PUT    /server/:serverid/power              - 該当IDのサーバを起動
+//! - [x] DELETE /server/:serverid/power              - 該当IDのサーバを停止、または強制停止
+//! - [ ] PUT    /server/:serverid/qemu/nmi           - nmi 情報の取得
+//! - [ ] PUT    /server/:serverid/reset              - 該当IDのサーバのリセットボタンを押下
+//! - [ ] GET    /server/:serverid/tag                - 該当IDのサーバに付けられたタグを取得
+//! - [ ] PUT    /server/:serverid/tag                - 該当IDのサーバに付けられるタグを変更
+//! - [ ] PUT    /server/:serverid/to/plan/:planid    - 該当IDのサーバのプランを変更
+//! - [ ] GET    /server/:serverid/vnc/proxy          - 該当IDのサーバのVNCプロクシ情報を取得
+//! - [ ] GET    /server/:serverid/vnc/size           - 該当IDのサーバの現在の画面サイズを取得
+//! - [ ] GET    /server/:serverid/vnc/snapshot       - 該当IDのサーバのVNCスナップショットを取得
+//! - [ ] GET    /server/tag                          - サーバタグ一覧を取得
 
 use serde::{Deserialize, Serialize};
 

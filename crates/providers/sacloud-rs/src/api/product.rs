@@ -1,3 +1,19 @@
+//! Sakura Internet API - Product
+//! https://manual.sakura.ad.jp/cloud-api/1.1/product/index.html
+//!
+//! - [x] GET    /product/disk                          - ディスクプラン一覧を取得
+//! - [ ] GET    /product/disk/:diskplanid              - 該当IDのディスクプラン情報を取得
+//! - [ ] GET    /product/internet                      - ルータ帯域一覧を取得
+//! - [ ] GET    /product/internet/:internetplanid      - 該当IDのルータ帯域情報を取得
+//! - [ ] GET    /product/license                       - ライセンス情報一覧を取得
+//! - [ ] GET    /product/license/:licenseid            - 該当IDのライセンス情報を取得
+//! - [ ] GET    /product/privatehost                   - 専有ホストプラン一覧を取得
+//! - [ ] GET    /product/privatehost/:privatehostplanid - 該当IDの専有ホストプラン情報を取得
+//! - [x] GET    /product/server                        - サーバプラン一覧を取得
+//! - [ ] GET    /product/server/:serverplanid          - 該当IDのサーバプラン情報を取得
+//! - [ ] GET    /public/price                          - リクエスト先ゾーンの価格表を取得
+
+
 use serde::{Deserialize, Serialize};
 
 pub mod parameter;

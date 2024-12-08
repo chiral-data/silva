@@ -1,12 +1,21 @@
+//! Sakura Internet API - Disk
 //! https://manual.sakura.ad.jp/cloud-api/1.1/disk/index.html
 //!
-//! API                                         Parameters              Response
-//! ---------------------------------------------------------------------------
-//! GET     /disk                               -                       DiskList
-//! POST    /disk                               Params                  DiskCreated
-//! GET     /disk/:diskid                       -                       DiskQuery
-//! PUT     /disk/:diskid/config                Config                  -
-//! PUT     /disk/:diskid/to/server/:serverid   ParamsEmpty             -
+//! - [x] GET    /disk                           - ディスク一覧を取得
+//! - [x] POST   /disk                           - ディスクを作成
+//! - [ ] GET    /disk/:diskid                   - 該当IDのディスク情報を取得
+//! - [ ] PUT    /disk/:diskid                   - ディスク情報を更新
+//! - [ ] DELETE /disk/:diskid                   - 該当IDのディスクを削除
+//! - [ ] PUT    /disk/:diskid/config            - ディスクの内容を書き換える
+//! - [ ] GET    /disk/:diskid/monitor           - ディスクのリソースモニタ情報を取得
+//! - [ ] PUT    /disk/:diskid/plan              - 該当IDのディスクのプランを変更
+//! - [ ] PUT    /disk/:diskid/resize-partition  - ディスクのパーティションサイズを最適化する
+//! - [ ] GET    /disk/:diskid/tag               - 該当IDのディスクに付けられたタグを取得
+//! - [ ] PUT    /disk/:diskid/tag               - 該当IDのディスクに付けられるタグを変更
+//! - [ ] PUT    /disk/:diskid/to/blank          - ディスクを空にする
+//! - [ ] DELETE /disk/:diskid/to/server         - ディスクとサーバの接続を解除
+//! - [x] PUT    /disk/:diskid/to/server/:serverid - ディスクとサーバを接続
+//! - [ ] GET    /disk/tag                       - ディスクタグ一覧を取得
 
 pub mod parameter;
 pub mod shortcut;
