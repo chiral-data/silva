@@ -1,0 +1,7 @@
+FROM nvcr.io/hpc/gromacs:2023.2
+
+RUN mkdir -p /proj
+ADD ./1AKI_clean.pdb /proj
+ADD ./run.sh /proj
+WORKDIR /proj
+CMD ["sh", "run.sh"]

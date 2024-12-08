@@ -1,0 +1,89 @@
+# The Sakura Internet Cloud SDK for Rust
+
+- [x] implemented and tested
+
+## Implementation Progress 
+- [ ] Server
+    - [ ] GET    /privatehost                         - 専有ホスト契約を検索・一覧を取得
+    - [ ] POST   /privatehost                         - 専有ホスト契約を作成
+    - [ ] GET    /privatehost/:privatehostid          - 該当IDの専有ホスト契約情報を取得
+    - [ ] PUT    /privatehost/:privatehostid          - 専有ホスト契約情報を更新
+    - [ ] DELETE /privatehost/:privatehostid          - 該当IDの専有ホスト契約を削除
+    - [x] GET    /server                              - サーバを検索・一覧を取得
+    - [x] POST   /server                              - サーバを作成
+    - [ ] GET    /server/:serverid                    - 該当IDのサーバ情報を取得
+    - [x] PUT    /server/:serverid                    - サーバ情報を更新
+    - [ ] DELETE /server/:serverid                    - 該当IDのサーバを削除
+    - [ ] GET    /server/:serverid/cdrom              - 該当IDのサーバに挿入されたISOイメージの状態を取得
+    - [ ] PUT    /server/:serverid/cdrom              - 該当IDのサーバにISOイメージを挿入
+    - [ ] DELETE /server/:serverid/cdrom              - 該当IDのサーバからISOイメージを排出
+    - [ ] GET    /server/:serverid/interface          - 該当IDのサーバが備えるインタフェースを取得
+    - [ ] PUT    /server/:serverid/keyboard           - 該当IDのサーバのキーボードを押下
+    - [ ] GET    /server/:serverid/monitor            - 該当IDのサーバのリソースモニタ情報を取得
+    - [ ] PUT    /server/:serverid/mouse/:mouseindex  - 該当IDのサーバのマウスを操作
+    - [ ] PUT    /server/:serverid/plan               - 該当IDのサーバのプランを変更
+    - [x] GET    /server/:serverid/power              - 該当IDのサーバの起動状態を取得
+    - [x] PUT    /server/:serverid/power              - 該当IDのサーバを起動
+    - [x] DELETE /server/:serverid/power              - 該当IDのサーバを停止、または強制停止
+    - [ ] PUT    /server/:serverid/qemu/nmi           - nmi 情報の取得
+    - [ ] PUT    /server/:serverid/reset              - 該当IDのサーバのリセットボタンを押下
+    - [ ] GET    /server/:serverid/tag                - 該当IDのサーバに付けられたタグを取得
+    - [ ] PUT    /server/:serverid/tag                - 該当IDのサーバに付けられるタグを変更
+    - [ ] PUT    /server/:serverid/to/plan/:planid    - 該当IDのサーバのプランを変更
+    - [ ] GET    /server/:serverid/vnc/proxy          - 該当IDのサーバのVNCプロクシ情報を取得
+    - [ ] GET    /server/:serverid/vnc/size           - 該当IDのサーバの現在の画面サイズを取得
+    - [ ] GET    /server/:serverid/vnc/snapshot       - 該当IDのサーバのVNCスナップショットを取得
+    - [ ] GET    /server/tag                          - サーバタグ一覧を取得
+- [ ] Disk
+    - [x] GET    /disk                           - ディスク一覧を取得
+    - [x] POST   /disk                           - ディスクを作成
+    - [ ] GET    /disk/:diskid                   - 該当IDのディスク情報を取得
+    - [ ] PUT    /disk/:diskid                   - ディスク情報を更新
+    - [ ] DELETE /disk/:diskid                   - 該当IDのディスクを削除
+    - [ ] PUT    /disk/:diskid/config            - ディスクの内容を書き換える
+    - [ ] GET    /disk/:diskid/monitor           - ディスクのリソースモニタ情報を取得
+    - [ ] PUT    /disk/:diskid/plan              - 該当IDのディスクのプランを変更
+    - [ ] PUT    /disk/:diskid/resize-partition  - ディスクのパーティションサイズを最適化する
+    - [ ] GET    /disk/:diskid/tag               - 該当IDのディスクに付けられたタグを取得
+    - [ ] PUT    /disk/:diskid/tag               - 該当IDのディスクに付けられるタグを変更
+    - [ ] PUT    /disk/:diskid/to/blank          - ディスクを空にする
+    - [ ] DELETE /disk/:diskid/to/server         - ディスクとサーバの接続を解除
+    - [x] PUT    /disk/:diskid/to/server/:serverid - ディスクとサーバを接続
+    - [ ] GET    /disk/tag                       - ディスクタグ一覧を取得
+- [ ] Switch 
+- [ ] Archive
+    - [x] GET    /archive                          - アーカイブ一覧を取得
+    - [ ] POST   /archive                          - アーカイブを作成
+    - [ ] GET    /archive/:archiveid               - 該当IDのアーカイブ情報を取得
+    - [ ] PUT    /archive/:archiveid               - アーカイブを更新
+    - [ ] DELETE /archive/:archiveid               - 該当IDのアーカイブを削除
+    - [ ] PUT    /archive/:archiveid/ftp           - アーカイブのFTP共有を開始 または リセットする
+    - [ ] DELETE /archive/:archiveid/ftp           - アーカイブのFTP共有を終了し、利用可能な状態にする
+    - [ ] GET    /archive/:archiveid/tag           - 該当IDのアーカイブに付けられたタグを取得
+    - [ ] PUT    /archive/:archiveid/tag           - 該当IDのアーカイブに付けられるタグを変更
+    - [ ] POST   /archive/:archiveid/to/zone/:zoneid - アーカイブを他のゾーンに転送
+    - [ ] GET    /archive/tag                      - アーカイブタグ一覧を取得
+- [ ] CDROM
+- [ ] Bridge
+- [ ] Router
+- [ ] Interface
+- [ ] Appliance
+- [ ] Icon
+- [ ] Note
+- [ ] sshkey
+- [ ] region, zone
+- [ ] product
+    - [x] GET    /product/disk                          - ディスクプラン一覧を取得
+    - [ ] GET    /product/disk/:diskplanid              - 該当IDのディスクプラン情報を取得
+    - [ ] GET    /product/internet                      - ルータ帯域一覧を取得
+    - [ ] GET    /product/internet/:internetplanid      - 該当IDのルータ帯域情報を取得
+    - [ ] GET    /product/license                       - ライセンス情報一覧を取得
+    - [ ] GET    /product/license/:licenseid            - 該当IDのライセンス情報を取得
+    - [ ] GET    /product/privatehost                   - 専有ホストプラン一覧を取得
+    - [ ] GET    /product/privatehost/:privatehostplanid - 該当IDの専有ホストプラン情報を取得
+    - [x] GET    /product/server                        - サーバプラン一覧を取得
+    - [ ] GET    /product/server/:serverplanid          - 該当IDのサーバプラン情報を取得
+    - [ ] GET    /public/price                          - リクエスト先ゾーンの価格表を取得
+- [ ] auth-status, licence
+- [ ] bill, billdetail, coupon
+
