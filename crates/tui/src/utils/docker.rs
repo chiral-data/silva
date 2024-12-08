@@ -16,10 +16,10 @@ pub async fn build_image(proj_dir: &PathBuf, image_name: &str, base_image: &str)
     let proj_settings = data_model::job::settings::Settings::new_from_file(&settings_filepath)
         .map_err(|e| anyhow::Error::msg(format!("{e} no settings file settings.toml")))?;
 
-    let filename_docker = "Dockerfile";
     let filename_tar = "image.tar";
 
     // create Docker file
+    let filename_docker = "Dockerfile";
     let mut docker_file = std::fs::File::create(proj_dir.join(filename_docker))?;
     writeln!(docker_file, "FROM {base_image}")?;
     writeln!(docker_file)?;
@@ -30,7 +30,22 @@ pub async fn build_image(proj_dir: &PathBuf, image_name: &str, base_image: &str)
     writeln!(docker_file)?;
     writeln!(docker_file, "WORKDIR /opt/{proj_name}")?;
     writeln!(docker_file, "ENTRYPOINT [\"sh\", \"run.sh\"]")?;
-    
+
+    // create entrypoint run.sh
+    let filename_entrypoint = "run.sh";
+    let mut entrypoint_file = std::fs::File::create(proj_dir.join(filename_entrypoint))?;
+    writeln!(entrypoint_file, "#!/bin/bash")?;
+    writeln!(entrypoint_file, "#")?;
+    writeln!(entrypoint_file)?;
+    for script_file in proj_settings.script_files.iter() {
+        writeln!(entrypoint_file, "sh {}", script_file)?;
+    }
+    writeln!(entrypoint_file)?;
+    for output_file in proj_settings.output_files.iter() {
+        writeln!(entrypoint_file, "cp {} /opt/artifact", output_file)?;
+    }
+   
+    // // create tar file for building the image
     // let tar_file = tokio::fs::File::create("image.tar")
     //     .await.unwrap().into_std().await;
     // let mut a = tar::Builder::new(tar_file);

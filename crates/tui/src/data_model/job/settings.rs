@@ -6,9 +6,8 @@ use serde::Deserialize;
 pub struct Settings {
     pub input_files: Vec<String>,
     pub output_files: Vec<String>,
-    /// default executable
-    /// if a docker image will be build, it will be used for ENTRYPOINT
-    pub entrypoint: Vec<String>
+    /// scripts to be executed in sequence 
+    pub script_files: Vec<String>
 }
 
 impl Settings {
@@ -39,13 +38,16 @@ mod tests {
         output_files = [
             "1.out",
         ]
-        entrypoint = ["top", "-b"]
+        script_files = [
+            "start.sh",
+            "finish.sh"
+        ]
         "#;
         
         let s = Settings::new(toml_str).unwrap();
         assert_eq!(s.input_files.len(), 3);
         assert_eq!(s.output_files.len(), 1);
-        assert_eq!(s.entrypoint.len(), 2);
+        assert_eq!(s.script_files.len(), 2);
     }
 }
 
