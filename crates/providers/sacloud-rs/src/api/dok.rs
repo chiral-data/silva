@@ -6,19 +6,25 @@
 //!     Koukaryouku DOK should be clicked
 //!
 //! Auth
-//!     - [] GET    /auth/
-//!     - [] POST   /auth/agree/
+//!     - [] GET        /auth/
+//!     - [] POST       /auth/agree/
+//! Registry
+//!     - [] GET        /registries/
+//!     - [] POST       /registries/
+//!     - [] GET        /registries/{registryID}/
+//!     - [] DELETE     /registries/{registryID}/
+//!     - [] PUT        /registries/{registryID}/
 //! Task
-//!     - [x] GET    /tasks/
-//!     - [] POST   /tasks/
-//!     - [x] GET    /tasks/{taskId}/
-//!     - [] DELETE /tasks/{taskId}/
-//!     - [] POST   /tasks/{taskId}/cancel/
-//!     - [] GET    /tasks/{taskId}/download/{target}/
+//!     - [x] GET       /tasks/
+//!     - [] POST       /tasks/
+//!     - [x] GET       /tasks/{taskId}/
+//!     - [] DELETE     /tasks/{taskId}/
+//!     - [] POST       /tasks/{taskId}/cancel/
+//!     - [] GET        /tasks/{taskId}/download/{target}/
 //! Artifacts
-//!     - [] GET    /artifacts/
-//!     - [] GET    /artifacts/{artifactId}
-//!     - [x] GET    /artifacts/{artifactId}/download/
+//!     - [] GET        /artifacts/
+//!     - [] GET        /artifacts/{artifactId}
+//!     - [x] GET       /artifacts/{artifactId}/download/
 
 use serde::{Deserialize, Serialize};
 
@@ -27,16 +33,22 @@ create_struct!(Artifact, "lowercase",
     filename: String
 );
 
-create_struct!(Task, "lowercase",
-    id: String,
-    status: String,
-    artifact: Artifact
-);
-
 create_struct!(Meta, "lowercase",
     page: usize,
     page_size: usize,
     count: usize
+);
+
+create_struct!(Registry, "lowercase",
+);
+
+create_struct!(RegistryList, "lowercase",
+);
+
+create_struct!(Task, "lowercase",
+    id: String,
+    status: String,
+    artifact: Artifact
 );
 
 create_struct!(TaskList, "lowercase",
@@ -45,11 +57,16 @@ create_struct!(TaskList, "lowercase",
 );
 
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::Client;
+
+    #[tokio::test]
+    async fn test_get_registries() {
+        let client = Client::default().dok();
+        client.registries().dok_end().get()
+    }
 
     #[tokio::test]
     async fn test_get_tasks() {
@@ -85,3 +102,5 @@ mod tests {
         client.artifacts().artifact_id(&task.artifact.id).download().dok_end().get_raw().await;
     }
 }
+
+pub mod params;
