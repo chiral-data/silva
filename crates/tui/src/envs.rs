@@ -21,9 +21,15 @@ pub fn get_projects_home() -> PathBuf {
 /// which is necessary for using Sakura Internet DOK service
 pub fn get_sakura_container_registry() -> (String, String, String) {
     (
-        env::var_os(SILVA_SAKURA_DOK_CONTAINER_REGISTRY_ADDRESS).unwrap().to_str().unwrap().to_string(),
-        env::var_os(SILVA_SAKURA_DOK_CONTAINER_REGISTRY_USERNAME).unwrap().to_str().unwrap().to_string(),
-        env::var_os(SILVA_SAKURA_DOK_CONTAINER_REGISTRY_PASSWORD).unwrap().to_str().unwrap().to_string(),
+        env::var_os(SILVA_SAKURA_DOK_CONTAINER_REGISTRY_ADDRESS).unwrap()
+            .to_str().unwrap()
+            .to_string(),
+        env::var_os(SILVA_SAKURA_DOK_CONTAINER_REGISTRY_USERNAME).unwrap()
+            .to_str().unwrap()
+            .to_string(),
+        env::var_os(SILVA_SAKURA_DOK_CONTAINER_REGISTRY_PASSWORD).unwrap()
+            .to_str().unwrap()
+            .to_string(),
     )
 }
 

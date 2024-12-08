@@ -22,19 +22,6 @@ pub async fn build_image(
     let proj_settings = data_model::job::settings::Settings::new_from_file(&settings_filepath)
         .map_err(|e| anyhow::Error::msg(format!("{e} no settings file settings.toml")))?;
 
-    // create Docker file
-    let filename_docker = "Dockerfile";
-    let mut docker_file = std::fs::File::create(proj_dir.join(filename_docker))?;
-    writeln!(docker_file, "FROM {base_image}")?;
-    writeln!(docker_file)?;
-    writeln!(docker_file, "RUN mkdir -p /opt/{proj_name}")?;
-    for input_file in proj_settings.input_files.iter() {
-        writeln!(docker_file, "ADD ./{input_file} /opt/{proj_name}")?;
-    }
-    writeln!(docker_file)?;
-    writeln!(docker_file, "WORKDIR /opt/{proj_name}")?;
-    writeln!(docker_file, "ENTRYPOINT [\"sh\", \"run.sh\"]")?;
-
     // create entrypoint run.sh
     let filename_entrypoint = "run.sh";
     let mut entrypoint_file = std::fs::File::create(proj_dir.join(filename_entrypoint))?;
@@ -48,6 +35,23 @@ pub async fn build_image(
     for output_file in proj_settings.output_files.iter() {
         writeln!(entrypoint_file, "cp {} /opt/artifact", output_file)?;
     }
+
+    // create Docker file
+    let filename_docker = "Dockerfile";
+    let mut docker_file = std::fs::File::create(proj_dir.join(filename_docker))?;
+    writeln!(docker_file, "FROM {base_image}")?;
+    writeln!(docker_file)?;
+    writeln!(docker_file, "RUN mkdir -p /opt/{proj_name}")?;
+    for input_file in proj_settings.input_files.iter() {
+        writeln!(docker_file, "ADD ./{input_file} /opt/{proj_name}")?;
+    }
+    for script_file in proj_settings.script_files.iter() {
+        writeln!(docker_file, "ADD ./{script_file} /opt/{proj_name}")?;
+    }
+    writeln!(docker_file, "ADD ./{filename_entrypoint} /opt/{proj_name}")?;
+    writeln!(docker_file)?;
+    writeln!(docker_file, "WORKDIR /opt/{proj_name}")?;
+    writeln!(docker_file, "CMD [\"sh\", \"{}\"]", filename_entrypoint)?;
    
     // create tar file for building the image
     let filename_tar = "image.tar";
@@ -58,6 +62,9 @@ pub async fn build_image(
     a.append_path("run.sh")?;
     for input_file in proj_settings.input_files.iter() {
         a.append_path(input_file)?;
+    }
+    for script_file in proj_settings.script_files.iter() {
+        a.append_path(script_file)?;
     }
 
     let docker = bollard::Docker::connect_with_local_defaults().unwrap();
@@ -98,12 +105,11 @@ pub async fn build_image(
     Ok(())
 }
 
-async fn push_image(image_name: &str) {
+async fn push_image(image_name: &str, username: Option<String>, password: Option<String>) {
     let docker = bollard::Docker::connect_with_local_defaults().unwrap();
     let push_options = bollard::image::PushImageOptions::<&str>::default();
     let credentials = bollard::auth::DockerCredentials { // for sakuracr.jp
-        username: Some("username".to_string()),
-        password: Some("password".to_string()),
+        username, password,
         ..Default::default()
     };
     let mut image_push_stream = docker.push_image(image_name, Some(push_options), Some(credentials));
@@ -114,16 +120,21 @@ async fn push_image(image_name: &str) {
 
 #[cfg(test)]
 mod tests {
+    use crate::envs;
+
     use super::*;
 
     #[tokio::test]
-    async fn test_build_image() {
+    async fn test_build_and_push_image() {
         let examples_dir = Path::new(std::env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().join("examples");
+        let (registry_addr, registry_username, registry_password) = envs::get_sakura_container_registry();
+
         let proj_dir = examples_dir.join("gromacs");
         assert!(proj_dir.exists());
-        let image_name = "example_image:test";
+        let image_name = format!("{}/gromacs:test_241208_2", registry_addr);
         let base_image = "nvcr.io/hpc/gromacs:2023.2";
         let job_logs = Arc::new(Mutex::new(HashMap::new()));
-        build_image(&proj_dir, image_name, base_image, job_logs).await.unwrap();
+        build_image(&proj_dir, &image_name, base_image, job_logs).await.unwrap();
+        push_image(&image_name, Some(registry_username), Some(registry_password)).await;
     }
 }
