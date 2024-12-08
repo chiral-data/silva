@@ -29,8 +29,9 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_m
                 let image_name = "example_image:test".to_string();
                 let base_image = "nvcr.io/hpc/gromacs:2023.2".to_string();
                 let proj_dir = proj_dir.to_owned();
+                let job_logs =store.job_mgr.logs.clone();
                 tokio::spawn(async move {
-                    utils::docker::build_image(&proj_dir, &image_name, &base_image).await.unwrap();
+                    utils::docker::build_image(&proj_dir, &image_name, &base_image, job_logs).await.unwrap();
                 });
             } else {
                 states.info.message = "no project selected".to_string();

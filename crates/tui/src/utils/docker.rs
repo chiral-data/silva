@@ -1,10 +1,16 @@
-use std::{io::Write, path::{Path, PathBuf}};
+use std::{collections::HashMap, io::{Read, Write}, path::{Path, PathBuf}, sync::Arc};
+
 use futures_util::stream::StreamExt;
+use tokio::sync::Mutex;
 
 use crate::data_model;
 
-
-pub async fn build_image(proj_dir: &PathBuf, image_name: &str, base_image: &str) -> anyhow::Result<()> {
+pub async fn build_image(
+    proj_dir: &PathBuf, 
+    image_name: &str, 
+    base_image: &str,
+    job_logs: Arc<Mutex<HashMap<String, Vec<String>>>>
+) -> anyhow::Result<()> {
     std::env::set_current_dir(proj_dir)?;
 
     let proj_name = proj_dir.file_name()
@@ -15,8 +21,6 @@ pub async fn build_image(proj_dir: &PathBuf, image_name: &str, base_image: &str)
     let settings_filepath = proj_dir.join("settings.toml");
     let proj_settings = data_model::job::settings::Settings::new_from_file(&settings_filepath)
         .map_err(|e| anyhow::Error::msg(format!("{e} no settings file settings.toml")))?;
-
-    let filename_tar = "image.tar";
 
     // create Docker file
     let filename_docker = "Dockerfile";
@@ -45,50 +49,51 @@ pub async fn build_image(proj_dir: &PathBuf, image_name: &str, base_image: &str)
         writeln!(entrypoint_file, "cp {} /opt/artifact", output_file)?;
     }
    
-    // // create tar file for building the image
-    // let tar_file = tokio::fs::File::create("image.tar")
-    //     .await.unwrap().into_std().await;
-    // let mut a = tar::Builder::new(tar_file);
-    // a.append_path("Dockerfile").unwrap();
-    // a.append_path("1AKI_clean.pdb").unwrap();
-    // a.append_path("run.sh").unwrap();
+    // create tar file for building the image
+    let filename_tar = "image.tar";
+    let tar_file = tokio::fs::File::create(filename_tar)
+        .await.unwrap().into_std().await;
+    let mut a = tar::Builder::new(tar_file);
+    a.append_path("Dockerfile")?;
+    a.append_path("run.sh")?;
+    for input_file in proj_settings.input_files.iter() {
+        a.append_path(input_file)?;
+    }
 
-    // let docker = Docker::connect_with_local_defaults().unwrap();
-    // let build_image_options = bollard::image::BuildImageOptions {
-    //     // dockerfile: dockerfile_path.to_str().unwrap(),
-    //     dockerfile: "Dockerfile",
-    //     t: image_name,
-    //     platform: "linux/amd64",
-    //     ..Default::default()
-    // };
-    // println!("start building");
-    // let mut file = std::fs::File::open("image.tar").unwrap();
-    // let mut contents = Vec::new();
-    // file.read_to_end(&mut contents).unwrap();
-    // let mut image_build_stream = docker.build_image(build_image_options, None, Some(contents.into()));
-    // // let mut image_build_stream = docker.build_image(build_image_options, None, None);
-    // while let Some(msg) = image_build_stream.next().await {
-    //     // println!("Message: {msg:?}");
-    //     match msg {
-    //         Ok(build_info) => {
-    //             let id = if let Some(id) = &build_info.id {
-    //                 id.to_string()
-    //             } else { "".to_string() };
-    //             if let Some(info) = build_info.stream {
-    //                 println!("[{id}]{info}");
-    //             } else if let Some(status) = build_info.status {
-    //                 let progress = if let Some(progress) = build_info.progress {
-    //                     progress
-    //                 } else { "".to_string() };
-    //                 println!("[{id}] Status: {status} {progress}");
-    //             } else {
-    //                 println!("non handled build_info {:?}", build_info);
-    //             }
-    //         }
-    //         Err(e) => println!("get error {e}")
-    //     }
-    // }
-    // tokio::fs::remove_file("image.tar").await.unwrap();
+    let docker = bollard::Docker::connect_with_local_defaults().unwrap();
+    let build_image_options = bollard::image::BuildImageOptions {
+        dockerfile: "Dockerfile",
+        t: image_name,
+        platform: "linux/amd64",
+        ..Default::default()
+    };
+    let mut file = std::fs::File::open(filename_tar).unwrap();
+    let mut contents = Vec::new();
+    file.read_to_end(&mut contents).unwrap();
+    let mut image_build_stream = docker.build_image(build_image_options, None, Some(contents.into()));
+    while let Some(msg) = image_build_stream.next().await {
+        match msg {
+            Ok(build_info) => {
+                let id = if let Some(id) = &build_info.id {
+                    id.to_string()
+                } else { "".to_string() };
+                if let Some(info) = build_info.stream {
+                    println!("[{id}]{info}");
+                } else if let Some(status) = build_info.status {
+                    let progress = if let Some(progress) = build_info.progress {
+                        progress
+                    } else { "".to_string() };
+                    println!("[{id}] Status: {status} {progress}");
+                } else {
+                    println!("non handled build_info {:?}", build_info);
+                }
+            }
+            Err(e) => println!("get error {e}")
+        }
+    }
+    tokio::fs::remove_file(filename_docker).await.unwrap();
+    tokio::fs::remove_file(filename_entrypoint).await.unwrap();
+    tokio::fs::remove_file(filename_tar).await.unwrap();
     
     Ok(())
 }
@@ -110,22 +115,6 @@ async fn push_image(image_name: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{io::Read, path::{Path, PathBuf}};
-
-    #[tokio::test]
-    async fn test_bollard_examples() {
-        use bollard::Docker;
-
-        let docker = Docker::connect_with_local_defaults().unwrap();
-        let version = docker.version().await.unwrap();
-        // dbg!(version);
-        let list_images_options = bollard::image::ListImagesOptions::<String> { all: true, ..Default::default() };
-        let images = docker.list_images(Some(list_images_options)).await.unwrap();
-        // dbg!(images);
-        for image in images.iter() {
-            dbg!(&image.repo_tags);
-        }
-    }
 
     #[tokio::test]
     async fn test_build_image() {
@@ -134,6 +123,7 @@ mod tests {
         assert!(proj_dir.exists());
         let image_name = "example_image:test";
         let base_image = "nvcr.io/hpc/gromacs:2023.2";
-        build_image(&proj_dir, image_name, base_image).await.unwrap();
+        let job_logs = Arc::new(Mutex::new(HashMap::new()));
+        build_image(&proj_dir, image_name, base_image, job_logs).await.unwrap();
     }
 }
