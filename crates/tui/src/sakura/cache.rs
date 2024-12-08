@@ -23,7 +23,7 @@ pub async fn load_server_plans(client: sacloud_rs::Client) ->  anyhow::Result<Se
             spl
         }
         None => {
-            let server_plan_list = sacloud_rs::api::product::shortcut::get_server_plans(client).await?;
+            let server_plan_list = sacloud_rs::api::product::shortcuts::get_server_plans(client).await?;
             let path = xdg_dirs.place_cache_file(&cache_filename)?;
             let mut file = fs::File::create(path)?;
             file.write_all(serde_json::to_string(&server_plan_list)?.as_bytes())?;

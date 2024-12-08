@@ -1,5 +1,8 @@
-//! Koukaryouku DOK - GPU Container Service
-//! Access permission for other services for API Key
+//! Sakura Internet API: Koukaryouku DOK GPU Container Service 
+//! https://manual.sakura.ad.jp/koukaryoku-dok-api/spec.html
+//!
+//! [attention!]
+//! Access permission for other services from the API Key page
 //!     Koukaryouku DOK should be clicked
 //!
 //! Auth
@@ -55,6 +58,11 @@ mod tests {
             .tasks().dok_end().get()
             .await.unwrap();
         dbg!(task_list);
+    }
+
+    #[tokio::test]
+    async fn test_post_tasks() {
+        todo!()
     }
 
     #[tokio::test]

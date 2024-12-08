@@ -16,9 +16,6 @@
 
 use serde::{Deserialize, Serialize};
 
-pub mod parameter;
-pub mod shortcut;
-
 create_struct!(ServerPlan, "PascalCase",
     index : usize,
     i_d : usize,
@@ -83,13 +80,13 @@ mod tests {
             .get().await.unwrap();
         assert_eq!(spl.server_plans.len(), 100);
         // use get_with_params, from 100 count 30
-        let params = parameter::Params::default().from(100).count(30);
+        let params = params::Params::default().from(100).count(30);
         let params_vec: Vec<_> = params.into();
         let spl: ServerPlanList = client.clone().product().server()
             .get_with_params(&params_vec).await.unwrap();
         assert_eq!(spl.server_plans.len(), 30);
         // use get_with_params, from 0 count 200
-        let params = parameter::Params::default().from(0).count(200);
+        let params = params::Params::default().from(0).count(200);
         let params_vec: Vec<_> = params.into();
         let spl: ServerPlanList = client.clone().clear().product().server()
             .get_with_params(&params_vec).await.unwrap();
@@ -104,3 +101,7 @@ mod tests {
         assert_eq!(dpl.disk_plans.len(), 2);
     }
 }
+
+
+pub mod params;
+pub mod shortcuts;

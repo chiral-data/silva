@@ -34,9 +34,6 @@
 
 use serde::{Deserialize, Serialize};
 
-pub mod parameter;
-pub mod shortcut;
-
 create_struct!(ServerPlan, "PascalCase",
     c_p_u: u8,
     g_p_u: u8,
@@ -125,7 +122,7 @@ mod tests {
             .get()
             .await
             .unwrap();
-        let create_params = parameter::Params::default()
+        let create_params = params::Params::default()
             .name("test_server")
             .server_plan(spl.server_plans[0].i_d);
         let new_server: ServerCreated = client
@@ -166,7 +163,7 @@ mod tests {
             .await
             .unwrap();
         // delete the server
-        let delte_params = parameter::ParamsWithDisk::default().disk_ids(vec![]);
+        let delte_params = params::ParamsWithDisk::default().disk_ids(vec![]);
         let sl: ServerList = client.clone().clear().server().get().await.unwrap();
         for server in sl.servers.iter() {
             let _res = client
@@ -192,7 +189,7 @@ mod tests {
         let spl: crate::api::product::ServerPlanList =
             client.clone().product().server().get().await.unwrap();
         // create server
-        let server_id = shortcut::create(client.clone(), "test_server", spl.server_plans[0].i_d)
+        let server_id = shortcuts::create(client.clone(), "test_server", spl.server_plans[0].i_d)
             .await
             .unwrap();
         let server_status: ServerStatus = client
@@ -206,16 +203,20 @@ mod tests {
             .unwrap();
         assert!(server_status.instance.status == "down");
         // power on
-        shortcut::power_on(client.clone(), &server_id)
+        shortcuts::power_on(client.clone(), &server_id)
             .await
             .unwrap();
         // power off
-        shortcut::power_off(client.clone(), &server_id)
+        shortcuts::power_off(client.clone(), &server_id)
             .await
             .unwrap();
         // delete server
-        shortcut::remove(client.clone(), &server_id, vec![])
+        shortcuts::remove(client.clone(), &server_id, vec![])
             .await
             .unwrap();
     }
 }
+
+
+pub mod params;
+pub mod shortcuts;

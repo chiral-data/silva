@@ -17,9 +17,6 @@
 //! - [x] PUT    /disk/:diskid/to/server/:serverid - ディスクとサーバを接続
 //! - [ ] GET    /disk/tag                       - ディスクタグ一覧を取得
 
-pub mod parameter;
-pub mod shortcut;
-
 use serde::{Deserialize, Serialize};
 
 // Disk plan
@@ -89,7 +86,7 @@ mod tests {
         let dpl: crate::api::product::DiskPlanList =
             client.clone().clear().product().disk().get().await.unwrap();
         let ubuntu_2204 = 113402076879;
-        let disk_id = shortcut::create(
+        let disk_id = shortcuts::create(
             client.clone(),
             "test_disk",
             dpl.disk_plans[0].i_d,
@@ -111,7 +108,7 @@ mod tests {
             .await
             .unwrap();
         let server_id =
-            server::shortcut::create(client.clone(), "test_server", spl.server_plans[0].i_d)
+            server::shortcuts::create(client.clone(), "test_server", spl.server_plans[0].i_d)
                 .await
                 .unwrap();
         // connect disk and server
@@ -127,7 +124,7 @@ mod tests {
             .await
             .unwrap();
         // power on server
-        server::shortcut::power_on(client.clone(), &server_id)
+        server::shortcuts::power_on(client.clone(), &server_id)
             .await
             .unwrap();
         // test ssh
@@ -152,7 +149,7 @@ mod tests {
             .unwrap();
         assert!(sess.authenticated());
         // shut down server
-        server::shortcut::power_off(client.clone(), &server_id).await.unwrap();
+        server::shortcuts::power_off(client.clone(), &server_id).await.unwrap();
         // delete the disks
         for disk in dl.disks.iter() {
             let _res = client
@@ -165,7 +162,7 @@ mod tests {
                 .unwrap();
         }
         // delete the server & the disk
-        let delte_params = crate::api::server::parameter::ParamsWithDisk::default()
+        let delte_params = crate::api::server::params::ParamsWithDisk::default()
             .disk_ids(vec![disk_id.parse::<usize>().unwrap()]);
         let _res = client
             .clone()
@@ -184,3 +181,6 @@ mod tests {
         assert_eq!(dl.total, 0);
     }
 }
+
+pub mod params;
+pub mod shortcuts;
