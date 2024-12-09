@@ -1,5 +1,13 @@
 use std::fs::File;
+use std::io::Read;
 use std::path::Path;
+
+pub fn get_file_content(filepath: &Path) -> anyhow::Result<String> {
+    let mut file_accounts = File::open(filepath)?;
+    let mut buf = String::new();
+    let _read_size = file_accounts.read_to_string(&mut buf)?;
+    Ok(buf)
+}
 
 pub async fn download(url: &str, filepath: &Path) -> anyhow::Result<()> {
     let response = reqwest::get(url).await?;

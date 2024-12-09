@@ -20,9 +20,6 @@ pub async fn run() -> anyhow::Result<()> {
 
     let mut states = ui::States::default();
     let mut store = data_model::Store::default();
-    if !store.ac_mgr.get_accounts().is_empty() {
-        states.setting.list.list.select(Some(0));
-    }
 
     loop {
         terminal.draw(|f| ui::render(f, &mut states, &mut store))?;

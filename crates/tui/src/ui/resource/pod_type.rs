@@ -67,7 +67,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut da
 
     match key.code {
         KeyCode::Char('c') | KeyCode::Char('C') => {
-            let account_selected = store.ac_mgr.selected(states)
+            let account_selected = store.account_mgr.selected(states)
                 .ok_or(anyhow::Error::msg("no account selected"))
                 .unwrap();
             let client = account_selected.create_client();

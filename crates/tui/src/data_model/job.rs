@@ -1,10 +1,12 @@
 //! Jobs run locally to manage cloud infrastructure
 //!
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use tokio::sync::Mutex;
 use serde::Deserialize;
+
+use crate::{constants, utils};
 
 #[derive(Debug, Deserialize)]
 pub struct Job {
@@ -36,7 +38,7 @@ impl Job {
 
 #[derive(Debug, Deserialize)]
 struct DataFile {
-    jobs: Vec<Job>,
+    jobs: Option<Vec<Job>>,
 }
 
 impl DataFile {
@@ -53,16 +55,30 @@ pub struct Manager {
 }
 
 impl Manager {
-    pub fn new(content: &str) -> Self {
-        let jobs = match DataFile::new(content) {
-            Ok(df) => df.jobs.into_iter()
+    fn data_filepath() -> anyhow::Result<PathBuf> {
+        let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME)?;
+        let fp = xdg_dirs.get_data_home().join(constants::FILENAME_JOBS);
+        Ok(fp)
+    }
+
+    pub fn load() -> anyhow::Result<Self> {
+        let filepath = Self::data_filepath()?; 
+        if !filepath.exists() {
+            std::fs::File::create(&filepath)?;
+        }
+
+        let content = utils::file::get_file_content(&filepath)?;
+        let df = DataFile::new(&content)?;
+        let jobs = match df.jobs {
+            Some(jobs) => jobs.into_iter()
                 .map(|job| (job.id, job))
                 .collect(),
-            Err(_e) => HashMap::new()
+            None => HashMap::new() 
         };
         let logs = Arc::new(Mutex::new(HashMap::new()));
 
-        Manager { jobs, logs }
+        let s = Self { jobs, logs };
+        Ok(s)
     }
 }
 
@@ -87,7 +103,7 @@ mod tests {
         "#;
         
         let df = DataFile::new(toml_str).unwrap();
-        assert_eq!(df.jobs.len(), 2);
+        assert_eq!(df.jobs.unwrap().len(), 2);
     }
 }
 

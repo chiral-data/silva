@@ -1,6 +1,9 @@
+use std::path::PathBuf;
+use std::io::Write;
+
 use serde::Deserialize;
 
-use crate::ui;
+use crate::{constants, ui, utils};
 
 #[derive(Debug, Deserialize)]
 pub struct SakuraAccount {
@@ -24,6 +27,12 @@ impl std::fmt::Display for Account {
 }
 
 impl Account {
+    pub fn id(&self) -> &str {
+        match self {
+            Account::Sakura(sa) => &sa.resource_id
+        }
+    }
+
     pub fn create_client(&self) -> sacloud_rs::Client {
         match self {
             Account::Sakura(sa) => sacloud_rs::Client::new(sa.access_token.to_string(), Some(sa.access_token_secret.to_string()))
@@ -43,19 +52,43 @@ impl DataFile {
     }
 }
 
-#[derive(Debug, Deserialize)]
+const TEMPORY_CONTENT: &str = r#"[[accounts]]
+Sakura.name = "sa_1"
+Sakura.resource_id = "rid_1"
+Sakura.access_token = "at_1"
+Sakura.access_token_secret = "ats_1"
+"#;
+
+#[derive(Debug)]
 pub struct Manager {
     accounts: Vec<Account>,
 }
 
 impl Manager {
-    pub fn new(content: &str) -> Self {
-        let accounts = match DataFile::new(content) {
-            Ok(df) => df.accounts,
-            Err(_e) => vec![]
+    fn data_filepath() -> anyhow::Result<PathBuf> {
+        let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME)?;
+        let fp = xdg_dirs.get_data_home().join(constants::FILENAME_ACCOUNTS);
+        Ok(fp)
+    }
+
+    pub fn load() -> anyhow::Result<Self> {
+        let filepath = Self::data_filepath()?;
+        let accounts = if filepath.exists() {
+            let content = utils::file::get_file_content(&filepath)?;
+            let df = DataFile::new(&content)?;
+            df.accounts
+        } else {
+            // create a temporary file for user
+            let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME)?;
+            let fp = xdg_dirs.get_data_home().join(format!("{}.tmp", constants::FILENAME_ACCOUNTS));
+            let mut file = std::fs::File::create(fp)?;
+            writeln!(&mut file, "{}", TEMPORY_CONTENT)?;
+
+            vec![]
         };
 
-        Self { accounts }
+        let s = Self { accounts };
+        Ok(s)
     }
 
     pub fn get_accounts(&self) -> &Vec<Account> {
@@ -63,7 +96,7 @@ impl Manager {
     }
 
     pub fn selected(&self, states: &ui::States) -> Option<&Account> {
-        states.setting.list.list.selected()
+        states.setting.account.list.selected()
             .map(|index| self.accounts.get(index))?
     }
 }

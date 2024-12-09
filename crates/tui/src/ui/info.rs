@@ -14,7 +14,7 @@ pub struct States {
 pub fn render(f: &mut Frame, area: Rect, states: &ui::States, store: &data_model::Store) {
     let states_current = &states.info;
 
-    let account_sel = if let Some(a) = store.ac_mgr.selected(states) {
+    let account_sel = if let Some(a) = store.account_mgr.selected(states) {
         a.to_string()
     } else { "None".to_string() };
     let project_sel = if let Some(proj) = store.proj_selected.as_ref() {

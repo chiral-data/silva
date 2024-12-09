@@ -1,4 +1,5 @@
-use std::{collections::HashMap, io::{Read, Write}, path::{Path, PathBuf}, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::io::{Read, Write};
 
 use futures_util::stream::StreamExt;
 use tokio::sync::Mutex;
@@ -9,7 +10,7 @@ pub async fn build_image(
     proj_dir: &PathBuf, 
     image_name: &str, 
     base_image: &str,
-    job_logs: Arc<Mutex<HashMap<String, Vec<String>>>>
+    _job_logs: Arc<Mutex<HashMap<String, Vec<String>>>>
 ) -> anyhow::Result<()> {
     std::env::set_current_dir(proj_dir)?;
 
@@ -122,6 +123,8 @@ pub async fn push_image(image_name: &str, username: Option<String>, password: Op
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use crate::envs;
 
     use super::*;
