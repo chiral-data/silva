@@ -63,7 +63,7 @@ impl Manager {
     }
 
     pub fn selected(&self, states: &ui::States) -> Option<&Account> {
-        states.account.list.list.selected()
+        states.setting.list.list.selected()
             .map(|index| self.accounts.get(index))?
     }
 }

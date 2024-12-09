@@ -33,7 +33,7 @@ pub fn render(f: &mut Frame, states: &mut states::States, store: &mut data_model
         tabs::Tab::Application => app::render(f, mid, states, store),
         tabs::Tab::Resource => resource::render(f, mid, states, store),
         tabs::Tab::Job => job::render(f, mid, states, store),
-        tabs::Tab::Account => account::render(f, mid, states, store),
+        tabs::Tab::Setting => setting::render(f, mid, states, store),
     }
     info::render(f, bottom, states, store)
 }
@@ -53,8 +53,8 @@ pub async fn input(tick_rate: Duration, last_tick: &mut Instant, states: &mut st
                         tabs::Tab::Project => tabs::Tab::Application,
                         tabs::Tab::Application => tabs::Tab::Resource, 
                         tabs::Tab::Resource => tabs::Tab::Job, 
-                        tabs::Tab::Job => tabs::Tab::Account, 
-                        tabs::Tab::Account => tabs::Tab::Project 
+                        tabs::Tab::Job => tabs::Tab::Setting, 
+                        tabs::Tab::Setting => tabs::Tab::Project 
                     }
                 } else {
                     match states.focus {
@@ -67,7 +67,7 @@ pub async fn input(tick_rate: Duration, last_tick: &mut Instant, states: &mut st
                             tabs::Tab::Resource => resource::handle_key(&key, states, store),
                             tabs::Tab::Job => job::handle_key(&key, states, store),
                             tabs::Tab::Project => project::handle_key(&key, states, store),
-                            tabs::Tab::Account => account::handle_key(&key, states, store) 
+                            tabs::Tab::Setting => setting::handle_key(&key, states, store) 
                         }
                     }
                 }
@@ -92,6 +92,6 @@ mod app;
 mod resource;
 mod project;
 mod job;
-mod account;
+mod setting;
 // the footer
 mod info;

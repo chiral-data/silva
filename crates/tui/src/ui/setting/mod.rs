@@ -11,13 +11,13 @@ pub struct States {
 }
 
 pub fn render(f: &mut ratatui::prelude::Frame, area: ratatui::prelude::Rect, states: &mut crate::ui::States, store: &crate::data_model::Store) {
-    match states.account.show_page {
+    match states.setting.show_page {
         ShowPage::List => list::render(f, area, states, store),
     } 
 }
 
 pub fn handle_key(key: &crossterm::event::KeyEvent, states: &mut crate::ui::States, store: &crate::data_model::Store) {
-    match states.account.show_page {
+    match states.setting.show_page {
         ShowPage::List => list::handle_key(key, states, store) 
     } 
 }

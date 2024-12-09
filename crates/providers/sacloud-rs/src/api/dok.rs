@@ -144,3 +144,4 @@ mod tests {
 }
 
 pub mod params;
+pub mod shortcuts;

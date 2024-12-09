@@ -9,7 +9,6 @@ pub struct Store {
     pub pod_mgr: pod::Manager,
     pub proj_selected: Option<PathBuf>,
     pub job_mgr: job::Manager,
-    pub jl_mgr: job_local::Manager,
 }
 
 fn get_file_content(fp: Option<PathBuf>) -> String {
@@ -32,16 +31,15 @@ impl std::default::Default for Store {
     fn default() -> Self {
         let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME).unwrap();
         let app_mgr = app::Manager::new();
-        let ac_mgr = account::Manager::new(get_file_content(xdg_dirs.find_data_file(constants::FILE_ACCOUNTS)).as_str());
+        let ac_mgr = account::Manager::new(get_file_content(xdg_dirs.find_data_file(constants::FILENAME_ACCOUNTS)).as_str());
         let pod_type_mgr = pod_type::Manager::new();
         let pod_mgr = pod::Manager::new();
-        let job_mgr = job::Manager::new();
-        let jl_mgr = job_local::Manager::new(get_file_content(xdg_dirs.find_data_file(constants::FILE_JOBS_LOCAL)).as_str());
+        let job_mgr = job::Manager::new(get_file_content(xdg_dirs.find_data_file(constants::FILENAME_JOBS_LOCAL)).as_str());
 
         Self { 
             app_mgr, ac_mgr, pod_type_mgr, pod_mgr,
             proj_selected: None, 
-            job_mgr, jl_mgr 
+            job_mgr, 
         }
     }
 }
@@ -54,4 +52,3 @@ mod account;
 pub mod pod_type;
 pub mod pod;
 pub mod job;
-pub mod job_local;

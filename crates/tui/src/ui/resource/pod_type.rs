@@ -75,11 +75,11 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut da
                 action::server::create_server(client).await.unwrap();
             });
 
-            let total = store.jl_mgr.jobs.len();
-            let mut job_local = data_model::job_local::JobLocal::new(total, "create a server".to_string());
+            let total = store.job_mgr.jobs.len();
+            let mut job_local = data_model::job::Job::new(total, "create a server".to_string());
             job_local.set_running();
             let _ = states.handlers.insert(job_local.id, jh);
-            store.jl_mgr.jobs.insert(job_local.id, job_local);
+            store.job_mgr.jobs.insert(job_local.id, job_local);
         }
         KeyCode::Up => {
             let total = states_current.pods.len(); 

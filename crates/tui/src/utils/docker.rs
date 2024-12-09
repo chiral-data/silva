@@ -105,7 +105,7 @@ pub async fn build_image(
     Ok(())
 }
 
-async fn push_image(image_name: &str, username: Option<String>, password: Option<String>) {
+pub async fn push_image(image_name: &str, username: Option<String>, password: Option<String>) -> anyhow::Result<()> {
     let docker = bollard::Docker::connect_with_local_defaults().unwrap();
     let push_options = bollard::image::PushImageOptions::<&str>::default();
     let credentials = bollard::auth::DockerCredentials { // for sakuracr.jp
@@ -116,6 +116,8 @@ async fn push_image(image_name: &str, username: Option<String>, password: Option
     while let Some(msg) = image_push_stream.next().await {
         println!("Message: {msg:?}");
     }
+
+    Ok(())
 }
 
 #[cfg(test)]

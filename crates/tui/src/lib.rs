@@ -1,9 +1,4 @@
-pub mod constants {
-    pub const APP_NAME: &str = "silva";
-    pub const FILE_ACCOUNTS: &str = "accounts.toml";
-    pub const FILE_JOBS_LOCAL: &str = "jobs_local.toml";
-}
-
+mod constants;
 mod envs;
 mod utils;
 

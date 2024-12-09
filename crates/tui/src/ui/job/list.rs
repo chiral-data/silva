@@ -32,7 +32,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
         .alignment(Alignment::Left)
         .wrap(Wrap { trim: true });
 
-    let jobs_string: Vec<String> = store.jl_mgr.jobs.values()
+    let jobs_string: Vec<String> = store.job_mgr.jobs.values()
         .map(|j| j.to_string())
         .collect();
 
@@ -57,7 +57,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
 
 pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, _store: &data_model::Store) {
     use event::KeyCode;
-    let states_current = &mut states.job.list;
+    // let states_current = &mut states.job.list;
     let states_parent = &mut states.job;
 
     match key.code {

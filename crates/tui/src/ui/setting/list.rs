@@ -17,7 +17,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
         let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME).unwrap();
         let text: Vec<Line> = vec![
             "Account for cloud services NOT found".to_string(),
-            format!("Add account information into {}", xdg_dirs.get_data_home().join(constants::FILE_ACCOUNTS).to_str().unwrap())
+            format!("Add account information into {}", xdg_dirs.get_data_home().join(constants::FILENAME_ACCOUNTS).to_str().unwrap())
         ].into_iter()
         .map(|s| Line::from(s).red())
         .collect();
@@ -27,7 +27,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
             .wrap(Wrap { trim: true });
         f.render_widget(paragraph, area);
     } else {
-        let states = &mut states.account.list;
+        let states = &mut states.setting.list;
         if states.list.selected().is_none() {
             states.list.select(Some(0));
         }
@@ -53,14 +53,14 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_m
     match key.code {
         KeyCode::Up => {
             let total = store.ac_mgr.get_accounts().len();
-            let mut sel_idx = states.account.list.list.selected().unwrap_or(0);
+            let mut sel_idx = states.setting.list.list.selected().unwrap_or(0);
             sel_idx = (sel_idx + total - 1) % total;
-            states.account.list.list.select(Some(sel_idx));
+            states.setting.list.list.select(Some(sel_idx));
         }
         KeyCode::Down => {
-            let mut sel_idx = states.account.list.list.selected().unwrap_or(0);
+            let mut sel_idx = states.setting.list.list.selected().unwrap_or(0);
             sel_idx = (sel_idx + 1) % store.ac_mgr.get_accounts().len();
-            states.account.list.list.select(Some(sel_idx));
+            states.setting.list.list.select(Some(sel_idx));
         }
         _ => ()
     }

@@ -10,7 +10,10 @@ const SILVA_SAKURA_DOK_CONTAINER_REGISTRY_USERNAME: &str = "SILVA_SAKURA_DOK_CON
 const SILVA_SAKURA_DOK_CONTAINER_REGISTRY_PASSWORD: &str = "SILVA_SAKURA_DOK_CONTAINER_REGISTRY_PASSWORD";
 
 pub fn setup() {
-    env::set_var(SILVA_PROJECTS_HOME, PathBuf::from(".").join("examples"))
+    // if project home directory is not set, use the directory "examples"
+    if env::var_os(SILVA_PROJECTS_HOME).is_none() {
+        env::set_var(SILVA_PROJECTS_HOME, PathBuf::from(".").join("examples"))
+    }
 }
 
 pub fn get_projects_home() -> PathBuf {

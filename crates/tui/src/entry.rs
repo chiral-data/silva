@@ -21,7 +21,7 @@ pub async fn run() -> anyhow::Result<()> {
     let mut states = ui::States::default();
     let mut store = data_model::Store::default();
     if !store.ac_mgr.get_accounts().is_empty() {
-        states.account.list.list.select(Some(0));
+        states.setting.list.list.select(Some(0));
     }
 
     loop {
@@ -36,14 +36,14 @@ pub async fn run() -> anyhow::Result<()> {
             ui::Signal::None => {}
         }
 
-        for (job_id, jh) in states.handlers.iter() {
-            if jh.is_finished() {
-                let job_local = store.jl_mgr.jobs.get_mut(job_id).unwrap();
-                job_local.set_complete();
-            }
-        }
+        // for (job_id, jh) in states.handlers.iter() {
+        //     if jh.is_finished() {
+        //         let job_local = store.jl_mgr.jobs.get_mut(job_id).unwrap();
+        //         job_local.set_complete();
+        //     }
+        // }
 
-        states.handlers.retain(|_, jh| !jh.is_finished());
+        // states.handlers.retain(|_, jh| !jh.is_finished());
     }
 
     disable_raw_mode()?;

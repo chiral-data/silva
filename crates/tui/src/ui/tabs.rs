@@ -11,7 +11,7 @@ pub enum Tab {
     Application,
     Resource,
     Job,
-    Account
+    Setting
 }
 
 #[derive(Default)]
@@ -27,14 +27,14 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::States) {
         Tab::Application => 1,
         Tab::Resource => 2,
         Tab::Job => 3,
-        Tab::Account => 4
+        Tab::Setting => 4
     };
     let tabs = Tabs::new(vec![
-            "[P]roject",
-            "[A]pplication",
-            "[R]esource",
-            "[J]ob",
-            "[I]nfo"
+            "[P]rojects",
+            "[A]pplications",
+            "[R]esources",
+            "[J]obs",
+            "[S]ettings"
         ])
         .block(Block::default().title("").borders(Borders::ALL))
         .select(selected)
@@ -64,7 +64,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States) {
         }
         KeyCode::Char('P') | KeyCode::Char('p') => states.tab.tab = ui::tabs::Tab::Project,
         KeyCode::Char('J') | KeyCode::Char('j') => states.tab.tab = ui::tabs::Tab::Job,
-        KeyCode::Char('C') | KeyCode::Char('c') => states.tab.tab = ui::tabs::Tab::Account,
+        KeyCode::Char('S') | KeyCode::Char('s') => states.tab.tab = ui::tabs::Tab::Setting,
         _ => ()
     }
 }

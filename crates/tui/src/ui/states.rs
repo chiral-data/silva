@@ -13,7 +13,7 @@ pub struct States {
     pub resource: ui::resource::States,
     pub project: ui::project::States,
     pub job: ui::job::States,
-    pub account: ui::account::States,
+    pub setting: ui::setting::States,
     pub handlers: HashMap<usize, tokio::task::JoinHandle<()>>,
 }
 
