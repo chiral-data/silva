@@ -53,10 +53,10 @@ impl DataFile {
 }
 
 const TEMPORY_CONTENT: &str = r#"[[accounts]]
-Sakura.name = "sa_1"
-Sakura.resource_id = "rid_1"
-Sakura.access_token = "at_1"
-Sakura.access_token_secret = "ats_1"
+Sakura.name = ""
+Sakura.resource_id = ""
+Sakura.access_token = ""
+Sakura.access_token_secret = ""
 "#;
 
 #[derive(Debug)]

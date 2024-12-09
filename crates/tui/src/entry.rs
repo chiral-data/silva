@@ -1,13 +1,28 @@
-use std::{io, process, time::{Duration, Instant}};
+use std::{io, path::PathBuf, process, time::{Duration, Instant}};
+use std::env;
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
 use ratatui::prelude::*;
 
-use crate::{envs, ui};
+use crate::{constants, envs, ui};
 use crate::data_model;
 
+fn setup() {
+    let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME).unwrap();
+    let data_dir = xdg_dirs.get_data_home();
+    if !data_dir.exists() {
+        std::fs::create_dir_all(data_dir).unwrap();
+    }
+
+    // if project home directory is not set, use the directory "examples"
+    if env::var_os(envs::SILVA_PROJECTS_HOME).is_none() {
+        env::set_var(envs::SILVA_PROJECTS_HOME, PathBuf::from(".").join("examples"))
+    }
+}
+
+
 pub async fn run() -> anyhow::Result<()> {
-    envs::setup();
+    setup();
 
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture, )?;
