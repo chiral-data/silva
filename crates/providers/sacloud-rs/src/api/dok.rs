@@ -67,6 +67,12 @@ create_struct!(TaskList, "lowercase",
     results: Vec<Task>
 );
 
+create_struct!(TaskCreated, "lowercase",
+    id: String,
+    status: String,
+    error_message: String
+);
+
 
 #[cfg(test)]
 mod tests {
@@ -106,10 +112,10 @@ mod tests {
             .name("some_task".to_string())
             .containers(vec![container])
             .tags(vec![]);
-        dbg!(serde_json::to_string(&post_tasks).unwrap());
-        client.tasks().dok_end()
+        let task_created: TaskCreated = client.tasks().dok_end()
             .set_params(&post_tasks).unwrap()
-                .post_raw().await;
+            .post().await.unwrap();
+        dbg!(task_created);
     }
 
     #[tokio::test]
