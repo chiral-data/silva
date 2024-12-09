@@ -40,9 +40,16 @@ create_struct!(Meta, "lowercase",
 );
 
 create_struct!(Registry, "lowercase",
+    id: String,
+    created_at: String,
+    updated_at: String,
+    hostname: String,
+    username: String
 );
 
 create_struct!(RegistryList, "lowercase",
+    meta: Meta,
+    results: Vec<Registry>
 );
 
 create_struct!(Task, "lowercase",
@@ -65,7 +72,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_registries() {
         let client = Client::default().dok();
-        client.registries().dok_end().get()
+        let registry_list: RegistryList = client.registries().dok_end().get()
+            .await.unwrap();
+        assert_eq!(registry_list.results.len(), 1);
     }
 
     #[tokio::test]
