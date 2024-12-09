@@ -33,6 +33,10 @@ create_struct!(Artifact, "lowercase",
     filename: String
 );
 
+create_struct!(ArtifactUrl, "lowercase",
+    url: String
+);
+
 create_struct!(Meta, "lowercase",
     page: usize,
     page_size: usize,
@@ -55,7 +59,7 @@ create_struct!(RegistryList, "lowercase",
 create_struct!(Task, "lowercase",
     id: String,
     status: String,
-    artifact: Artifact
+    artifact: Option<Artifact>
 );
 
 create_struct!(TaskList, "lowercase",
@@ -81,9 +85,9 @@ mod tests {
     async fn test_get_tasks() {
         let client = Client::default().dok();
         let task_list: TaskList = client
-            .tasks().dok_end().get()
-            .await.unwrap();
-        dbg!(task_list);
+            .tasks().dok_end()
+            .get().await.unwrap();
+        assert!(!task_list.results.is_empty());
     }
 
     #[tokio::test]
@@ -98,7 +102,8 @@ mod tests {
         let task: Task = client
             .tasks().task_id(id).dok_end().get()
             .await.unwrap();
-        dbg!(task);
+        assert_eq!(task.status, "done");
+        assert!(task.artifact.is_some());
     }
 
     #[tokio::test]
@@ -108,7 +113,10 @@ mod tests {
         let task: Task = client.clone()
             .tasks().task_id(id).dok_end().get()
             .await.unwrap();
-        client.artifacts().artifact_id(&task.artifact.id).download().dok_end().get_raw().await;
+        let artifact_url: ArtifactUrl = client
+            .artifacts().artifact_id(&task.artifact.unwrap().id).download().dok_end()
+            .get().await.unwrap();
+        assert!(artifact_url.url.contains(id));
     }
 }
 
