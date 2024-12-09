@@ -92,7 +92,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_post_tasks() {
-        todo!()
+        let client = Client::default().dok();
+        let registry_list: RegistryList = client.clone().registries().dok_end().get()
+            .await.unwrap();
+        let registry = registry_list.results.first().unwrap();
+        let container = params::Container::default()
+            .image(format!("{}/gromacs:test_241208_2", registry.hostname))
+            .registry(Some(registry.id.to_string()))
+            .command(vec![])
+            .entrypoint(vec![])
+            .plan(params::Plan::V100);
+        let post_tasks = params::PostTasks::default()
+            .name("some_task".to_string())
+            .containers(vec![container])
+            .tags(vec![]);
+        dbg!(serde_json::to_string(&post_tasks).unwrap());
+        client.tasks().dok_end()
+            .set_params(&post_tasks).unwrap()
+                .post_raw().await;
     }
 
     #[tokio::test]
