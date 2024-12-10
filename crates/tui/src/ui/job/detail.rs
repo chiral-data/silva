@@ -20,10 +20,19 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
 
 }
 
-async fn run_job(proj_dir: PathBuf, image_name: String, base_image: String, job_logs: Arc<Mutex<HashMap<String, Vec<String>>>>) -> anyhow::Result<()> {
+async fn run_job(
+    proj_dir: PathBuf, 
+    image_name: String, 
+    base_image: String, 
+    client: sacloud_rs::Client,
+    registry_id: String,
+    plan: sacloud_rs::api::dok::params::Plan,
+    job_logs: Arc<Mutex<HashMap<String, Vec<String>>>>
+) -> anyhow::Result<()> {
     utils::docker::build_image(&proj_dir, &image_name, &base_image, job_logs).await?;
     let (_addr, username, password) = envs::get_sakura_container_registry();
     utils::docker::push_image(&image_name, Some(username), Some(password)).await?;
+    let task_created = sacloud_rs::api::dok::shortcuts::create_task(client, &image_name, &registry_id, plan).await?;
     
     Ok(())
 }
@@ -43,9 +52,10 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_m
                 let image_name = "example_image:test".to_string();
                 let base_image = "nvcr.io/hpc/gromacs:2023.2".to_string();
                 let proj_dir = proj_dir.to_owned();
-                let job_logs =store.job_mgr.logs.clone();
+                let job_logs = store.job_mgr.logs.clone();
+                let client = store.account_mgr.create_client(&store.setting_mgr);
                 tokio::spawn(async move {
-                    match run_job(proj_dir, image_name, base_image, job_logs).await {
+                    match run_job(proj_dir, image_name, base_image, client, job_logs).await {
                         Ok(()) => (),
                         Err(e) => todo!()
                     }

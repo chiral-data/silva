@@ -9,9 +9,26 @@ use serde::Deserialize;
 use crate::{constants, utils};
 
 #[derive(Debug, Deserialize)]
+pub enum JobStatus {
+    Created,
+    Running,
+    Completed,
+}
+
+impl std::fmt::Display for JobStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Created => write!(f, "Created"),
+            Self::Running => write!(f, "Running"),
+            Self::Completed => write!(f, "Completed"),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Job {
     pub id: usize,
-    status: super::common::JobStatus,
+    status: JobStatus,
     desc: String
 }
 
@@ -23,15 +40,15 @@ impl std::fmt::Display for Job {
 
 impl Job {
     pub fn new(id: usize, desc: String) -> Self {
-        Self { id, desc, status: super::common::JobStatus::Created }
+        Self { id, desc, status: JobStatus::Created }
     }
 
     pub fn set_running(&mut self) {
-        self.status = super::common::JobStatus::Running;
+        self.status = JobStatus::Running;
     }
 
     pub fn set_complete(&mut self) {
-        self.status = super::common::JobStatus::Completed;
+        self.status = JobStatus::Completed;
     }
 }
 

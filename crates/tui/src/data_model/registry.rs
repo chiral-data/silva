@@ -6,6 +6,7 @@
 use std::path::PathBuf;
 use std::io::Write;
 
+use sacloud_rs::api::dok;
 use serde::Deserialize;
 
 use crate::{constants, utils};
@@ -65,6 +66,15 @@ impl Manager {
         };
 
         Ok(s)
+    }
+
+    pub async fn initialze(&self, store: &super::Store) {
+        if let Some(client) = store.account_mgr.create_client(&store.setting_mgr) {
+            if let Ok(registries_dok) = dok::shortcuts::get_registries(client).await {
+
+            }
+        }
+
     }
 
     pub fn selected(&self, setting_mgr: &super::settings::Manager) -> Option<&Registry> {

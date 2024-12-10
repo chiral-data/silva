@@ -95,6 +95,15 @@ impl Manager {
         setting_mgr.account_id_sel.as_ref()
             .map(|id| self.accounts.iter().find(|acc| acc.id() == id))?
     }
+
+    pub fn create_client(&self, setting_mgr: &super::settings::Manager) -> Option<sacloud_rs::Client> {
+        self.selected(setting_mgr)
+            .map(|account_sel| {
+                match account_sel {
+                    Account::Sakura(sa) => sacloud_rs::Client::new(sa.access_token.to_string(), Some(sa.access_token_secret.to_string()))
+                }
+            })
+    }
 }
 
 #[cfg(test)]

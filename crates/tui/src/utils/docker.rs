@@ -124,15 +124,34 @@ pub async fn push_image(image_name: &str, username: Option<String>, password: Op
 #[cfg(test)]
 mod tests {
     use std::path::Path;
-
-    use crate::envs;
+    use std::env;
 
     use super::*;
+
+    const SILVA_SAKURA_DOK_CONTAINER_REGISTRY_ADDRESS: &str = "SILVA_SAKURA_DOK_CONTAINER_REGISTRY_ADDRESS";
+    const SILVA_SAKURA_DOK_CONTAINER_REGISTRY_USERNAME: &str = "SILVA_SAKURA_DOK_CONTAINER_REGISTRY_USERNAME";
+    const SILVA_SAKURA_DOK_CONTAINER_REGISTRY_PASSWORD: &str = "SILVA_SAKURA_DOK_CONTAINER_REGISTRY_PASSWORD";
+
+    /// get parameters of the container registry of Sakura Internet
+    /// which is necessary for using Sakura Internet DOK service
+    fn get_sakura_container_registry() -> (String, String, String) {
+        (
+            env::var_os(SILVA_SAKURA_DOK_CONTAINER_REGISTRY_ADDRESS).unwrap()
+                .to_str().unwrap()
+                .to_string(),
+            env::var_os(SILVA_SAKURA_DOK_CONTAINER_REGISTRY_USERNAME).unwrap()
+                .to_str().unwrap()
+                .to_string(),
+            env::var_os(SILVA_SAKURA_DOK_CONTAINER_REGISTRY_PASSWORD).unwrap()
+                .to_str().unwrap()
+                .to_string(),
+        )
+    }
 
     #[tokio::test]
     async fn test_build_and_push_image() {
         let examples_dir = Path::new(std::env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().join("examples");
-        let (registry_addr, registry_username, registry_password) = envs::get_sakura_container_registry();
+        let (registry_addr, registry_username, registry_password) = get_sakura_container_registry();
 
         let proj_dir = examples_dir.join("gromacs");
         assert!(proj_dir.exists());
