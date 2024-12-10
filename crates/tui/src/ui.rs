@@ -30,8 +30,7 @@ pub fn render(f: &mut Frame, states: &mut states::States, store: &mut data_model
     tabs::render(f, top, states);
     match states.tab.tab {
         tabs::Tab::Project => project::render(f, mid, states, store),
-        tabs::Tab::Application => app::render(f, mid, states, store),
-        tabs::Tab::Resource => resource::render(f, mid, states, store),
+        tabs::Tab::Infra => infra::render(f, mid, states, store),
         tabs::Tab::Job => job::render(f, mid, states, store),
         tabs::Tab::Setting => setting::render(f, mid, states, store),
     }
@@ -50,9 +49,8 @@ pub async fn input(tick_rate: Duration, last_tick: &mut Instant, states: &mut st
                 } else if key.code == event::KeyCode::Tab {
                     states.focus = Focus::Tab;
                     states.tab.tab = match states.tab.tab {
-                        tabs::Tab::Project => tabs::Tab::Application,
-                        tabs::Tab::Application => tabs::Tab::Resource, 
-                        tabs::Tab::Resource => tabs::Tab::Job, 
+                        tabs::Tab::Project => tabs::Tab::Infra,
+                        tabs::Tab::Infra => tabs::Tab::Job, 
                         tabs::Tab::Job => tabs::Tab::Setting, 
                         tabs::Tab::Setting => tabs::Tab::Project 
                     }
@@ -63,10 +61,9 @@ pub async fn input(tick_rate: Duration, last_tick: &mut Instant, states: &mut st
                             states.focus = Focus::Main;
                         }
                         Focus::Main => match states.tab.tab {
-                            tabs::Tab::Application => app::handle_key(&key, states, store),
-                            tabs::Tab::Resource => resource::handle_key(&key, states, store),
-                            tabs::Tab::Job => job::handle_key(&key, states, store),
                             tabs::Tab::Project => project::handle_key(&key, states, store),
+                            tabs::Tab::Infra => infra::handle_key(&key, states, store),
+                            tabs::Tab::Job => job::handle_key(&key, states, store),
                             tabs::Tab::Setting => setting::handle_key(&key, states, store) 
                         }
                     }
@@ -88,8 +85,7 @@ pub use states::States;
 // the top bar
 mod tabs;
 // the main body
-mod app;
-mod resource;
+mod infra;
 mod project;
 mod job;
 mod setting;
