@@ -18,11 +18,10 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
     }
 
     let registry_strings: Vec<String> = store.registry_mgr.registries.iter()
-        .map(|r| format!("{}{r}", 
-            if Some(r.id()) == store.setting_mgr.registry_id_sel {
+        .map(|r| format!("{}{r}", if Some(r.id()) == store.setting_mgr.registry_id_sel {
                 "* "
-            } else { "  " },
-        ))
+            } else { "  " })
+        )
         .collect();
     let list = List::new(registry_strings)
         .block(Block::bordered().title(" Select Registry "))

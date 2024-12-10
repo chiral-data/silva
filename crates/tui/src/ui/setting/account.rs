@@ -13,26 +13,7 @@ pub struct States {
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
     let current_style = states.get_style(ui::Focus::Main);
-    let top_bottom = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(1)]) 
-        .split(area);
-    let (top, bottom) = (top_bottom[0], top_bottom[1]);
 
-
-    // the info panel
-    let account_sel = if let Some(a) = store.account_mgr.selected(&store.setting_mgr) {
-        a.to_string()
-    } else { "None".to_string() };
-    let text: Vec<Line> = vec![
-        Line::from(format!("[Selected Account]   {account_sel}")),
-    ];
-    let paragrah = Paragraph::new(text)
-        .style(current_style)
-        .block(Block::default().title(" Info ").borders(Borders::ALL));
-    f.render_widget(paragrah, top);
-
-    // the list pannel
     if store.account_mgr.accounts.is_empty() {
         let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME).unwrap();
         let filepath_hint = format!("Add account information into {}", xdg_dirs.get_data_home().join(constants::FILENAME_ACCOUNTS).to_str().unwrap());
@@ -65,7 +46,10 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
             states_current.list.select(Some(0));
         }
         let account_strings: Vec<String> = store.account_mgr.accounts.iter()
-            .map(|a| a.to_string())
+            .map(|a| format!("{}{a}", if Some(a.id()) == store.setting_mgr.account_id_sel.as_deref() {
+                    "* "
+                } else { "  " })
+            )
             .collect();
         let list = List::new(account_strings)
             .block(Block::bordered().title(" Select Cloud Account "))
@@ -76,7 +60,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
             .style(current_style)
             .direction(ListDirection::TopToBottom);
 
-        f.render_stateful_widget(list, bottom, &mut states_current.list);
+        f.render_stateful_widget(list, area, &mut states_current.list);
     }
 }
 
