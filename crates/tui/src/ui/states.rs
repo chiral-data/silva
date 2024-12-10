@@ -19,7 +19,7 @@ pub struct States {
 impl States {
     pub fn initialize(&mut self, store: &data_model::Store) {
         if let Some(acc_id_selected) = store.setting_mgr.account_id_sel.as_ref() {
-            if let Some(idx) = store.account_mgr.get_accounts().iter().position(|acc| acc.id() == acc_id_selected) {
+            if let Some(idx) = store.account_mgr.accounts.iter().position(|acc| acc.id() == acc_id_selected) {
                 self.setting.account.list.select(Some(idx));
             }
         }

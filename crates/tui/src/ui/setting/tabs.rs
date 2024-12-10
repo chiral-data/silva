@@ -8,21 +8,21 @@ use crate::ui;
 pub enum Tab {
     #[default]
     Account,
-    Repository,
+    Registry,
 }
 
 impl Tab {
     fn left(&self) -> Self {
         match self {
-            Self::Account => Self::Repository,
-            Self::Repository => Self::Account
+            Self::Account => Self::Registry,
+            Self::Registry => Self::Account
         }
     }
 
     fn right(&self) -> Self {
         match self {
-            Self::Account => Self::Repository,
-            Self::Repository => Self::Account
+            Self::Account => Self::Registry,
+            Self::Registry => Self::Account
         }
     }
 }
@@ -37,11 +37,11 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::States) {
     let states_current = &states.setting.tabs;
     let selected = match states_current.tab {
         Tab::Account => 0,
-        Tab::Repository => 1,
+        Tab::Registry => 1,
     };
     let tabs = Tabs::new(vec![
             "Account",
-            "Repository",
+            "Registry",
         ])
         .block(Block::default().title("").borders(Borders::ALL))
         .select(selected)

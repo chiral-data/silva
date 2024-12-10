@@ -17,6 +17,18 @@ pub struct Registry {
     pub password: Option<String>
 }
 
+impl std::fmt::Display for Registry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}   {}", self.addr, self.username.as_deref().unwrap_or(""))
+    }
+}
+
+impl Registry {
+    pub fn id(&self) -> String {
+        format!("{}_{}", self.addr, self.username.as_deref().unwrap_or(""))
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct DataFile {
     registries: Option<Vec<Registry>>,
@@ -53,6 +65,11 @@ impl Manager {
         };
 
         Ok(s)
+    }
+
+    pub fn selected(&self, setting_mgr: &super::settings::Manager) -> Option<&Registry> {
+        setting_mgr.registry_id_sel.as_ref()
+            .map(|id| self.registries.iter().find(|r| r.id() == *id))?
     }
 }
 

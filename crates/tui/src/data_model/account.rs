@@ -61,7 +61,7 @@ Sakura.access_token_secret = ""
 
 #[derive(Debug)]
 pub struct Manager {
-    accounts: Vec<Account>,
+    pub accounts: Vec<Account>,
 }
 
 impl Manager {
@@ -89,10 +89,6 @@ impl Manager {
 
         let s = Self { accounts };
         Ok(s)
-    }
-
-    pub fn get_accounts(&self) -> &Vec<Account> {
-        &self.accounts
     }
 
     pub fn selected(&self, setting_mgr: &super::settings::Manager) -> Option<&Account> {

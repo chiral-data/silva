@@ -8,6 +8,7 @@ use crate::{constants, utils};
 #[derive(Debug, Serialize, Deserialize)]
 struct DataFile {
     account_id_sel: Option<String>,
+    registry_id_sel: Option<String>,
 }
 
 impl DataFile {
@@ -23,7 +24,8 @@ impl DataFile {
 }
 
 pub struct Manager {
-    pub account_id_sel: Option<String>
+    pub account_id_sel: Option<String>,
+    pub registry_id_sel: Option<String>,
 }
 
 impl Manager {
@@ -42,7 +44,8 @@ impl Manager {
         let content = utils::file::get_file_content(&filepath)?;
         let df = DataFile::new(&content)?;
         let s = Self {
-            account_id_sel: df.account_id_sel
+            account_id_sel: df.account_id_sel,
+            registry_id_sel: df.registry_id_sel
         };
 
         Ok(s)
@@ -50,7 +53,8 @@ impl Manager {
 
     pub fn save(&self) -> anyhow::Result<()> {
         let df = DataFile {
-            account_id_sel: self.account_id_sel.clone()
+            account_id_sel: self.account_id_sel.clone(),
+            registry_id_sel: self.registry_id_sel.clone()
         };
 
         let filepath = Self::data_filepath()?; 

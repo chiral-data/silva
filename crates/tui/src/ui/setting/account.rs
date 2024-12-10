@@ -33,7 +33,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
     f.render_widget(paragrah, top);
 
     // the list pannel
-    if store.account_mgr.get_accounts().is_empty() {
+    if store.account_mgr.accounts.is_empty() {
         let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME).unwrap();
         let filepath_hint = format!("Add account information into {}", xdg_dirs.get_data_home().join(constants::FILENAME_ACCOUNTS).to_str().unwrap());
         let tmp_filepath_hint = xdg_dirs.get_data_home().join(format!("{}.tmp", constants::FILENAME_ACCOUNTS));
@@ -64,7 +64,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
         if states_current.list.selected().is_none() {
             states_current.list.select(Some(0));
         }
-        let account_strings: Vec<String> = store.account_mgr.get_accounts().iter()
+        let account_strings: Vec<String> = store.account_mgr.accounts.iter()
             .map(|a| a.to_string())
             .collect();
         let list = List::new(account_strings)
@@ -86,19 +86,19 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut da
     let states_current = &mut states.setting.account;
     match key.code {
         KeyCode::Up => {
-            let total = store.account_mgr.get_accounts().len();
+            let total = store.account_mgr.accounts.len();
             let mut sel_idx = states_current.list.selected().unwrap_or(0);
             sel_idx = (sel_idx + total - 1) % total;
             states_current.list.select(Some(sel_idx));
         }
         KeyCode::Down => {
             let mut sel_idx = states_current.list.selected().unwrap_or(0);
-            sel_idx = (sel_idx + 1) % store.account_mgr.get_accounts().len();
+            sel_idx = (sel_idx + 1) % store.account_mgr.accounts.len();
             states_current.list.select(Some(sel_idx));
         }
         KeyCode::Char('S') | KeyCode::Char('s') => {
             let sel_idx = states_current.list.selected().unwrap_or(0);
-            let account_sel = store.account_mgr.get_accounts().get(sel_idx).unwrap();
+            let account_sel = store.account_mgr.accounts.get(sel_idx).unwrap();
             store.setting_mgr.account_id_sel = Some(account_sel.id().to_string());
             store.setting_mgr.save().unwrap();
         }
