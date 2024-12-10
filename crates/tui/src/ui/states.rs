@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use ratatui::prelude::*;
 
-use crate::ui;
+use crate::{data_model, ui};
 
 #[derive(Default)]
 pub struct States {
@@ -18,6 +18,14 @@ pub struct States {
 }
 
 impl States {
+    pub fn initialize(&mut self, store: &data_model::Store) {
+        if let Some(acc_id_selected) = store.setting_mgr.account_id_sel.as_ref() {
+            if let Some(idx) = store.account_mgr.get_accounts().iter().position(|acc| acc.id() == acc_id_selected) {
+                self.setting.account.list.select(Some(idx));
+            }
+        }
+    }
+
     pub fn get_style(&self, focus: ui::Focus) -> Style {
         if self.focus == focus {
             Style::default().fg(ui::COLOR_FOCUS)

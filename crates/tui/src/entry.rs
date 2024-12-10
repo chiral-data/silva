@@ -35,6 +35,7 @@ pub async fn run() -> anyhow::Result<()> {
 
     let mut states = ui::States::default();
     let mut store = data_model::Store::default();
+    states.initialize(&store);
 
     loop {
         terminal.draw(|f| ui::render(f, &mut states, &mut store))?;

@@ -13,6 +13,26 @@ pub struct States {
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
     let current_style = states.get_style(ui::Focus::Main);
+    let top_bottom = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(1)]) 
+        .split(area);
+    let (top, bottom) = (top_bottom[0], top_bottom[1]);
+
+
+    // the info panel
+    let account_sel = if let Some(a) = store.account_mgr.selected(&store.setting_mgr) {
+        a.to_string()
+    } else { "None".to_string() };
+    let text: Vec<Line> = vec![
+        Line::from(format!("[Selected Account]   {account_sel}")),
+    ];
+    let paragrah = Paragraph::new(text)
+        .style(current_style)
+        .block(Block::default().title(" Info ").borders(Borders::ALL));
+    f.render_widget(paragrah, top);
+
+    // the list pannel
     if store.account_mgr.get_accounts().is_empty() {
         let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME).unwrap();
         let filepath_hint = format!("Add account information into {}", xdg_dirs.get_data_home().join(constants::FILENAME_ACCOUNTS).to_str().unwrap());
@@ -51,16 +71,16 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
             .block(Block::bordered().title(" Select Cloud Account "))
             .style(Style::new().white())
             .highlight_style(Style::new().reversed())
-            .highlight_symbol(">> ")
+            .highlight_symbol(">>[S] ")
             .repeat_highlight_symbol(true)
             .style(current_style)
             .direction(ListDirection::TopToBottom);
 
-        f.render_stateful_widget(list, area, &mut states_current.list);
+        f.render_stateful_widget(list, bottom, &mut states_current.list);
     }
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_model::Store) {
+pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut data_model::Store) {
     use event::KeyCode;
 
     let states_current = &mut states.setting.account;
@@ -75,6 +95,12 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_m
             let mut sel_idx = states_current.list.selected().unwrap_or(0);
             sel_idx = (sel_idx + 1) % store.account_mgr.get_accounts().len();
             states_current.list.select(Some(sel_idx));
+        }
+        KeyCode::Char('S') | KeyCode::Char('s') => {
+            let sel_idx = states_current.list.selected().unwrap_or(0);
+            let account_sel = store.account_mgr.get_accounts().get(sel_idx).unwrap();
+            store.setting_mgr.account_id_sel = Some(account_sel.id().to_string());
+            store.setting_mgr.save().unwrap();
         }
         _ => ()
     }

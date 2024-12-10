@@ -3,7 +3,7 @@ use std::io::Write;
 
 use serde::Deserialize;
 
-use crate::{constants, ui, utils};
+use crate::{constants, utils};
 
 #[derive(Debug, Deserialize)]
 pub struct SakuraAccount {
@@ -95,9 +95,9 @@ impl Manager {
         &self.accounts
     }
 
-    pub fn selected(&self, states: &ui::States) -> Option<&Account> {
-        states.setting.account.list.selected()
-            .map(|index| self.accounts.get(index))?
+    pub fn selected(&self, setting_mgr: &super::settings::Manager) -> Option<&Account> {
+        setting_mgr.account_id_sel.as_ref()
+            .map(|id| self.accounts.iter().find(|acc| acc.id() == id))?
     }
 }
 
