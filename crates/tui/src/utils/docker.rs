@@ -1,16 +1,16 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::{Arc, Mutex}};
 use std::io::{Read, Write};
 
 use futures_util::stream::StreamExt;
-use tokio::sync::Mutex;
 
 use crate::data_model;
+
 
 pub async fn build_image(
     proj_dir: &PathBuf, 
     image_name: &str, 
     base_image: &str,
-    _job_logs: Arc<Mutex<HashMap<String, Vec<String>>>>
+    job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
     std::env::set_current_dir(proj_dir)?;
 
@@ -21,7 +21,7 @@ pub async fn build_image(
 
     let settings_filepath = proj_dir.join("settings.toml");
     let proj_settings = data_model::job::settings::Settings::new_from_file(&settings_filepath)
-        .map_err(|e| anyhow::Error::msg(format!("{e} no settings file settings.toml")))?;
+        .map_err(|e| anyhow::Error::msg(format!("{e} no settings file {settings_filepath:?}")))?;
 
     // create entrypoint run.sh
     let filename_entrypoint = "run.sh";
@@ -68,16 +68,16 @@ pub async fn build_image(
         a.append_path(script_file)?;
     }
 
-    let docker = bollard::Docker::connect_with_local_defaults().unwrap();
+    let docker = bollard::Docker::connect_with_local_defaults()?;
     let build_image_options = bollard::image::BuildImageOptions {
         dockerfile: "Dockerfile",
         t: image_name,
         platform: "linux/amd64",
         ..Default::default()
     };
-    let mut file = std::fs::File::open(filename_tar).unwrap();
+    let mut file = std::fs::File::open(filename_tar)?;
     let mut contents = Vec::new();
-    file.read_to_end(&mut contents).unwrap();
+    file.read_to_end(&mut contents)?;
     let mut image_build_stream = docker.build_image(build_image_options, None, Some(contents.into()));
     while let Some(msg) = image_build_stream.next().await {
         match msg {
@@ -86,17 +86,23 @@ pub async fn build_image(
                     id.to_string()
                 } else { "".to_string() };
                 if let Some(info) = build_info.stream {
-                    println!("[{id}]{info}");
+                    let mut job_mgr = job_mgr.lock().unwrap();
+                    job_mgr.add_log(0, format!("[{id}]{info}"));
                 } else if let Some(status) = build_info.status {
                     let progress = if let Some(progress) = build_info.progress {
                         progress
                     } else { "".to_string() };
-                    println!("[{id}] Status: {status} {progress}");
+                    let mut job_mgr = job_mgr.lock().unwrap();
+                    job_mgr.add_log(0, format!("[{id}] Status: {status} {progress}"));
                 } else {
-                    println!("non handled build_info {:?}", build_info);
+                    let mut job_mgr = job_mgr.lock().unwrap();
+                    job_mgr.add_log(0, format!("non handled build_info {:?}", build_info));
                 }
             }
-            Err(e) => println!("get error {e}")
+            Err(e) => {
+                let mut job_mgr = job_mgr.lock().unwrap();
+                job_mgr.add_log(0, format!("get error {e}"));
+            }
         }
     }
     tokio::fs::remove_file(filename_docker).await.unwrap();
@@ -106,7 +112,7 @@ pub async fn build_image(
     Ok(())
 }
 
-pub async fn push_image(image_name: &str, username: Option<String>, password: Option<String>) -> anyhow::Result<()> {
+pub async fn push_image(image_name: &str, username: Option<String>, password: Option<String>, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
     let docker = bollard::Docker::connect_with_local_defaults().unwrap();
     let push_options = bollard::image::PushImageOptions::<&str>::default();
     let credentials = bollard::auth::DockerCredentials { // for sakuracr.jp
@@ -115,7 +121,23 @@ pub async fn push_image(image_name: &str, username: Option<String>, password: Op
     };
     let mut image_push_stream = docker.push_image(image_name, Some(push_options), Some(credentials));
     while let Some(msg) = image_push_stream.next().await {
-        println!("Message: {msg:?}");
+        match msg {
+            Ok(push_image_info) => {
+                let raw_msg = format!("push_image_info: {push_image_info:?}");
+                let status = if let Some(status) = push_image_info.status {
+                    status
+                } else { "".to_string() };
+                let progress = if let Some(progress) = push_image_info.progress {
+                    progress 
+                } else { "".to_string() };
+                let err = if let Some(_err) = push_image_info.error {
+                    raw_msg
+                } else { "".to_string() };
+                let mut job_mgr = job_mgr.lock().unwrap();
+                job_mgr.add_log(0, format!("[push image] {status}, {progress}, {err}"));
+            }
+            Err(e) => return Err(anyhow::Error::msg(format!("push image error {e}")))
+        }
     }
 
     Ok(())
@@ -157,8 +179,8 @@ mod tests {
         assert!(proj_dir.exists());
         let image_name = format!("{}/gromacs:test_241208_2", registry_addr);
         let base_image = "nvcr.io/hpc/gromacs:2023.2";
-        let job_logs = Arc::new(Mutex::new(HashMap::new()));
-        build_image(&proj_dir, &image_name, base_image, job_logs).await.unwrap();
-        push_image(&image_name, Some(registry_username), Some(registry_password)).await;
+        let job_mgr = Arc::new(Mutex::new(data_model::job::Manager::load().unwrap()));
+        build_image(&proj_dir, &image_name, base_image, job_mgr.clone()).await.unwrap();
+        push_image(&image_name, Some(registry_username), Some(registry_password), job_mgr).await.unwrap();
     }
 }

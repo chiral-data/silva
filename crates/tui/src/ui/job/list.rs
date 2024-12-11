@@ -32,7 +32,8 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
         .alignment(Alignment::Left)
         .wrap(Wrap { trim: true });
 
-    let jobs_string: Vec<String> = store.job_mgr.jobs.values()
+    let job_mgr  = store.job_mgr.lock().unwrap();
+    let jobs_string: Vec<String> = job_mgr.jobs.values()
         .map(|j| j.to_string())
         .collect();
 

@@ -1,14 +1,12 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use tokio::sync::Mutex;
+use sacloud_rs::api::dok;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use crossterm::event;
 
 use crate::data_model;
-use crate::envs;
 use crate::ui;
 use crate::utils;
 
@@ -16,23 +14,87 @@ use crate::utils;
 pub struct States {
 }
 
-pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
 
+pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
+    let current_style = states.get_style(ui::Focus::Main);
+
+    let actions = vec![
+        Line::from("[R]un the new job")
+    ];
+    let action_list = Paragraph::new(actions)
+        .block(Block::bordered().title(" Actions "))
+        .style(current_style)
+        .alignment(Alignment::Left)
+        .wrap(Wrap { trim: true });
+
+    let job_mgr = store.job_mgr.lock().unwrap();
+    // TODO: use job id 0 for testing first
+    let logs: Vec<Line> = job_mgr.logs.get(&0)
+        .map(|v| {
+            v.iter()
+            .map(|s| s.as_str())
+            .map(Line::from)
+            .collect()
+        })
+        .unwrap_or_default();
+    let paragraph = Paragraph::new(logs)
+        .block(Block::bordered())
+        .alignment(Alignment::Left)
+        .wrap(Wrap { trim: true });
+
+    let top_bottom = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([ Constraint::Length(3), Constraint::Min(1)]) 
+        .split(area);
+    let (top, bottom) = (top_bottom[0], top_bottom[1]);
+    f.render_widget(action_list, top);
+    f.render_widget(paragraph, bottom);
+}
+
+struct ParametersDok {
+    image_name: String, 
+    base_image: String, 
+    client: sacloud_rs::Client,
+    registry_dok: dok::Registry,
+    registry_password: Option<String>,
+    plan: dok::params::Plan,
+}
+
+fn prepare_job(store: &data_model::Store) -> anyhow::Result<(PathBuf, ParametersDok)> {
+    let proj_dir = store.proj_selected.as_ref()
+        .ok_or(anyhow::Error::msg("no project selected"))?;
+    let image_name = "example_image:test".to_string();
+    let base_image = "nvcr.io/hpc/gromacs:2023.2".to_string();
+    let proj_dir = proj_dir.to_owned();
+    let client = store.account_mgr.create_client(&store.setting_mgr)
+        .ok_or(anyhow::Error::msg("can not create cloud client"))?;
+    let registry_sel = store.registry_mgr.selected(&store.setting_mgr)
+        .ok_or(anyhow::Error::msg("no registry selected"))?;
+    let registry_dok = registry_sel.find_registry_dok(&store.registry_mgr.registries_dok)
+        .ok_or(anyhow::Error::msg(format!("can not find registry for Sakura DOK service {:?}", store.registry_mgr.registries_dok)))?;
+    let registry_password = registry_sel.password.to_owned();
+    let pod_sel = store.pod_mgr.selected()
+        .ok_or(anyhow::Error::msg("no pod selected"))?;
+    let plan = match &pod_sel.settings {
+        data_model::pod::Settings::SakuraInternetServer(_) => { return Err(anyhow::Error::msg("not DOK service")); },
+        data_model::pod::Settings::SakuraInternetService(dok_gpu_type) => match dok_gpu_type {
+            data_model::provider::sakura_internet::DokGpuType::V100 => dok::params::Plan::V100,
+            data_model::provider::sakura_internet::DokGpuType::H100 => dok::params::Plan::H100GB80,
+        }
+    };
+    let params_dok = ParametersDok { image_name, base_image, client, registry_dok, registry_password, plan };
+
+    Ok((proj_dir, params_dok)) 
 }
 
 async fn run_job(
     proj_dir: PathBuf, 
-    image_name: String, 
-    base_image: String, 
-    client: sacloud_rs::Client,
-    registry_id: String,
-    plan: sacloud_rs::api::dok::params::Plan,
-    job_logs: Arc<Mutex<HashMap<String, Vec<String>>>>
+    params_dok: ParametersDok,
+    job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
-    utils::docker::build_image(&proj_dir, &image_name, &base_image, job_logs).await?;
-    let (_addr, username, password) = envs::get_sakura_container_registry();
-    utils::docker::push_image(&image_name, Some(username), Some(password)).await?;
-    let task_created = sacloud_rs::api::dok::shortcuts::create_task(client, &image_name, &registry_id, plan).await?;
+    utils::docker::build_image(&proj_dir, &params_dok.image_name, &params_dok.base_image, job_mgr.clone()).await?;
+    utils::docker::push_image(&params_dok.image_name, Some(params_dok.registry_dok.username.to_string()), params_dok.registry_password, job_mgr.clone()).await?;
+    let _task_created = sacloud_rs::api::dok::shortcuts::create_task(params_dok.client, &params_dok.image_name, &params_dok.registry_dok.hostname, params_dok.plan).await?;
     
     Ok(())
 }
@@ -42,26 +104,21 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_m
 
     match key.code {
         KeyCode::Char('r') | KeyCode::Char('R') => {
-            // Run the job, for DOK, it will be
-            // generate the Dockfile
-            // Build the docker image
-            // push the docker image
-            // submit the task
-
-            if let Some(proj_dir) = &store.proj_selected  {
-                let image_name = "example_image:test".to_string();
-                let base_image = "nvcr.io/hpc/gromacs:2023.2".to_string();
-                let proj_dir = proj_dir.to_owned();
-                let job_logs = store.job_mgr.logs.clone();
-                let client = store.account_mgr.create_client(&store.setting_mgr);
-                tokio::spawn(async move {
-                    match run_job(proj_dir, image_name, base_image, client, job_logs).await {
-                        Ok(()) => (),
-                        Err(e) => todo!()
-                    }
-                });
-            } else {
-                states.info.message = "no project selected".to_string();
+            match prepare_job(store){
+                Ok(res) => {
+                    let (proj_dir, params_dok) = res; 
+                    let job_mgr = store.job_mgr.clone();
+                    tokio::spawn(async move {
+                        match run_job(proj_dir, params_dok, job_mgr.clone()).await {
+                            Ok(()) => (),
+                            Err(e) => {
+                                let mut job_mgr = job_mgr.lock().unwrap();
+                                job_mgr.add_log(0, format!("run job error: {e}"));
+                            } 
+                        }
+                    });
+                }
+                Err(e) => states.info.message = format!("get job parameters error: {e}")
             }
         }
         _ => ()

@@ -2,7 +2,6 @@ use ratatui::prelude::*;
 use ratatui::widgets::*;
 use crossterm::event;
 
-use crate::action;
 use crate::data_model;
 use crate::ui;
 
@@ -67,19 +66,20 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut da
 
     match key.code {
         KeyCode::Char('c') | KeyCode::Char('C') => {
-            let account_selected = store.account_mgr.selected(&store.setting_mgr)
-                .ok_or(anyhow::Error::msg("no account selected"))
-                .unwrap();
-            let client = account_selected.create_client();
-            let jh = tokio::spawn(async move {
-                action::server::create_server(client).await.unwrap();
-            });
+            todo!()
+            // let account_selected = store.account_mgr.selected(&store.setting_mgr)
+            //     .ok_or(anyhow::Error::msg("no account selected"))
+            //     .unwrap();
+            // let client = account_selected.create_client();
+            // let jh = tokio::spawn(async move {
+            //     action::server::create_server(client).await.unwrap();
+            // });
 
-            let total = store.job_mgr.jobs.len();
-            let mut job_local = data_model::job::Job::new(total, "create a server".to_string());
-            job_local.set_running();
-            let _ = states.handlers.insert(job_local.id, jh);
-            store.job_mgr.jobs.insert(job_local.id, job_local);
+            // let total = store.job_mgr.jobs.len();
+            // let mut job_local = data_model::job::Job::new(total, "create a server".to_string());
+            // job_local.set_running();
+            // let _ = states.handlers.insert(job_local.id, jh);
+            // store.job_mgr.jobs.insert(job_local.id, job_local);
         }
         KeyCode::Up => {
             let total = states_current.pods.len(); 

@@ -4,7 +4,6 @@
 //!     is recommended.
 
 use std::path::PathBuf;
-use std::io::Write;
 
 use sacloud_rs::api::dok;
 use serde::Deserialize;
@@ -13,20 +12,28 @@ use crate::{constants, utils};
 
 #[derive(Debug, Deserialize)]
 pub struct Registry {
-    pub addr: String,
+    pub hostname: String,
     pub username: Option<String>,
     pub password: Option<String>
 }
 
 impl std::fmt::Display for Registry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}   {}", self.addr, self.username.as_deref().unwrap_or(""))
+        write!(f, "{}   {}", self.hostname, self.username.as_deref().unwrap_or(""))
     }
 }
 
 impl Registry {
     pub fn id(&self) -> String {
-        format!("{}_{}", self.addr, self.username.as_deref().unwrap_or(""))
+        format!("{}_{}", self.hostname, self.username.as_deref().unwrap_or(""))
+    }
+
+    pub fn find_registry_dok(&self, registries_dok: &[dok::Registry]) -> Option<dok::Registry> {
+        self.username.as_ref()
+            .map(|username| {
+                registries_dok.iter().find(|r| r.username == *username && r.hostname == self.hostname)
+                    .map(|r| r.to_owned())
+            })?
     }
 }
 
@@ -43,7 +50,8 @@ impl DataFile {
 }
 
 pub struct Manager {
-    pub registries: Vec<Registry>
+    pub registries: Vec<Registry>,
+    pub registries_dok: Vec<dok::Registry>,
 }
 
 impl Manager {
@@ -62,16 +70,17 @@ impl Manager {
         let content = utils::file::get_file_content(&filepath)?;
         let df = DataFile::new(&content)?;
         let s = Self { 
-            registries: df.registries.unwrap_or_default()
+            registries: df.registries.unwrap_or_default(),
+            registries_dok: vec![]
         };
 
         Ok(s)
     }
 
-    pub async fn initialze(&self, store: &super::Store) {
-        if let Some(client) = store.account_mgr.create_client(&store.setting_mgr) {
+    pub async fn initialze(&mut self, account_mgr: &super::account::Manager, setting_mgr: &super::settings::Manager) {
+        if let Some(client) = account_mgr.create_client(setting_mgr) {
             if let Ok(registries_dok) = dok::shortcuts::get_registries(client).await {
-
+                self.registries_dok = registries_dok.results;
             }
         }
 

@@ -58,7 +58,7 @@ impl Manager {
         };
 
         let filepath = Self::data_filepath()?; 
-        let mut file = std::fs::File::create(&filepath)?;
+        let mut file = std::fs::File::create(filepath)?;
         write!(file, "{}", df.to_string()?)?;
         Ok(())
     }

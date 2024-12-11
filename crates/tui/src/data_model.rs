@@ -1,5 +1,5 @@
-use std::path::PathBuf;
-
+use std::{path::PathBuf, sync::Arc};
+use std::sync::Mutex;
 
 pub struct Store {
     pub account_mgr: account::Manager,
@@ -9,7 +9,7 @@ pub struct Store {
     pub pod_type_mgr: pod_type::Manager,
     pub pod_mgr: pod::Manager,
     pub proj_selected: Option<PathBuf>,
-    pub job_mgr: job::Manager,
+    pub job_mgr: Arc<Mutex<job::Manager>>
 }
 
 impl std::default::Default for Store {
@@ -26,14 +26,14 @@ impl std::default::Default for Store {
             account_mgr, registry_mgr, setting_mgr,
             app_mgr, pod_type_mgr, pod_mgr,
             proj_selected: None, 
-            job_mgr, 
+            job_mgr: Arc::new(Mutex::new(job_mgr)), 
         }
     }
 }
 
 
 
-mod provider;
+pub mod provider;
 mod registry;
 mod settings;
 pub mod app;

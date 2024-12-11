@@ -42,15 +42,19 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut da
     match key.code {
         KeyCode::Up => {
             let total = store.registry_mgr.registries.len();
-            let mut sel_idx = states_current.list.selected().unwrap_or(0);
-            sel_idx = (sel_idx + total - 1) % total;
-            states_current.list.select(Some(sel_idx));
+            if total > 0 {
+                let mut sel_idx = states_current.list.selected().unwrap_or(0);
+                sel_idx = (sel_idx + total - 1) % total;
+                states_current.list.select(Some(sel_idx));
+            }
         }
         KeyCode::Down => {
             let total = store.registry_mgr.registries.len();
-            let mut sel_idx = states_current.list.selected().unwrap_or(0);
-            sel_idx = (sel_idx + 1) % total; 
-            states_current.list.select(Some(sel_idx));
+            if total > 0 {
+                let mut sel_idx = states_current.list.selected().unwrap_or(0);
+                sel_idx = (sel_idx + 1) % total; 
+                states_current.list.select(Some(sel_idx));
+            }
         }
         KeyCode::Char('S') | KeyCode::Char('s') => {
             let sel_idx = states_current.list.selected().unwrap_or(0);

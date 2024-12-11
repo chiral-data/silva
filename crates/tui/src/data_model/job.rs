@@ -1,9 +1,8 @@
 //! Jobs run locally to manage cloud infrastructure
 //!
 
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::{HashMap, VecDeque}, path::PathBuf};
 
-use tokio::sync::Mutex;
 use serde::Deserialize;
 
 use crate::{constants, utils};
@@ -68,7 +67,7 @@ impl DataFile {
 pub struct Manager {
     pub jobs: HashMap<usize, Job>,
     /// job logs: <job id, log contents>
-    pub logs: Arc<Mutex<HashMap<String, Vec<String>>>>
+    pub logs: HashMap<usize, VecDeque<String>>
 }
 
 impl Manager {
@@ -92,10 +91,17 @@ impl Manager {
                 .collect(),
             None => HashMap::new() 
         };
-        let logs = Arc::new(Mutex::new(HashMap::new()));
 
-        let s = Self { jobs, logs };
+        let s = Self { jobs, logs: HashMap::new() };
         Ok(s)
+    }
+
+    pub fn add_log(&mut self, job_id: usize, log: String) {
+        let job_logs = self.logs.entry(job_id).or_default();
+        job_logs.push_back(log);
+        if job_logs.len() > 10 {
+            job_logs.pop_front();
+        }
     }
 }
 

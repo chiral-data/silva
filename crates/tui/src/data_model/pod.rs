@@ -69,7 +69,7 @@ impl Manager {
         Manager { pods, pod_id_selected: None }
     }
 
-    pub fn pod_selected(&self) -> Option<&Pod> {
+    pub fn selected(&self) -> Option<&Pod> {
         self.pod_id_selected
             .map(|id_sel| self.pods.get(&id_sel))?
     }

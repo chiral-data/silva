@@ -16,7 +16,7 @@ fn setup() {
 
     // if project home directory is not set, use the directory "examples"
     if env::var_os(envs::SILVA_PROJECTS_HOME).is_none() {
-        env::set_var(envs::SILVA_PROJECTS_HOME, PathBuf::from(".").join("examples"))
+        env::set_var(envs::SILVA_PROJECTS_HOME, PathBuf::from(".").join("examples").canonicalize().unwrap())
     }
 }
 
@@ -36,6 +36,7 @@ pub async fn run() -> anyhow::Result<()> {
     let mut states = ui::States::default();
     let mut store = data_model::Store::default();
     states.initialize(&store);
+    store.registry_mgr.initialze(&store.account_mgr, &store.setting_mgr).await;
 
     loop {
         terminal.draw(|f| ui::render(f, &mut states, &mut store))?;
