@@ -3,7 +3,7 @@
 
 use std::{collections::{HashMap, VecDeque}, path::PathBuf};
 
-use serde::Deserialize;
+use serde::{de::IntoDeserializer, Deserialize};
 
 use crate::{constants, utils};
 
@@ -67,7 +67,8 @@ impl DataFile {
 pub struct Manager {
     pub jobs: HashMap<usize, Job>,
     /// job logs: <job id, log contents>
-    pub logs: HashMap<usize, VecDeque<String>>
+    pub logs: HashMap<usize, VecDeque<String>>,
+    pub logs_tmp: HashMap<usize, String>
 }
 
 impl Manager {
@@ -92,16 +93,25 @@ impl Manager {
             None => HashMap::new() 
         };
 
-        let s = Self { jobs, logs: HashMap::new() };
+        let s = Self { jobs, logs: HashMap::new(), logs_tmp: HashMap::new() };
         Ok(s)
     }
 
+    /// add a new log message for job 
     pub fn add_log(&mut self, job_id: usize, log: String) {
         let job_logs = self.logs.entry(job_id).or_default();
         job_logs.push_back(log);
         if job_logs.len() > 10 {
             job_logs.pop_front();
         }
+    }
+
+    pub fn add_log_tmp(&mut self, job_id: usize, log: String) {
+        let _ = self.logs_tmp.insert(job_id, log);
+    }
+
+    pub fn clear_log_tmp(&mut self, job_id: &usize) {
+        let _ = self.logs_tmp.remove(job_id);
     }
 }
 

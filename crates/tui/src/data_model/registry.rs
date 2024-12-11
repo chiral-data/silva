@@ -10,7 +10,7 @@ use serde::Deserialize;
 
 use crate::{constants, utils};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Registry {
     pub hostname: String,
     pub username: Option<String>,

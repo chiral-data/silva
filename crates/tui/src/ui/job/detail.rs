@@ -27,9 +27,10 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
         .alignment(Alignment::Left)
         .wrap(Wrap { trim: true });
 
+    let job_id = 0;
     let job_mgr = store.job_mgr.lock().unwrap();
     // TODO: use job id 0 for testing first
-    let logs: Vec<Line> = job_mgr.logs.get(&0)
+    let mut logs: Vec<Line> = job_mgr.logs.get(&job_id)
         .map(|v| {
             v.iter()
             .map(|s| s.as_str())
@@ -37,6 +38,9 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
             .collect()
         })
         .unwrap_or_default();
+    if let Some(log_tmp) = job_mgr.logs_tmp.get(&job_id) {
+        logs.push(Line::from(log_tmp.as_str()));
+    }
     let paragraph = Paragraph::new(logs)
         .block(Block::bordered())
         .alignment(Alignment::Left)
@@ -54,16 +58,16 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
 struct ParametersDok {
     image_name: String, 
     base_image: String, 
+    registry: data_model::registry::Registry,
     client: sacloud_rs::Client,
     registry_dok: dok::Registry,
-    registry_password: Option<String>,
     plan: dok::params::Plan,
 }
 
 fn prepare_job(store: &data_model::Store) -> anyhow::Result<(PathBuf, ParametersDok)> {
     let proj_dir = store.proj_selected.as_ref()
         .ok_or(anyhow::Error::msg("no project selected"))?;
-    let image_name = "example_image:test".to_string();
+    let image_name = "gromacs:241211_test";
     let base_image = "nvcr.io/hpc/gromacs:2023.2".to_string();
     let proj_dir = proj_dir.to_owned();
     let client = store.account_mgr.create_client(&store.setting_mgr)
@@ -72,7 +76,6 @@ fn prepare_job(store: &data_model::Store) -> anyhow::Result<(PathBuf, Parameters
         .ok_or(anyhow::Error::msg("no registry selected"))?;
     let registry_dok = registry_sel.find_registry_dok(&store.registry_mgr.registries_dok)
         .ok_or(anyhow::Error::msg(format!("can not find registry for Sakura DOK service {:?}", store.registry_mgr.registries_dok)))?;
-    let registry_password = registry_sel.password.to_owned();
     let pod_sel = store.pod_mgr.selected()
         .ok_or(anyhow::Error::msg("no pod selected"))?;
     let plan = match &pod_sel.settings {
@@ -82,7 +85,7 @@ fn prepare_job(store: &data_model::Store) -> anyhow::Result<(PathBuf, Parameters
             data_model::provider::sakura_internet::DokGpuType::H100 => dok::params::Plan::H100GB80,
         }
     };
-    let params_dok = ParametersDok { image_name, base_image, client, registry_dok, registry_password, plan };
+    let params_dok = ParametersDok { image_name: format!("{}/{image_name}", registry_sel.hostname), base_image, registry: registry_sel.to_owned(), client, registry_dok, plan };
 
     Ok((proj_dir, params_dok)) 
 }
@@ -93,7 +96,7 @@ async fn run_job(
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
     utils::docker::build_image(&proj_dir, &params_dok.image_name, &params_dok.base_image, job_mgr.clone()).await?;
-    utils::docker::push_image(&params_dok.image_name, Some(params_dok.registry_dok.username.to_string()), params_dok.registry_password, job_mgr.clone()).await?;
+    utils::docker::push_image(params_dok.registry, &params_dok.image_name, job_mgr.clone()).await?;
     let _task_created = sacloud_rs::api::dok::shortcuts::create_task(params_dok.client, &params_dok.image_name, &params_dok.registry_dok.hostname, params_dok.plan).await?;
     
     Ok(())

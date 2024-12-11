@@ -34,7 +34,7 @@ impl std::default::Default for Store {
 
 
 pub mod provider;
-mod registry;
+pub mod registry;
 mod settings;
 pub mod app;
 mod account;

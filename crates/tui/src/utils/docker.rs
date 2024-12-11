@@ -12,6 +12,11 @@ pub async fn build_image(
     base_image: &str,
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(0, format!("[build image {image_name}] starts ..."));
+    }
+
     std::env::set_current_dir(proj_dir)?;
 
     let proj_name = proj_dir.file_name()
@@ -87,36 +92,45 @@ pub async fn build_image(
                 } else { "".to_string() };
                 if let Some(info) = build_info.stream {
                     let mut job_mgr = job_mgr.lock().unwrap();
-                    job_mgr.add_log(0, format!("[{id}]{info}"));
+                    job_mgr.add_log_tmp(0, format!("[{id}]{info}"));
                 } else if let Some(status) = build_info.status {
                     let progress = if let Some(progress) = build_info.progress {
                         progress
                     } else { "".to_string() };
                     let mut job_mgr = job_mgr.lock().unwrap();
-                    job_mgr.add_log(0, format!("[{id}] Status: {status} {progress}"));
+                    job_mgr.add_log_tmp(0, format!("[{id}] Status: {status} {progress}"));
                 } else {
                     let mut job_mgr = job_mgr.lock().unwrap();
-                    job_mgr.add_log(0, format!("non handled build_info {:?}", build_info));
+                    job_mgr.add_log_tmp(0, format!("non handled build_info {:?}", build_info));
                 }
             }
-            Err(e) => {
-                let mut job_mgr = job_mgr.lock().unwrap();
-                job_mgr.add_log(0, format!("get error {e}"));
-            }
+            Err(e) => return Err(anyhow::Error::msg(format!("push image error {e}")))
         }
     }
     tokio::fs::remove_file(filename_docker).await.unwrap();
     tokio::fs::remove_file(filename_entrypoint).await.unwrap();
     tokio::fs::remove_file(filename_tar).await.unwrap();
+
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(0, format!("[build image {image_name}] completed ..."));
+        job_mgr.clear_log_tmp(&0);
+    }
     
     Ok(())
 }
 
-pub async fn push_image(image_name: &str, username: Option<String>, password: Option<String>, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
+// pub async fn push_image(image_name: &str, username: Option<String>, password: Option<String>, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
+pub async fn push_image(registry: data_model::registry::Registry, image_name: &str, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(0, format!("[push image({image_name})] started ..."));
+    }
+
     let docker = bollard::Docker::connect_with_local_defaults().unwrap();
     let push_options = bollard::image::PushImageOptions::<&str>::default();
     let credentials = bollard::auth::DockerCredentials { // for sakuracr.jp
-        username, password,
+        username: registry.username, password: registry.password,
         ..Default::default()
     };
     let mut image_push_stream = docker.push_image(image_name, Some(push_options), Some(credentials));
@@ -134,12 +148,17 @@ pub async fn push_image(image_name: &str, username: Option<String>, password: Op
                     raw_msg
                 } else { "".to_string() };
                 let mut job_mgr = job_mgr.lock().unwrap();
-                job_mgr.add_log(0, format!("[push image] {status}, {progress}, {err}"));
+                job_mgr.add_log_tmp(0, format!("[push image] {status}, {progress}, {err}"));
             }
             Err(e) => return Err(anyhow::Error::msg(format!("push image error {e}")))
         }
     }
 
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(0, format!("[push image({image_name})] completed ..."));
+        job_mgr.clear_log_tmp(&0);
+    }
     Ok(())
 }
 
@@ -173,14 +192,18 @@ mod tests {
     #[tokio::test]
     async fn test_build_and_push_image() {
         let examples_dir = Path::new(std::env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().join("examples");
-        let (registry_addr, registry_username, registry_password) = get_sakura_container_registry();
+        let (hostname, username, password) = get_sakura_container_registry();
+        let registry = data_model::registry::Registry {
+            hostname, username: Some(username), password: Some(password)
+        };
 
         let proj_dir = examples_dir.join("gromacs");
         assert!(proj_dir.exists());
-        let image_name = format!("{}/gromacs:test_241208_2", registry_addr);
+        let image_name = "gromacs:test_241211_2";
+        let image_name = format!("{}/{image_name}", registry.hostname);
         let base_image = "nvcr.io/hpc/gromacs:2023.2";
         let job_mgr = Arc::new(Mutex::new(data_model::job::Manager::load().unwrap()));
         build_image(&proj_dir, &image_name, base_image, job_mgr.clone()).await.unwrap();
-        push_image(&image_name, Some(registry_username), Some(registry_password), job_mgr).await.unwrap();
+        push_image(registry, &image_name, job_mgr).await.unwrap();
     }
 }

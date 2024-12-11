@@ -47,7 +47,7 @@ pub async fn input(tick_rate: Duration, last_tick: &mut Instant, states: &mut st
                 if key.modifiers == event::KeyModifiers::CONTROL && key.code == event::KeyCode::Char('q') {
                     return Ok(Signal::Quit);
                 } else if key.code == event::KeyCode::Tab {
-                    states.focus = Focus::Tab;
+                    states.focus = Focus::Main;
                     states.tab.tab = match states.tab.tab {
                         tabs::Tab::Project => tabs::Tab::Infra,
                         tabs::Tab::Infra => tabs::Tab::Job, 
