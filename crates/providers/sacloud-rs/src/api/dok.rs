@@ -132,13 +132,14 @@ mod tests {
     #[tokio::test]
     async fn test_get_artifact_download_url() {
         let client = Client::default().dok();
-        let id = "ed1fd80e-aa00-4666-8cd1-04b624373d92";
+        let id = "b1e2efe6-239c-4a26-a6bb-a9cfa5cb67f1";
         let task: Task = client.clone()
             .tasks().task_id(id).dok_end().get()
             .await.unwrap();
         let artifact_url: ArtifactUrl = client
             .artifacts().artifact_id(&task.artifact.unwrap().id).download().dok_end()
             .get().await.unwrap();
+        dbg!(&artifact_url);
         assert!(artifact_url.url.contains(id));
     }
 }

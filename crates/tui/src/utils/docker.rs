@@ -14,7 +14,7 @@ pub async fn build_image(
 ) -> anyhow::Result<()> {
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[build image {image_name}] starts ..."));
+        job_mgr.add_log(0, format!("[docker] build image {image_name} started ..."));
     }
 
     std::env::set_current_dir(proj_dir)?;
@@ -92,19 +92,19 @@ pub async fn build_image(
                 } else { "".to_string() };
                 if let Some(info) = build_info.stream {
                     let mut job_mgr = job_mgr.lock().unwrap();
-                    job_mgr.add_log_tmp(0, format!("[{id}]{info}"));
+                    job_mgr.add_log_tmp(0, format!("[docker] {id}: {info}"));
                 } else if let Some(status) = build_info.status {
                     let progress = if let Some(progress) = build_info.progress {
                         progress
                     } else { "".to_string() };
                     let mut job_mgr = job_mgr.lock().unwrap();
-                    job_mgr.add_log_tmp(0, format!("[{id}] Status: {status} {progress}"));
+                    job_mgr.add_log_tmp(0, format!("[docker] {id} Status: {status} {progress}"));
                 } else {
                     let mut job_mgr = job_mgr.lock().unwrap();
-                    job_mgr.add_log_tmp(0, format!("non handled build_info {:?}", build_info));
+                    job_mgr.add_log_tmp(0, format!("[docker] non handled build_info {:?}", build_info));
                 }
             }
-            Err(e) => return Err(anyhow::Error::msg(format!("push image error {e}")))
+            Err(e) => return Err(anyhow::Error::msg(format!("[docker] push image error {e}")))
         }
     }
     tokio::fs::remove_file(filename_docker).await.unwrap();
@@ -113,7 +113,7 @@ pub async fn build_image(
 
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[build image {image_name}] completed ..."));
+        job_mgr.add_log(0, format!("[docker] [build image {image_name}] completed ..."));
         job_mgr.clear_log_tmp(&0);
     }
     
@@ -124,7 +124,7 @@ pub async fn build_image(
 pub async fn push_image(registry: data_model::registry::Registry, image_name: &str, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[push image({image_name})] started ..."));
+        job_mgr.add_log(0, format!("[docker] push image({image_name}) started ..."));
     }
 
     let docker = bollard::Docker::connect_with_local_defaults().unwrap();
@@ -148,7 +148,7 @@ pub async fn push_image(registry: data_model::registry::Registry, image_name: &s
                     raw_msg
                 } else { "".to_string() };
                 let mut job_mgr = job_mgr.lock().unwrap();
-                job_mgr.add_log_tmp(0, format!("[push image] {status}, {progress}, {err}"));
+                job_mgr.add_log_tmp(0, format!("[docker] push image {status}, {progress}, {err}"));
             }
             Err(e) => return Err(anyhow::Error::msg(format!("push image error {e}")))
         }
@@ -156,7 +156,7 @@ pub async fn push_image(registry: data_model::registry::Registry, image_name: &s
 
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[push image({image_name})] completed ..."));
+        job_mgr.add_log(0, format!("[docker] push image({image_name}) completed ..."));
         job_mgr.clear_log_tmp(&0);
     }
     Ok(())

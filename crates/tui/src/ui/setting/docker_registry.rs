@@ -27,7 +27,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
         .block(Block::bordered().title(" Select Registry "))
         .style(Style::new().white())
         .highlight_style(Style::new().reversed())
-        .highlight_symbol(">>[S] ")
+        .highlight_symbol(">>[Space] ")
         .repeat_highlight_symbol(true)
         .style(current_style)
         .direction(ListDirection::TopToBottom);
@@ -56,7 +56,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut da
                 states_current.list.select(Some(sel_idx));
             }
         }
-        KeyCode::Char('S') | KeyCode::Char('s') => {
+        KeyCode::Char(' ') => {
             let sel_idx = states_current.list.selected().unwrap_or(0);
             let registry_sel = store.registry_mgr.registries.get(sel_idx).unwrap();
             store.setting_mgr.registry_id_sel = Some(registry_sel.id().to_string());

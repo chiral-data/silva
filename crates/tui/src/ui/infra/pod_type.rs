@@ -42,7 +42,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &mut da
         .block(Block::bordered().title(" Pods "))
         .style(current_style)
         .highlight_style(Style::new().reversed())
-        .highlight_symbol(">>[S] ")
+        .highlight_symbol(">>[Space] ")
         .repeat_highlight_symbol(true)
         .direction(ListDirection::TopToBottom);
     if !states_current.pods.is_empty() && states_current.list_state_pods.selected().is_none() {
@@ -97,7 +97,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut da
                 states_current.list_state_pods.select(Some(sel_idx));
             }
         }
-        KeyCode::Char('s') | KeyCode::Char('S') => {
+        KeyCode::Char(' ') => {
             if let Some(sel_idx) = states_current.list_state_pods.selected() {
                 store.pod_mgr.pod_id_selected = Some(states_current.pods.get(sel_idx).unwrap().id);
             }

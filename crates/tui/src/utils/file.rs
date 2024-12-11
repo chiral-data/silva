@@ -9,6 +9,7 @@ pub fn get_file_content(filepath: &Path) -> anyhow::Result<String> {
     Ok(buf)
 }
 
+/// download the file from url to file with filepath
 pub async fn download(url: &str, filepath: &Path) -> anyhow::Result<()> {
     let response = reqwest::get(url).await?;
     let bytes = response.bytes().await?;
@@ -17,10 +18,10 @@ pub async fn download(url: &str, filepath: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn unzip_tar_gz(filename: &Path, to_folder: &Path) -> anyhow::Result<()> {
+pub fn unzip_tar_gz(filepath: &Path, to_folder: &Path) -> anyhow::Result<()> {
     std::fs::create_dir_all(to_folder)?;
 
-    let file = File::open(filename)?;
+    let file = File::open(filepath)?;
     let gz_decoder = flate2::read::GzDecoder::new(file);
     let mut ar = tar::Archive::new(gz_decoder);
 

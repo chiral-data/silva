@@ -24,3 +24,20 @@ pub async fn create_task(client: Client, image_name: &str, registry_id: &str, pl
 
     Ok(task_created)
 }
+
+pub async fn get_task(client: Client, task_id: &str) -> anyhow::Result<dok::Task> {
+    let task: dok::Task = client.dok()
+        .tasks().task_id(task_id).dok_end().get()
+        .await?;
+    Ok(task)
+}
+
+pub async fn get_artifact_download_url(client: Client, task: &dok::Task) -> anyhow::Result<dok::ArtifactUrl>{
+    let artifact_id = task.artifact.as_ref()
+        .map(|af| &af.id)
+        .ok_or(anyhow::Error::msg(format!("no artifact for task {}", task.id)))?;
+    let artifact_url: dok::ArtifactUrl = client.dok()
+        .artifacts().artifact_id(artifact_id).download().dok_end()
+        .get().await?;
+    Ok(artifact_url)
+}

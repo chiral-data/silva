@@ -14,8 +14,8 @@ pub enum Signal {
 
 #[derive(Default, PartialEq)]
 pub enum Focus {
-    #[default]
     Tab,
+    #[default]
     Main
 }
 
