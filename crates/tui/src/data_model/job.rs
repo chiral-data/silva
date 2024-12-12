@@ -3,7 +3,7 @@
 
 use std::{collections::{HashMap, VecDeque}, path::PathBuf};
 
-use serde::{de::IntoDeserializer, Deserialize};
+use serde::Deserialize;
 
 use crate::{constants, utils};
 
@@ -38,17 +38,17 @@ impl std::fmt::Display for Job {
 }
 
 impl Job {
-    pub fn new(id: usize, desc: String) -> Self {
-        Self { id, desc, status: JobStatus::Created }
-    }
+    // pub fn new(id: usize, desc: String) -> Self {
+    //     Self { id, desc, status: JobStatus::Created }
+    // }
 
-    pub fn set_running(&mut self) {
-        self.status = JobStatus::Running;
-    }
+    // pub fn set_running(&mut self) {
+    //     self.status = JobStatus::Running;
+    // }
 
-    pub fn set_complete(&mut self) {
-        self.status = JobStatus::Completed;
-    }
+    // pub fn set_complete(&mut self) {
+    //     self.status = JobStatus::Completed;
+    // }
 }
 
 

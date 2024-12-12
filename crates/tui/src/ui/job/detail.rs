@@ -80,7 +80,7 @@ fn prepare_job(store: &data_model::Store) -> anyhow::Result<(PathBuf, Parameters
     let pod_sel = store.pod_mgr.selected()
         .ok_or(anyhow::Error::msg("no pod selected"))?;
     let plan = match &pod_sel.settings {
-        data_model::pod::Settings::SakuraInternetServer(_) => { return Err(anyhow::Error::msg("not DOK service")); },
+        data_model::pod::Settings::SakuraInternetServer => { return Err(anyhow::Error::msg("not DOK service")); },
         data_model::pod::Settings::SakuraInternetService(dok_gpu_type) => match dok_gpu_type {
             data_model::provider::sakura_internet::DokGpuType::V100 => dok::params::Plan::V100,
             data_model::provider::sakura_internet::DokGpuType::H100 => dok::params::Plan::H100GB80,

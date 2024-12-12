@@ -39,7 +39,7 @@ pub struct Manager {
 impl Manager {
     pub fn new() -> Self {
         // TODO: temporarily hard coding
-        let apps = vec!["gromacs", "psi4", "myPresto"].into_iter()
+        let apps = vec!["gromacs"].into_iter()
             .map(App::from)
             .collect();
         Self { apps }

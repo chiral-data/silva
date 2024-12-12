@@ -33,11 +33,11 @@ impl Account {
         }
     }
 
-    pub fn create_client(&self) -> sacloud_rs::Client {
-        match self {
-            Account::Sakura(sa) => sacloud_rs::Client::new(sa.access_token.to_string(), Some(sa.access_token_secret.to_string()))
-        }
-    }
+    // pub fn create_client(&self) -> sacloud_rs::Client {
+    //     match self {
+    //         Account::Sakura(sa) => sacloud_rs::Client::new(sa.access_token.to_string(), Some(sa.access_token_secret.to_string()))
+    //     }
+    // }
 }
 
 #[derive(Debug, Deserialize)]

@@ -7,7 +7,7 @@ use crate::ui;
 
 #[derive(Default)]
 pub struct States {
-    pub list: ListState
+    // pub list: ListState
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {

@@ -8,7 +8,8 @@ use super::provider;
 
 #[derive(Debug, Deserialize, Clone)]
 pub enum Settings {
-    SakuraInternetServer(provider::sakura_internet::ServerSettings),
+    // SakuraInternetServer(provider::sakura_internet::ServerSettings),
+    SakuraInternetServer,
     SakuraInternetService(provider::sakura_internet::DokGpuType),
 }
 

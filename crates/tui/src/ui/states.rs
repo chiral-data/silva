@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use ratatui::prelude::*;
 
 use crate::{data_model, ui};
@@ -13,7 +11,7 @@ pub struct States {
     pub project: ui::project::States,
     pub job: ui::job::States,
     pub setting: ui::setting::States,
-    pub handlers: HashMap<usize, tokio::task::JoinHandle<()>>,
+    // pub handlers: HashMap<usize, tokio::task::JoinHandle<()>>,
 }
 
 impl States {
