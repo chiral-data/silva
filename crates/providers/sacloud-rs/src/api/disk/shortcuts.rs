@@ -1,6 +1,6 @@
 use tokio::time::sleep;
 
-use super::parameter;
+use super::params;
 use crate::api::disk;
 use crate::{enums::EDiskConnection, Client};
 
@@ -12,13 +12,13 @@ pub async fn create(
     archive_id: usize,
     ssh_key: &str,
 ) -> anyhow::Result<String> {
-    let disk_params = parameter::Disk::default()
+    let disk_params = params::Disk::default()
         .name(disk_name)
         .plan(disk_plan_id)
         .connection(EDiskConnection::Virtio)
         .size_m_b(size_mb)
         .source_archive_id(archive_id);
-    let create_params = parameter::Params::default().disk(disk_params);
+    let create_params = params::Params::default().disk(disk_params);
     let disk_created: disk::DiskCreated = client.clone().disk()
         .set_params(&create_params)
         .unwrap().post().await?;
@@ -33,7 +33,7 @@ pub async fn create(
         sleep(std::time::Duration::from_secs(1)).await;
     }
     // Config a disk
-    let config = parameter::Config::default()
+    let config = params::Config::default()
         // .password("123456")
         .ssh_key(ssh_key);
     let _ = client

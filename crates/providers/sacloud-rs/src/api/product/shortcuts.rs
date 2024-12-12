@@ -1,11 +1,12 @@
 use crate::{api::product::ServerPlanList, Client};
 
 use super::DiskPlanList;
+use super::params;
 
 pub async fn get_server_plans(client: Client) -> anyhow::Result<ServerPlanList> {
     let mut spl: ServerPlanList = client.clone().product().server().get().await?;
     if spl.total > 100 {
-        let params = super::parameter::Params::default().from(0).count(spl.total);
+        let params = params::Params::default().from(0).count(spl.total);
         let params_vec: Vec<_> = params.into();
         spl = client.clone().product().server().get_with_params(&params_vec).await?;
     }
@@ -16,7 +17,7 @@ pub async fn get_server_plans(client: Client) -> anyhow::Result<ServerPlanList> 
 pub async fn get_disk_plans(client: Client) -> anyhow::Result<DiskPlanList> {
     let mut dpl: DiskPlanList = client.clone().product().disk().get().await?;
     if dpl.total > 100 {
-        let params = super::parameter::Params::default().from(0).count(dpl.total);
+        let params = params::Params::default().from(0).count(dpl.total);
         let params_vec: Vec<_> = params.into();
         dpl = client.clone().product().server().get_with_params(&params_vec).await?;
     }

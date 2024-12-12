@@ -3,20 +3,19 @@ use std::collections::HashMap;
 use serde::Deserialize;
 
 use super::app::App;
-use super::provider;
 
 
 #[derive(Debug, Deserialize, Clone)]
 pub enum Kind {
-    SakuraInternetServer(provider::sakura_internet::ServerPlan), 
+    // SakuraInternetServer(provider::sakura_internet::ServerPlan), 
     SakuraInternetService,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct PodType {
     pub id: usize,
-    pub provider: provider::Provider,
-    kind: Kind,
+    // pub provider: provider::Provider,
+    // kind: Kind,
     pub name: String,
     pub descs: Vec<String>,
     pub is_service: bool,
@@ -42,8 +41,8 @@ impl Manager {
         // };
         let pt_1 = PodType { 
             id: 1, 
-            provider: provider::Provider::SakuraInternet,
-            kind: Kind::SakuraInternetService,
+            // provider: provider::Provider::SakuraInternet,
+            // kind: Kind::SakuraInternetService,
             name: "Sakura Internet - DOK".to_string(),
             descs: vec![
                 "Providing the best GPUs for generative AI and machine learning at low prices".to_string(),

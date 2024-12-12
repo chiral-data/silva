@@ -14,8 +14,8 @@ pub enum Signal {
 
 #[derive(Default, PartialEq)]
 pub enum Focus {
-    #[default]
     Tab,
+    #[default]
     Main
 }
 
@@ -30,10 +30,9 @@ pub fn render(f: &mut Frame, states: &mut states::States, store: &mut data_model
     tabs::render(f, top, states);
     match states.tab.tab {
         tabs::Tab::Project => project::render(f, mid, states, store),
-        tabs::Tab::Application => app::render(f, mid, states, store),
-        tabs::Tab::Resource => resource::render(f, mid, states, store),
+        tabs::Tab::Infra => infra::render(f, mid, states, store),
         tabs::Tab::Job => job::render(f, mid, states, store),
-        tabs::Tab::Account => account::render(f, mid, states, store),
+        tabs::Tab::Setting => setting::render(f, mid, states, store),
     }
     info::render(f, bottom, states, store)
 }
@@ -48,13 +47,12 @@ pub async fn input(tick_rate: Duration, last_tick: &mut Instant, states: &mut st
                 if key.modifiers == event::KeyModifiers::CONTROL && key.code == event::KeyCode::Char('q') {
                     return Ok(Signal::Quit);
                 } else if key.code == event::KeyCode::Tab {
-                    states.focus = Focus::Tab;
+                    states.focus = Focus::Main;
                     states.tab.tab = match states.tab.tab {
-                        tabs::Tab::Project => tabs::Tab::Application,
-                        tabs::Tab::Application => tabs::Tab::Resource, 
-                        tabs::Tab::Resource => tabs::Tab::Job, 
-                        tabs::Tab::Job => tabs::Tab::Account, 
-                        tabs::Tab::Account => tabs::Tab::Project 
+                        tabs::Tab::Project => tabs::Tab::Infra,
+                        tabs::Tab::Infra => tabs::Tab::Job, 
+                        tabs::Tab::Job => tabs::Tab::Setting, 
+                        tabs::Tab::Setting => tabs::Tab::Project 
                     }
                 } else {
                     match states.focus {
@@ -63,11 +61,10 @@ pub async fn input(tick_rate: Duration, last_tick: &mut Instant, states: &mut st
                             states.focus = Focus::Main;
                         }
                         Focus::Main => match states.tab.tab {
-                            tabs::Tab::Application => app::handle_key(&key, states, store),
-                            tabs::Tab::Resource => resource::handle_key(&key, states, store),
-                            tabs::Tab::Job => job::handle_key(&key, states, store),
                             tabs::Tab::Project => project::handle_key(&key, states, store),
-                            tabs::Tab::Account => account::handle_key(&key, states, store) 
+                            tabs::Tab::Infra => infra::handle_key(&key, states, store),
+                            tabs::Tab::Job => job::handle_key(&key, states, store),
+                            tabs::Tab::Setting => setting::handle_key(&key, states, store) 
                         }
                     }
                 }
@@ -88,10 +85,9 @@ pub use states::States;
 // the top bar
 mod tabs;
 // the main body
-mod app;
-mod resource;
+mod infra;
 mod project;
 mod job;
-mod account;
+mod setting;
 // the footer
 mod info;

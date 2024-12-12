@@ -1,13 +1,28 @@
-use std::{io, process, time::{Duration, Instant}};
+use std::{io, path::PathBuf, process, time::{Duration, Instant}};
+use std::env;
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
 use ratatui::prelude::*;
 
-use crate::{envs, ui};
+use crate::{constants, envs, ui};
 use crate::data_model;
 
+fn setup() {
+    let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME).unwrap();
+    let data_dir = xdg_dirs.get_data_home();
+    if !data_dir.exists() {
+        std::fs::create_dir_all(data_dir).unwrap();
+    }
+
+    // if project home directory is not set, use the directory "examples"
+    if env::var_os(envs::SILVA_PROJECTS_HOME).is_none() {
+        env::set_var(envs::SILVA_PROJECTS_HOME, PathBuf::from(".").join("examples").canonicalize().unwrap())
+    }
+}
+
+
 pub async fn run() -> anyhow::Result<()> {
-    envs::setup();
+    setup();
 
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture, )?;
@@ -20,9 +35,8 @@ pub async fn run() -> anyhow::Result<()> {
 
     let mut states = ui::States::default();
     let mut store = data_model::Store::default();
-    if !store.ac_mgr.get_accounts().is_empty() {
-        states.account.list.list.select(Some(0));
-    }
+    states.initialize(&store);
+    store.registry_mgr.initialze(&store.account_mgr, &store.setting_mgr).await;
 
     loop {
         terminal.draw(|f| ui::render(f, &mut states, &mut store))?;
@@ -36,14 +50,14 @@ pub async fn run() -> anyhow::Result<()> {
             ui::Signal::None => {}
         }
 
-        for (job_id, jh) in states.handlers.iter() {
-            if jh.is_finished() {
-                let job_local = store.jl_mgr.jobs.get_mut(job_id).unwrap();
-                job_local.set_complete();
-            }
-        }
+        // for (job_id, jh) in states.handlers.iter() {
+        //     if jh.is_finished() {
+        //         let job_local = store.jl_mgr.jobs.get_mut(job_id).unwrap();
+        //         job_local.set_complete();
+        //     }
+        // }
 
-        states.handlers.retain(|_, jh| !jh.is_finished());
+        // states.handlers.retain(|_, jh| !jh.is_finished());
     }
 
     disable_raw_mode()?;
