@@ -1,0 +1,13 @@
+input_files = [
+  "japanese.mp3"
+]
+
+output_files = [
+  "output.txt",
+]
+
+script_files = [
+  "job.sh"
+]
+
+base_image = "chiral.sakuracr.jp/whisper:1212"
