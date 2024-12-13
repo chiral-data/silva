@@ -27,7 +27,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::States) {
         Tab::Job => 2,
         Tab::Setting => 3
     };
-    let tabs = Tabs::new(vec![
+    let tabs = Tabs::new([
             "[P]rojects",
             "[I]nfra",
             "[J]obs",
