@@ -10,4 +10,6 @@ script_files = [
   "job.sh"
 ]
 
+[dok]
 base_image = "chiral.sakuracr.jp/whisper:1212"
+extra_build_commands = "python load_model.py"

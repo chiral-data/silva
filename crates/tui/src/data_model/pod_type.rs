@@ -30,7 +30,6 @@ pub struct Manager {
 
 impl Manager {
     pub fn new() -> Self {
-        // TODO: right now only hard coding
         // let pt_0 = PodType { 
         //     id: 0, 
         //     provider: provider::Provider::SakuraInternet,
@@ -64,9 +63,10 @@ impl Manager {
             // (5, pt_5)
         ].into_iter().collect();
 
+        // TODO: right now only hard coding
         let for_applications = vec![
             (App::Gromacs, vec![1]),
-            (App::Psi4, vec![1])
+            (App::OpenAIWhisper, vec![1])
         ].into_iter().collect();
 
         Manager { pod_types, for_applications }

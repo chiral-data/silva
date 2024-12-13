@@ -60,6 +60,13 @@ pub async fn prepare_build_files(
     for script_file in job_settings.script_files.iter() {
         writeln!(docker_file, "ADD ./{script_file} /opt/{proj_name}")?;
     }
+    if let Some(dok) = job_settings.dok {
+        if let Some(extra_build_commands) = dok.extra_build_commands {
+            for cmd in extra_build_commands.iter() {
+                writeln!(docker_file, "{cmd}")?; 
+            }
+        }
+    }
     writeln!(docker_file, "ADD ./{FILENAME_ENTRYPOINT} /opt/{proj_name}")?;
     writeln!(docker_file)?;
     writeln!(docker_file, "WORKDIR /opt/{proj_name}")?;
