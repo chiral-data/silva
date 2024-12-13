@@ -25,7 +25,7 @@ pub async fn build_image(
         .ok_or(anyhow::Error::msg("osString to str error"))?;
 
     let settings_filepath = proj_dir.join("settings.toml");
-    let proj_settings = data_model::job::settings::Settings::new_from_file(&settings_filepath)
+    let job_settings = data_model::job::settings::Settings::new_from_file(&settings_filepath)
         .map_err(|e| anyhow::Error::msg(format!("{e} no settings file {settings_filepath:?}")))?;
 
     // create entrypoint run.sh
@@ -34,11 +34,11 @@ pub async fn build_image(
     writeln!(entrypoint_file, "#!/bin/bash")?;
     writeln!(entrypoint_file, "#")?;
     writeln!(entrypoint_file)?;
-    for script_file in proj_settings.script_files.iter() {
+    for script_file in job_settings.script_files.iter() {
         writeln!(entrypoint_file, "sh {}", script_file)?;
     }
     writeln!(entrypoint_file)?;
-    for output_file in proj_settings.output_files.iter() {
+    for output_file in job_settings.output_files.iter() {
         writeln!(entrypoint_file, "cp {} /opt/artifact", output_file)?;
     }
 
@@ -48,10 +48,10 @@ pub async fn build_image(
     writeln!(docker_file, "FROM {base_image}")?;
     writeln!(docker_file)?;
     writeln!(docker_file, "RUN mkdir -p /opt/{proj_name}")?;
-    for input_file in proj_settings.input_files.iter() {
+    for input_file in job_settings.input_files.iter() {
         writeln!(docker_file, "ADD ./{input_file} /opt/{proj_name}")?;
     }
-    for script_file in proj_settings.script_files.iter() {
+    for script_file in job_settings.script_files.iter() {
         writeln!(docker_file, "ADD ./{script_file} /opt/{proj_name}")?;
     }
     writeln!(docker_file, "ADD ./{filename_entrypoint} /opt/{proj_name}")?;
@@ -66,10 +66,10 @@ pub async fn build_image(
     let mut a = tar::Builder::new(tar_file);
     a.append_path("Dockerfile")?;
     a.append_path("run.sh")?;
-    for input_file in proj_settings.input_files.iter() {
+    for input_file in job_settings.input_files.iter() {
         a.append_path(input_file)?;
     }
-    for script_file in proj_settings.script_files.iter() {
+    for script_file in job_settings.script_files.iter() {
         a.append_path(script_file)?;
     }
 
