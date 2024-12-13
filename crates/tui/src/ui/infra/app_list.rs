@@ -7,7 +7,7 @@ use crate::ui;
 
 #[derive(Default)]
 pub struct States {
-    list: ListState
+    pub list: ListState
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
@@ -18,11 +18,11 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
         states_current.list.select(Some(0));
     }
 
-    let items: Vec<&str> = store.app_mgr.apps
-        .iter().map(|app| app.as_str())
+    let items: Vec<String> = store.app_mgr.apps
+        .iter().map(|app| format!("{:15} [{}]", app.as_str(), app.keywords()))
         .collect();
 
-    let list = List::new(items)
+    let app_list = List::new(items)
         .block(Block::bordered().title("Available Applications"))
         .highlight_style(Style::new().reversed())
         .highlight_symbol(">> ")
@@ -30,7 +30,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
         .style(current_style)
         .direction(ListDirection::TopToBottom);
 
-    f.render_stateful_widget(list, area, &mut states_current.list);
+    f.render_stateful_widget(app_list, area, &mut states_current.list);
 }
 
 pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_model::Store) {

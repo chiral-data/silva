@@ -56,7 +56,7 @@ mod tests {
         assert_eq!(s.script_files.len(), 2);
         let dok = s.dok.unwrap();
         assert_eq!(dok.base_image, "a");
-        assert_eq!(dok.extra_build_commands.len(), 1);
+        assert_eq!(dok.extra_build_commands.unwrap().len(), 1);
     }
 }
 

@@ -7,8 +7,7 @@ use crate::ui;
 
 const HELPER_NEW_JOB: &[&str] = &[
     "Create a new job", 
-    "based on the selected project", 
-    "and execute it on the chosen pod"
+    "based on the selected project and execute it on the chosen pod",
 ];
 
 #[derive(Default, PartialEq)]
@@ -33,10 +32,11 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
         .block(Block::bordered().title(" Actions "))
         .select(action_selected)
         .style(current_style);
-    let helper: Vec<Line> = HELPER_NEW_JOB.iter()
+    let helper_lines: Vec<Line> = HELPER_NEW_JOB.iter()
         .map(|&s| Line::from(s))
         .collect();
-    let paragraph = Paragraph::new(helper)
+    let helper = Paragraph::new(helper_lines)
+        .style(current_style)
         .block(Block::bordered())
         .alignment(Alignment::Left)
         .wrap(Wrap { trim: true });
@@ -48,20 +48,16 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
 
     let job_list = List::new(jobs_string)
         .block(Block::bordered().title(" Jobs "))
-        // .highlight_style(Style::new().reversed())
-        // .highlight_symbol(">> ")
-        // .repeat_highlight_symbol(true)
-        // .style(current_style)
         .direction(ListDirection::TopToBottom);
 
     let top_mid_bottom = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Max(5), Constraint::Length(3), Constraint::Min(1)]) 
+        .constraints([Constraint::Length(3), Constraint::Max(5), Constraint::Min(1)]) 
         .split(area);
     let (top, mid, bottom) = (top_mid_bottom[0], top_mid_bottom[1], top_mid_bottom[2]);
 
-    f.render_widget(paragraph, top);
-    f.render_widget(actions, mid);
+    f.render_widget(actions, top);
+    f.render_widget(helper, mid);
     f.render_widget(job_list, bottom);
 }
 

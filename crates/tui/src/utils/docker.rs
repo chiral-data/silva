@@ -1,36 +1,43 @@
-use std::{path::PathBuf, sync::{Arc, Mutex}};
+use std::{path::{Path, PathBuf}, sync::{Arc, Mutex}};
 use std::io::{Read, Write};
 
 use futures_util::stream::StreamExt;
 
 use crate::data_model;
 
+const FILENAME_ENTRYPOINT: &str = "run.sh";
+const FILENAME_DOCKER: &str = "Dockerfile";
 
-pub async fn build_image(
-    proj_dir: &PathBuf, 
-    image_name: &str, 
-    base_image: &str,
-    job_mgr: Arc<Mutex<data_model::job::Manager>>
-) -> anyhow::Result<()> {
-    {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] build image {image_name} started ..."));
-    }
-
-    std::env::set_current_dir(proj_dir)?;
-
+fn get_project_name(proj_dir: &Path) -> anyhow::Result<String> {
     let proj_name = proj_dir.file_name()
         .ok_or(anyhow::Error::msg("no file name for project "))?
         .to_str()
         .ok_or(anyhow::Error::msg("osString to str error"))?;
+    let proj_parent = proj_dir
+        .parent()
+        .map(|p| p.to_str().unwrap_or(""))
+        .unwrap_or("");
 
+    Ok(format!("{proj_parent}_{proj_name}"))
+}
+
+fn get_job_settings(proj_dir: &Path) ->anyhow::Result<data_model::job::settings::Settings> {
     let settings_filepath = proj_dir.join("settings.toml");
     let job_settings = data_model::job::settings::Settings::new_from_file(&settings_filepath)
         .map_err(|e| anyhow::Error::msg(format!("{e} no settings file {settings_filepath:?}")))?;
 
+    Ok(job_settings)
+}
+
+pub async fn prepare_build_files(
+    proj_dir: &Path,
+    base_image: &str,
+) -> anyhow::Result<()> {
+    let job_settings = get_job_settings(proj_dir)?;
+    let proj_name = get_project_name(proj_dir)?;
+
     // create entrypoint run.sh
-    let filename_entrypoint = "run.sh";
-    let mut entrypoint_file = std::fs::File::create(proj_dir.join(filename_entrypoint))?;
+    let mut entrypoint_file = std::fs::File::create(proj_dir.join(FILENAME_ENTRYPOINT))?;
     writeln!(entrypoint_file, "#!/bin/bash")?;
     writeln!(entrypoint_file, "#")?;
     writeln!(entrypoint_file)?;
@@ -43,8 +50,7 @@ pub async fn build_image(
     }
 
     // create Docker file
-    let filename_docker = "Dockerfile";
-    let mut docker_file = std::fs::File::create(proj_dir.join(filename_docker))?;
+    let mut docker_file = std::fs::File::create(proj_dir.join(FILENAME_DOCKER))?;
     writeln!(docker_file, "FROM {base_image}")?;
     writeln!(docker_file)?;
     writeln!(docker_file, "RUN mkdir -p /opt/{proj_name}")?;
@@ -54,10 +60,32 @@ pub async fn build_image(
     for script_file in job_settings.script_files.iter() {
         writeln!(docker_file, "ADD ./{script_file} /opt/{proj_name}")?;
     }
-    writeln!(docker_file, "ADD ./{filename_entrypoint} /opt/{proj_name}")?;
+    writeln!(docker_file, "ADD ./{FILENAME_ENTRYPOINT} /opt/{proj_name}")?;
     writeln!(docker_file)?;
     writeln!(docker_file, "WORKDIR /opt/{proj_name}")?;
-    writeln!(docker_file, "CMD [\"sh\", \"{}\"]", filename_entrypoint)?;
+    writeln!(docker_file, "CMD [\"sh\", \"{}\"]", FILENAME_ENTRYPOINT)?;
+
+    Ok(())
+}
+
+pub async fn build_image(
+    proj_dir: &PathBuf, 
+    image_name: &str, 
+    job_mgr: Arc<Mutex<data_model::job::Manager>>
+) -> anyhow::Result<()> {
+    let job_settings = get_job_settings(proj_dir)?;
+    let dok = job_settings.dok.as_ref()
+        .ok_or(anyhow::Error::msg("no DOK settings"))?;
+    let base_image = &dok.base_image;
+
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(0, format!("[docker] build image {image_name} started ..."));
+    }
+
+    std::env::set_current_dir(proj_dir)?;
+
+    prepare_build_files(proj_dir, base_image).await?;
    
     // create tar file for building the image
     let filename_tar = "image.tar";
@@ -107,8 +135,8 @@ pub async fn build_image(
             Err(e) => return Err(anyhow::Error::msg(format!("[docker] push image error {e}")))
         }
     }
-    tokio::fs::remove_file(filename_docker).await.unwrap();
-    tokio::fs::remove_file(filename_entrypoint).await.unwrap();
+    tokio::fs::remove_file(FILENAME_DOCKER).await.unwrap();
+    tokio::fs::remove_file(FILENAME_ENTRYPOINT).await.unwrap();
     tokio::fs::remove_file(filename_tar).await.unwrap();
 
     {
@@ -201,9 +229,8 @@ mod tests {
         assert!(proj_dir.exists());
         let image_name = "gromacs:test_241211_2";
         let image_name = format!("{}/{image_name}", registry.hostname);
-        let base_image = "nvcr.io/hpc/gromacs:2023.2";
         let job_mgr = Arc::new(Mutex::new(data_model::job::Manager::load().unwrap()));
-        build_image(&proj_dir, &image_name, base_image, job_mgr.clone()).await.unwrap();
+        build_image(&proj_dir, &image_name, job_mgr.clone()).await.unwrap();
         push_image(registry, &image_name, job_mgr).await.unwrap();
     }
 }

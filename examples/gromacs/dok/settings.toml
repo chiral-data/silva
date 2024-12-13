@@ -11,3 +11,7 @@ output_files = [
 script_files = [
   "job.sh"
 ]
+
+[dok]
+base_image = "nvcr.io/hpc/gromacs:2023.2"
+

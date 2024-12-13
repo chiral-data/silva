@@ -22,6 +22,6 @@ pub enum DokGpuType {
 #[derive(Debug, Default, Deserialize)]
 pub struct DokSettings {
     pub base_image: String,
-    pub extra_build_commands: Vec<String>,
+    pub extra_build_commands: Option<Vec<String>>,
 }
 

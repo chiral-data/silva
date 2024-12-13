@@ -11,7 +11,7 @@ pub mod interface;
 // appliance
 // icon
 // note
-pub mod sshkey;
+// pub mod sshkey;
 // facility
 pub mod product;
 // account
