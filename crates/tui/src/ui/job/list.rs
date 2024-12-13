@@ -11,21 +11,28 @@ const HELPER_NEW_JOB: &[&str] = &[
     "and execute it on the chosen pod"
 ];
 
+#[derive(Default, PartialEq)]
+pub enum Tab {
+    #[default]
+    New
+}
+
 #[derive(Default)]
 pub struct States {
-    pub list_state_action: ListState
+    tab_action: Tab 
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
     let current_style = states.get_style(ui::Focus::Main);
     let states_current = &mut states.job.list;
 
-    let actions = Tabs::new(["[N]ew job"])
+    let action_selected = match states_current.tab_action {
+        Tab::New => 0,
+    };
+    let actions = Tabs::new(["[N]ew"])
         .block(Block::bordered().title(" Actions "))
+        .select(action_selected)
         .style(current_style);
-    if states_current.list_state_action.selected().is_none() {
-        states_current.list_state_action.select(Some(0));
-    } 
     let helper: Vec<Line> = HELPER_NEW_JOB.iter()
         .map(|&s| Line::from(s))
         .collect();
@@ -64,7 +71,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, _store: &data_
     match key.code {
         KeyCode::Char('n') | KeyCode::Char('N') => {
             let states_current = &mut states.job.list;
-            states_current.list_state_action.select(Some(0));
+            states_current.tab_action = Tab::New;
         }
         KeyCode::Enter => {
             let states_parent = &mut states.job;

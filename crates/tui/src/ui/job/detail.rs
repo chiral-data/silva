@@ -11,6 +11,18 @@ use crate::data_model;
 use crate::ui;
 use crate::utils;
 
+const HELPER_PREVIEW: &[&str] = &[
+    "Preview a job", 
+    "e.g., generate the docker file and script file for a DOK task for preview", 
+];
+
+const HELPER_RUN: &[&str] = &[
+    "Launch a job", 
+];
+
+const INDEX_PREVIEW: usize = 0;
+const INDEX_RUN: usize = 1;
+
 #[derive(Default)]
 pub struct States {
 }
@@ -18,10 +30,21 @@ pub struct States {
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
     let current_style = states.get_style(ui::Focus::Main);
+    let states_current = &mut states.job.detal;
 
-    let actions = vec![
-        Line::from("[R]un the new job")
-    ];
+    let actions = Tabs::new(["[P]review", "[R]un"])
+        .block(Block::bordered().title(" Actions "))
+        .style(current_style);
+    // if states_current.list_state_action.selected().is_none() {
+    //     states_current.list_state_action.select(Some(INDEX_NEW_JOB));
+    // } 
+    // let helper: Vec<Line> = HELPER_NEW_JOB.iter()
+    //     .map(|&s| Line::from(s))
+    //     .collect();
+    // let paragraph = Paragraph::new(helper)
+    //     .block(Block::bordered())
+    //     .alignment(Alignment::Left)
+    //     .wrap(Wrap { trim: true });
     let action_list = Paragraph::new(actions)
         .block(Block::bordered().title(" Actions "))
         .style(current_style)
