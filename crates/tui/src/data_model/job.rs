@@ -1,11 +1,11 @@
 //! Jobs run locally to manage cloud infrastructure
 //!
 
-use std::{collections::{HashMap, VecDeque}, path::{Path, PathBuf}};
+use std::{collections::{HashMap, VecDeque}, fs, path::{Path, PathBuf}};
 
 use serde::Deserialize;
 
-use crate::{constants, utils};
+use crate::constants;
 
 #[derive(Debug, Deserialize)]
 pub enum JobStatus {
@@ -105,7 +105,7 @@ impl Manager {
             std::fs::File::create(&filepath)?;
         }
 
-        let content = utils::file::get_file_content(&filepath)?;
+        let content = fs::read_to_string(&filepath)?;
         let df = DataFile::new(&content)?;
         let jobs = match df.jobs {
             Some(jobs) => jobs.into_iter()
