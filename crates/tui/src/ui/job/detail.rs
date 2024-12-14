@@ -51,24 +51,6 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
         .alignment(Alignment::Left)
         .wrap(Wrap { trim: true });
 
-    let job_id = 0;
-    let job_mgr = store.job_mgr.lock().unwrap();
-    // TODO: use job id 0 for testing first
-    let mut logs: Vec<Line> = job_mgr.logs.get(&job_id)
-        .map(|v| {
-            v.iter()
-            .map(|s| s.as_str())
-            .map(Line::from)
-            .collect()
-        })
-        .unwrap_or_default();
-    if let Some(log_tmp) = job_mgr.logs_tmp.get(&job_id) {
-        logs.push(Line::from(log_tmp.as_str()));
-    }
-    let job_logs = Paragraph::new(logs)
-        .block(Block::bordered())
-        .alignment(Alignment::Left)
-        .wrap(Wrap { trim: true });
 
     let top_mid_bottom = Layout::default()
         .direction(Direction::Vertical)
@@ -78,7 +60,11 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
 
     f.render_widget(actions, top);
     f.render_widget(helper, mid);
-    f.render_widget(job_logs, bottom);
+    match states_current.tab_action {
+        Tab::Preview => preview::render(f, bottom, states, store),
+        Tab::Clear => (),
+        Tab::Run => run::render(f, bottom, states, store)
+    }
 }
 
 fn action_clear(states: &mut ui::States, store: &data_model::Store) -> anyhow::Result<()> {

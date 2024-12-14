@@ -2,6 +2,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use ratatui::prelude::*;
+use ratatui::widgets::*;
+
 use sacloud_rs::api::dok;
 
 use crate::data_model;
@@ -93,4 +96,28 @@ pub fn action(_states: &mut ui::States, store: &data_model::Store) -> anyhow::Re
 
     Ok(())
         
+}
+
+pub fn render(f: &mut Frame, area: Rect, _states: &mut ui::States, store: &data_model::Store) {
+    // TODO: use job id 0 for testing first
+    let job_id = 0;
+    let job_mgr = store.job_mgr.lock().unwrap();
+    let mut logs: Vec<Line> = job_mgr.logs.get(&job_id)
+        .map(|v| {
+            v.iter()
+            .map(|s| s.as_str())
+            .map(Line::from)
+            .collect()
+        })
+        .unwrap_or_default();
+    if let Some(log_tmp) = job_mgr.logs_tmp.get(&job_id) {
+        logs.push(Line::from(log_tmp.as_str()));
+    }
+    let job_logs = Paragraph::new(logs)
+        .block(Block::bordered())
+        .alignment(Alignment::Left)
+        .wrap(Wrap { trim: true });
+
+    f.render_widget(Clear, area);
+    f.render_widget(job_logs, area);
 }
