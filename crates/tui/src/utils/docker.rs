@@ -59,7 +59,7 @@ pub fn prepare_build_files(
     if let Some(dok) = &job_settings.dok {
         if let Some(extra_build_commands) = &dok.extra_build_commands {
             for cmd in extra_build_commands.iter() {
-                writeln!(docker_file, "{cmd}")?; 
+                writeln!(docker_file, "RUN {cmd}")?; 
             }
         }
     }

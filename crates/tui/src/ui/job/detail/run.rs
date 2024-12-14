@@ -9,17 +9,14 @@ use data_model::job::settings::Settings as JobSettings;
 use crate::ui;
 use crate::utils;
 
-
-
 pub const HELPER: &[&str] = &[
     "Launch a job", 
 ];
 
-
 async fn launch_job(
     proj_dir: PathBuf, 
     job_settings: JobSettings,
-    params_dok: super::ParametersDok,
+    params_dok: super::params::ParametersDok,
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
     // build & push the docker image
@@ -80,7 +77,9 @@ async fn launch_job(
 }
 
 pub fn action(states: &mut ui::States, store: &data_model::Store) -> anyhow::Result<()> {
-    let (proj_dir, job_settings, params_dok) = super::get_job_parameters(store, states)?;
+    let proj_dir = super::params::proj_dir(store)?;
+    let job_settings = data_model::job::Job::get_settings(&proj_dir)?;
+    let params_dok = super::params::params_dok(store, states)?;
     let job_mgr = store.job_mgr.clone();
     tokio::spawn(async move {
         match launch_job(proj_dir, job_settings, params_dok, job_mgr.clone()).await {

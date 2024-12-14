@@ -9,7 +9,8 @@ pub const HELPER: &[&str] = &[
 
 
 pub fn action(states: &mut ui::States, store: &data_model::Store) -> anyhow::Result<()> {
-    let (proj_dir, job_settings, _params_dok) = super::get_job_parameters(store, states)?;
+    let proj_dir = super::params::proj_dir(store)?;
+    let job_settings = data_model::job::Job::get_settings(&proj_dir)?;
     states.info.message = "Creating job intermediate files ...".to_string();
     utils::docker::prepare_build_files(&proj_dir, &job_settings)?;
     states.info.message = format!("Preview job done for project {}", proj_dir.to_str().unwrap());

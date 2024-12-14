@@ -1,6 +1,3 @@
-use std::path::PathBuf;
-
-use sacloud_rs::api::dok;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use crossterm::event;
@@ -84,47 +81,11 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
     f.render_widget(job_logs, bottom);
 }
 
-struct ParametersDok {
-    image_name: String, 
-    registry: data_model::registry::Registry,
-    client: sacloud_rs::Client,
-    registry_dok: dok::Registry,
-    plan: dok::params::Plan,
-}
-
-fn get_job_parameters(store: &data_model::Store, states: &ui::States) -> anyhow::Result<(PathBuf, data_model::job::settings::Settings, ParametersDok)> {
-    let proj_dir = store.proj_selected.as_ref()
-        .ok_or(anyhow::Error::msg("no project selected"))?;
-    let app_sel = store.app_mgr.selected(states)
-        .ok_or(anyhow::Error::msg("no application selected"))?;
-    let image_name = format!("{}:latest", app_sel.as_str()).to_lowercase();
-    let proj_dir = proj_dir.to_owned();
-    let client = store.account_mgr.create_client(&store.setting_mgr)
-        .ok_or(anyhow::Error::msg("can not create cloud client"))?;
-    let registry_sel = store.registry_mgr.selected(&store.setting_mgr)
-        .ok_or(anyhow::Error::msg("no registry selected"))?;
-    let registry_dok = registry_sel.find_registry_dok(&store.registry_mgr.registries_dok)
-        .ok_or(anyhow::Error::msg(format!("can not find registry for Sakura DOK service {:?}", store.registry_mgr.registries_dok)))?;
-    let pod_sel = store.pod_mgr.selected()
-        .ok_or(anyhow::Error::msg("no pod selected"))?;
-    let plan = match &pod_sel.settings {
-        data_model::pod::Settings::SakuraInternetServer => { return Err(anyhow::Error::msg("not DOK service")); },
-        data_model::pod::Settings::SakuraInternetService(dok_gpu_type) => match dok_gpu_type {
-            data_model::provider::sakura_internet::DokGpuType::V100 => dok::params::Plan::V100,
-            data_model::provider::sakura_internet::DokGpuType::H100 => dok::params::Plan::H100GB80,
-        }
-    };
-    let job_settings = data_model::job::Job::get_settings(&proj_dir)?;
-    let params_dok = ParametersDok { image_name: format!("{}/{image_name}", registry_sel.hostname), registry: registry_sel.to_owned(), client, registry_dok, plan };
-
-    Ok((proj_dir, job_settings, params_dok)) 
-}
-
 fn action_clear(states: &mut ui::States, store: &data_model::Store) -> anyhow::Result<()> {
-    let (proj_dir, job_settings, _params_dok) = super::get_job_parameters(store, states)?;
-    states.info.message = "Creating job intermediate files ...".to_string();
-    utils::docker::clear_build_files(&proj_dir, &job_settings)?;
-    states.info.message = format!("Preview job done for project {}", proj_dir.to_str().unwrap());
+    let proj_dir = params::proj_dir(store)?;
+    states.info.message = "Removing job intermediate files ...".to_string();
+    utils::docker::clear_build_files(&proj_dir)?;
+    states.info.message = format!("File cleaning done for project {}", proj_dir.to_str().unwrap());
     Ok(())
 }
 
@@ -145,7 +106,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_m
         KeyCode::Enter => {
             match match states_current.tab_action {
                 Tab::Preview => preview::action(states, store),
-                Tab::Clear => todo!(),
+                Tab::Clear => action_clear(states, store),
                 Tab::Run => run::action(states, store)
             } {
                 Ok(_) => (),
@@ -156,5 +117,6 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_m
     }
 }
 
+mod params;
 mod preview;
 mod run;
