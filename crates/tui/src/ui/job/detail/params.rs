@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use sacloud_rs::api::dok;
 
 use crate::data_model;
-use crate::ui;
 
 pub struct ParametersDok {
     pub image_name: String, 
@@ -21,10 +20,10 @@ pub fn proj_dir(store: &data_model::Store) -> anyhow::Result<PathBuf> {
 }
 
 
-pub fn params_dok(store: &data_model::Store, states: &ui::States) -> anyhow::Result<ParametersDok> {
-    let app_sel = store.app_mgr.selected(states)
-        .ok_or(anyhow::Error::msg("no application selected"))?;
-    let image_name = format!("{}:latest", app_sel.as_str()).to_lowercase();
+pub fn params_dok(store: &data_model::Store) -> anyhow::Result<ParametersDok> {
+    let proj_dir = proj_dir(store)?;
+    let proj_name = data_model::job::Job::get_project_name(&proj_dir)?;
+    let image_name = format!("{proj_name}:latest").to_lowercase();
     let client = store.account_mgr.create_client(&store.setting_mgr)
         .ok_or(anyhow::Error::msg("can not create cloud client"))?;
     let registry_sel = store.registry_mgr.selected(&store.setting_mgr)

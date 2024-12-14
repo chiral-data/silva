@@ -1,5 +1,6 @@
 input_files = [
-  "japanese.mp3"
+  "japanese.mp3",
+  "example.py"
 ]
 
 output_files = [
@@ -11,5 +12,4 @@ script_files = [
 ]
 
 [dok]
-base_image = "chiral.sakuracr.jp/whisper:1212"
-extra_build_commands = ["python load_model.py"]
+base_image = "chiral.sakuracr.jp/whisper:1214"

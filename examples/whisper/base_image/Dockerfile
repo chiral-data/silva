@@ -10,5 +10,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install -U pip
+RUN pip install git+https://github.com/openai/whisper.git 
 
-RUN pip install -U whisper 
+RUN mkdir -p /opt/models
+ADD https://openaipublic.azureedge.net/main/whisper/models/aff26ae408abcba5fbf8813c21e62b0941638c5f6eebfb145be0c9839262a19a/large-v3-turbo.pt /opt/models/large-v3-turbo.pt

@@ -1,7 +1,5 @@
 use serde::Deserialize;
 
-use crate::ui;
-
 #[derive(Debug, Default, Clone, Deserialize, PartialEq, Eq, Hash)]
 pub enum App {
     #[default]
@@ -58,9 +56,9 @@ impl Manager {
         Self { apps }
     }
 
-    pub fn selected(&self, states: &ui::States) -> Option<&App> {
-        states.infra.app_list.list.selected()
-            .map(|index| self.apps.get(index))?
-    }
+    // pub fn selected(&self, states: &ui::States) -> Option<&App> {
+    //     states.infra.app_list.list.selected()
+    //         .map(|index| self.apps.get(index))?
+    // }
 }
 

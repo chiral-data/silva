@@ -9,24 +9,11 @@ use data_model::job::settings::Settings as JobSettings;
 const FILENAME_ENTRYPOINT: &str = "run.sh";
 const FILENAME_DOCKER: &str = "Dockerfile";
 
-fn get_project_name(proj_dir: &Path) -> anyhow::Result<String> {
-    let proj_name = proj_dir.file_name()
-        .ok_or(anyhow::Error::msg("no file name for project "))?
-        .to_str()
-        .ok_or(anyhow::Error::msg("osString to str error"))?;
-    let proj_parent = proj_dir
-        .parent()
-        .map(|p| p.file_name().unwrap().to_str().unwrap_or(""))
-        .unwrap_or("");
-
-    Ok(format!("{proj_parent}_{proj_name}"))
-}
-
 pub fn prepare_build_files(
     proj_dir: &Path,
     job_settings: &JobSettings
 ) -> anyhow::Result<()> {
-    let proj_name = get_project_name(proj_dir)?;
+    let proj_name = data_model::job::Job::get_project_name(proj_dir)?;
     let dok = job_settings.dok.as_ref()
         .ok_or(anyhow::Error::msg("no DOK settings"))?;
     let base_image = &dok.base_image;

@@ -76,10 +76,10 @@ async fn launch_job(
     Ok(())
 }
 
-pub fn action(states: &mut ui::States, store: &data_model::Store) -> anyhow::Result<()> {
+pub fn action(_states: &mut ui::States, store: &data_model::Store) -> anyhow::Result<()> {
     let proj_dir = super::params::proj_dir(store)?;
     let job_settings = data_model::job::Job::get_settings(&proj_dir)?;
-    let params_dok = super::params::params_dok(store, states)?;
+    let params_dok = super::params::params_dok(store)?;
     let job_mgr = store.job_mgr.clone();
     tokio::spawn(async move {
         match launch_job(proj_dir, job_settings, params_dok, job_mgr.clone()).await {
