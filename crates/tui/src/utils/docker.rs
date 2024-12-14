@@ -16,7 +16,7 @@ fn get_project_name(proj_dir: &Path) -> anyhow::Result<String> {
         .ok_or(anyhow::Error::msg("osString to str error"))?;
     let proj_parent = proj_dir
         .parent()
-        .map(|p| p.to_str().unwrap_or(""))
+        .map(|p| p.file_name().unwrap().to_str().unwrap_or(""))
         .unwrap_or("");
 
     Ok(format!("{proj_parent}_{proj_name}"))
