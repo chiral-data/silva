@@ -28,7 +28,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::States, store: &data_model
         Line::from(format!("[Selected Project]   {project_sel}")).green(),
         Line::from(format!("[Selected Pod Type]  {pod_type_sel_string}")).green(),
         Line::from(format!("[Selected Pod]       {pod_sel_string}")).green(),
-        Line::from(format!("[Message] {}", states_current.message)).blue()
+        Line::from(format!("[Message] {}", states_current.message)).yellow()
     ];
 
     let paragrah = Paragraph::new(text)

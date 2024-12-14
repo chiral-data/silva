@@ -4,6 +4,7 @@ use std::io::{Read, Write};
 use futures_util::stream::StreamExt;
 
 use crate::data_model;
+use data_model::job::settings::Settings as JobSettings;
 
 const FILENAME_ENTRYPOINT: &str = "run.sh";
 const FILENAME_DOCKER: &str = "Dockerfile";
@@ -21,23 +22,18 @@ fn get_project_name(proj_dir: &Path) -> anyhow::Result<String> {
     Ok(format!("{proj_parent}_{proj_name}"))
 }
 
-fn get_job_settings(proj_dir: &Path) ->anyhow::Result<data_model::job::settings::Settings> {
-    let settings_filepath = proj_dir.join("settings.toml");
-    let job_settings = data_model::job::settings::Settings::new_from_file(&settings_filepath)
-        .map_err(|e| anyhow::Error::msg(format!("{e} no settings file {settings_filepath:?}")))?;
-
-    Ok(job_settings)
-}
-
-pub async fn prepare_build_files(
+pub fn prepare_build_files(
     proj_dir: &Path,
-    base_image: &str,
+    job_settings: &JobSettings
 ) -> anyhow::Result<()> {
-    let job_settings = get_job_settings(proj_dir)?;
     let proj_name = get_project_name(proj_dir)?;
+    let dok = job_settings.dok.as_ref()
+        .ok_or(anyhow::Error::msg("no DOK settings"))?;
+    let base_image = &dok.base_image;
 
     // create entrypoint run.sh
-    let mut entrypoint_file = std::fs::File::create(proj_dir.join(FILENAME_ENTRYPOINT))?;
+    let entrypoint_filepath = proj_dir.join(FILENAME_ENTRYPOINT);
+    let mut entrypoint_file = std::fs::File::create(entrypoint_filepath)?;
     writeln!(entrypoint_file, "#!/bin/bash")?;
     writeln!(entrypoint_file, "#")?;
     writeln!(entrypoint_file)?;
@@ -60,8 +56,8 @@ pub async fn prepare_build_files(
     for script_file in job_settings.script_files.iter() {
         writeln!(docker_file, "ADD ./{script_file} /opt/{proj_name}")?;
     }
-    if let Some(dok) = job_settings.dok {
-        if let Some(extra_build_commands) = dok.extra_build_commands {
+    if let Some(dok) = &job_settings.dok {
+        if let Some(extra_build_commands) = &dok.extra_build_commands {
             for cmd in extra_build_commands.iter() {
                 writeln!(docker_file, "{cmd}")?; 
             }
@@ -75,16 +71,26 @@ pub async fn prepare_build_files(
     Ok(())
 }
 
+pub fn clear_build_files(proj_dir: &Path) -> anyhow::Result<()> {
+    for filename in vec![
+        FILENAME_ENTRYPOINT,
+        FILENAME_DOCKER
+    ].into_iter() {
+        let filepath = proj_dir.join(filename);
+        if filepath.exists() {
+            std::fs::remove_file(filepath)?;
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn build_image(
     proj_dir: &PathBuf, 
+    job_settings: &JobSettings,
     image_name: &str, 
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
-    let job_settings = get_job_settings(proj_dir)?;
-    let dok = job_settings.dok.as_ref()
-        .ok_or(anyhow::Error::msg("no DOK settings"))?;
-    let base_image = &dok.base_image;
-
     {
         let mut job_mgr = job_mgr.lock().unwrap();
         job_mgr.add_log(0, format!("[docker] build image {image_name} started ..."));
@@ -92,7 +98,7 @@ pub async fn build_image(
 
     std::env::set_current_dir(proj_dir)?;
 
-    prepare_build_files(proj_dir, base_image).await?;
+    prepare_build_files(proj_dir, job_settings)?;
    
     // create tar file for building the image
     let filename_tar = "image.tar";
@@ -236,8 +242,9 @@ mod tests {
         assert!(proj_dir.exists());
         let image_name = "gromacs:test_241211_2";
         let image_name = format!("{}/{image_name}", registry.hostname);
+        let job_settings = data_model::job::Job::get_settings(&proj_dir).unwrap();
         let job_mgr = Arc::new(Mutex::new(data_model::job::Manager::load().unwrap()));
-        build_image(&proj_dir, &image_name, job_mgr.clone()).await.unwrap();
+        build_image(&proj_dir, &job_settings, &image_name, job_mgr.clone()).await.unwrap();
         push_image(registry, &image_name, job_mgr).await.unwrap();
     }
 }

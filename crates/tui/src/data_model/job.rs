@@ -1,7 +1,7 @@
 //! Jobs run locally to manage cloud infrastructure
 //!
 
-use std::{collections::{HashMap, VecDeque}, path::PathBuf};
+use std::{collections::{HashMap, VecDeque}, path::{Path, PathBuf}};
 
 use serde::Deserialize;
 
@@ -49,6 +49,14 @@ impl Job {
     // pub fn set_complete(&mut self) {
     //     self.status = JobStatus::Completed;
     // }
+
+    pub fn get_settings(proj_dir: &Path) ->anyhow::Result<settings::Settings> {
+        let settings_filepath = proj_dir.join("settings.toml");
+        let job_settings = settings::Settings::new_from_file(&settings_filepath)
+            .map_err(|e| anyhow::Error::msg(format!("{e} no settings file {settings_filepath:?}")))?;
+
+        Ok(job_settings)
+    }
 }
 
 
