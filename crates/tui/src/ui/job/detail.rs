@@ -31,7 +31,7 @@ pub struct States {
 }
 
 impl States {
-    pub fn new_job(&mut self, store: &data_model::Store) -> anyhow::Result<()> {
+    pub fn update(&mut self, store: &data_model::Store) -> anyhow::Result<()> {
         self.proj_dir = params::proj_dir(store)?;
         self.job_settings = data_model::job::Job::get_settings(&self.proj_dir)?;
         let mut build_files_strs = vec!["Dockerfile", "run.sh"]; // file for building docker image
@@ -42,8 +42,6 @@ impl States {
         Ok(())
     }
 }
-
-
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
     let current_style = states.get_style(true);

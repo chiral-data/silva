@@ -34,7 +34,10 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, _store: &data_
         let filename = states_current.proj_files.get(states_current.list_state_file.selected().unwrap()).unwrap();
         let filepath = states_current.proj_dir.join(filename);
         if filepath.exists() {
-            fs::read_to_string(filepath).unwrap()
+            match fs::read_to_string(&filepath) {
+                Ok(s) => s,
+                Err(e) => format!("cannot read file {} as string: {e}", filepath.to_str().unwrap())
+            }
         } else {
             format!("file {} not exists", filepath.to_str().unwrap())
         }

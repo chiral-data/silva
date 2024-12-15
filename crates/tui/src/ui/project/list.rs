@@ -65,6 +65,10 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut da
         KeyCode::Char(' ')=> {
             if let Some(sel_idx) = states_current.list.selected() {
                 store.proj_selected = Some(states_current.proj_dirs.get(sel_idx).unwrap().to_owned());
+                match states.job.detail.update(store) {
+                    Ok(_) => (),
+                    Err(e) => states.info.message = format!("cannot selecte project{}: {e}", store.proj_selected.as_ref().unwrap().to_str().unwrap())
+                }
             }
         }
         _ => ()
