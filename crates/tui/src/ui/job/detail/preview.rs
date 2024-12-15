@@ -13,24 +13,8 @@ pub const HELPER: &[&str] = &[
     "e.g., generate the docker file and script file for a DOK task for preview", 
 ];
 
-// fn get_file_content(store: &data_model::Store, filename: &str) -> anyhow::Result<String> {
-//     let proj_dir = super::params::proj_dir(store)?;
-//     let filepath = proj_dir.join(filename);
-//     if !filepath.exists() {
-//         return Err(anyhow::Error::msg(format!("file {} not exists", filepath.to_str().unwrap())));
-//     }
-
-//     let file = fs::File::open(filepath)?;
-//     let reader = io::BufReader::new(file);
-//     let lines: Vec<String> = reader.lines()
-//         .map(|line| line?)
-//         .collect();
-
-//     Ok(lines)
-// }
-
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, _store: &data_model::Store) {
-    let current_style = states.get_style(ui::Focus::Main);
+    let current_style = states.get_style(true);
     let states_current = &mut states.job.detail;
 
     // file list

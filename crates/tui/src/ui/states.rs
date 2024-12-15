@@ -4,7 +4,6 @@ use crate::{data_model, ui};
 
 #[derive(Default)]
 pub struct States {
-    pub focus: ui::Focus,
     pub tab: ui::tabs::States,
     pub info: ui::info::States,
     pub infra: ui::infra::States,
@@ -24,8 +23,8 @@ impl States {
         }
     }
 
-    pub fn get_style(&self, focus: ui::Focus) -> Style {
-        if self.focus == focus {
+    pub fn get_style(&self, is_focus: bool) -> Style {
+        if is_focus {
             Style::default().fg(ui::COLOR_FOCUS)
         } else {
             Style::default()

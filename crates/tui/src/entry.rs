@@ -45,7 +45,7 @@ pub async fn run() -> anyhow::Result<()> {
     loop {
         terminal.draw(|f| ui::render(f, &mut states, &mut store))?;
 
-        match ui::input(tick_rate, &mut last_tick, &mut states, &mut store).await? {
+        match ui::handle_key(tick_rate, &mut last_tick, &mut states, &mut store).await? {
             ui::Signal::Quit => {
                 process::Command::new("reset").status()
                     .unwrap_or_else(|e| panic!("failed to reset terminal with error: {e:?}"));

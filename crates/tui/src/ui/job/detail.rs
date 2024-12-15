@@ -46,7 +46,7 @@ impl States {
 
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
-    let current_style = states.get_style(ui::Focus::Main);
+    let current_style = states.get_style(true);
     let states_current = &mut states.job.detail;
 
     let action_selected = match states_current.tab_action {
@@ -54,7 +54,13 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
         Tab::Clear => 1,
         Tab::Run => 2,
     };
-    let actions = Tabs::new(["[P]review", "[C]lear", "[R]un"])
+    let tabs_strings: Vec<String> = ["[P]review", "[C]lear", "[R]un"].into_iter()
+        .enumerate()
+        .map(|(i, s)| format!("{}{s}", if i == action_selected {
+            "[Enter] "
+        } else { "" }))
+        .collect();
+    let actions = Tabs::new(tabs_strings)
         .block(Block::bordered().title(" Actions "))
         .select(action_selected)
         .style(current_style);

@@ -11,7 +11,7 @@ pub struct States {
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
-    let current_style = states.get_style(ui::Focus::Main);
+    let current_style = states.get_style(true);
     let states_current = &mut states.infra.app_list;
 
     if states_current.list.selected().is_none() {
@@ -25,7 +25,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
     let app_list = List::new(items)
         .block(Block::bordered().title("Available Applications"))
         .highlight_style(Style::new().reversed())
-        .highlight_symbol(">> ")
+        .highlight_symbol(">>[Enter] ")
         .repeat_highlight_symbol(true)
         .style(current_style)
         .direction(ListDirection::TopToBottom);

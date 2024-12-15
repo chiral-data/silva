@@ -18,17 +18,23 @@ pub enum Tab {
 
 #[derive(Default)]
 pub struct States {
-    tab_action: Tab 
+    tab_action: Tab,
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
-    let current_style = states.get_style(ui::Focus::Main);
+    let current_style = states.get_style(true);
     let states_current = &mut states.job.list;
 
     let action_selected = match states_current.tab_action {
         Tab::New => 0,
     };
-    let actions = Tabs::new(["[N]ew"])
+    let tabs_strings: Vec<String> = ["[N]ew"].into_iter()
+        .enumerate()
+        .map(|(i, s)| format!("{}{s}", if i == action_selected {
+            "[Enter] "
+        } else { "" }))
+        .collect();
+    let actions = Tabs::new(tabs_strings)
         .block(Block::bordered().title(" Actions "))
         .select(action_selected)
         .style(current_style);

@@ -33,7 +33,7 @@ pub struct States {
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &ui::States) {
-    let current_style = states.get_style(ui::Focus::Main);
+    let current_style = states.get_style(true);
     let states_current = &states.setting.tabs;
     let selected = match states_current.tab {
         Tab::Account => 0,

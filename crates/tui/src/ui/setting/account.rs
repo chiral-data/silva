@@ -12,7 +12,7 @@ pub struct States {
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
-    let current_style = states.get_style(ui::Focus::Main);
+    let current_style = states.get_style(true);
 
     if store.account_mgr.accounts.is_empty() {
         let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME).unwrap();
