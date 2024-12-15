@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use crossterm::event;
@@ -22,6 +24,8 @@ pub enum Tab {
 #[derive(Default)]
 pub struct States {
     tab_action: Tab,
+    proj_dir: PathBuf,
+    // job_settings: data_model::job::settings::Settings,
 }
 
 

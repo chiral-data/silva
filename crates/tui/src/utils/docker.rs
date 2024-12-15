@@ -24,11 +24,11 @@ pub fn prepare_build_files(
     writeln!(entrypoint_file, "#!/bin/bash")?;
     writeln!(entrypoint_file, "#")?;
     writeln!(entrypoint_file)?;
-    for script_file in job_settings.script_files.iter() {
+    for script_file in job_settings.files.scripts.iter() {
         writeln!(entrypoint_file, "sh {}", script_file)?;
     }
     writeln!(entrypoint_file)?;
-    for output_file in job_settings.output_files.iter() {
+    for output_file in job_settings.files.outputs.iter() {
         writeln!(entrypoint_file, "cp {} /opt/artifact", output_file)?;
     }
 
@@ -37,10 +37,10 @@ pub fn prepare_build_files(
     writeln!(docker_file, "FROM {base_image}")?;
     writeln!(docker_file)?;
     writeln!(docker_file, "RUN mkdir -p /opt/{proj_name}")?;
-    for input_file in job_settings.input_files.iter() {
+    for input_file in job_settings.files.inputs.iter() {
         writeln!(docker_file, "ADD ./{input_file} /opt/{proj_name}")?;
     }
-    for script_file in job_settings.script_files.iter() {
+    for script_file in job_settings.files.scripts.iter() {
         writeln!(docker_file, "ADD ./{script_file} /opt/{proj_name}")?;
     }
     if let Some(dok) = &job_settings.dok {
@@ -94,10 +94,10 @@ pub async fn build_image(
     let mut a = tar::Builder::new(tar_file);
     a.append_path("Dockerfile")?;
     a.append_path("run.sh")?;
-    for input_file in job_settings.input_files.iter() {
+    for input_file in job_settings.files.inputs.iter() {
         a.append_path(input_file)?;
     }
-    for script_file in job_settings.script_files.iter() {
+    for script_file in job_settings.files.scripts.iter() {
         a.append_path(script_file)?;
     }
 

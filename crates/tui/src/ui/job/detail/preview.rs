@@ -34,27 +34,28 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
     let current_style = states.get_style(ui::Focus::Main);
     // let states_current = states.job.detail;
 
-    // file list
-    let proj_dir = super::params::proj_dir(store).unwrap();
-    let fe = states.file_explorer.as_mut().unwrap();
-    fe.set_cwd(proj_dir).unwrap();
+    // // file list
+    // let proj_dir = super::params::proj_dir(store)?;
+    // let job_settings = data_model::job::Job::get_settings(&proj_dir)?;
+
+
     // let files_string = vec!["Dockerfile", "run.sh"];
     // let file_list = List::new(files_string)
     //     .style(current_style)
     //     .block(Block::bordered())
     //     .direction(ListDirection::TopToBottom);
 
-    // file content
-    // let lines = match get_file_content(store, filepath) {
-    //     Ok(contents) => contents.split
-    // }
+    // // file content
+    // // let lines = match get_file_content(store, filepath) {
+    // //     Ok(contents) => contents.split
+    // // }
 
-    let left_right = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(12),  Constraint::Min(1)]) 
-        .split(area);
-    let (left, right) = (left_right[0], left_right[1]);
-    f.render_widget(&fe.widget(), left);
+    // let left_right = Layout::default()
+    //     .direction(Direction::Horizontal)
+    //     .constraints([Constraint::Length(12),  Constraint::Min(1)]) 
+    //     .split(area);
+    // let (left, right) = (left_right[0], left_right[1]);
+    // f.render_widget(&fe.widget(), left);
 }
 
 
