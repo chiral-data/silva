@@ -23,10 +23,26 @@ pub enum Tab {
 
 #[derive(Default)]
 pub struct States {
-    tab_action: Tab,
     proj_dir: PathBuf,
-    // job_settings: data_model::job::settings::Settings,
+    job_settings: data_model::job::settings::Settings,
+    tab_action: Tab,
+    proj_files: Vec<String>,
+    list_state_file: ListState,
 }
+
+impl States {
+    pub fn new_job(&mut self, store: &data_model::Store) -> anyhow::Result<()> {
+        self.proj_dir = params::proj_dir(store)?;
+        self.job_settings = data_model::job::Job::get_settings(&self.proj_dir)?;
+        let mut build_files_strs = vec!["Dockerfile", "run.sh"]; // file for building docker image
+        let mut all_files_strs = self.job_settings.files.all_files();
+        all_files_strs.append(&mut build_files_strs);
+        self.proj_files = all_files_strs.iter().map(|s| s.to_string()).collect();
+
+        Ok(())
+    }
+}
+
 
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
@@ -103,7 +119,12 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_m
                 Err(e) => states.info.message = format!("job action error: {e}")
             }
         }
-        _ => ()
+        _ => {
+            match states_current.tab_action {
+                Tab::Preview => preview::handle_key(key, states, store),
+                _ => todo!()
+            }
+        }
     }
 }
 

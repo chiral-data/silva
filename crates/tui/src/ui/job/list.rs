@@ -61,7 +61,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
     f.render_widget(job_list, bottom);
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, _store: &data_model::Store) {
+pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_model::Store) {
     use event::KeyCode;
 
     match key.code {
@@ -70,8 +70,10 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, _store: &data_
             states_current.tab_action = Tab::New;
         }
         KeyCode::Enter => {
-            let states_parent = &mut states.job;
-            states_parent.show_page = super::ShowPage::Detail;
+            match states.job.detail.new_job(store) {
+                Ok(_) => states.job.show_page = super::ShowPage::Detail,
+                Err(e) => states.info.message = format!("enter job detail page error: {e}")
+            }
         }
         _ => ()
     }

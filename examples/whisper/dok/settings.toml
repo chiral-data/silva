@@ -1,13 +1,14 @@
-input_files = [
+[files]
+inputs = [
   "japanese.mp3",
   "example.py"
 ]
 
-output_files = [
+outputs = [
   "output.txt",
 ]
 
-script_files = [
+scripts = [
   "job.sh"
 ]
 
