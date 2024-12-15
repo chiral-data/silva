@@ -1,6 +1,8 @@
 [files]
+# the mp3 audio file is downloaded from the following page
+# https://www.mitsue.co.jp/english/service/audio_and_video/audio_production/narrators_sample.html
 inputs = [
-  "japanese.mp3",
+  "alisa_fujii_sample_2.mp3",
   "example.py"
 ]
 

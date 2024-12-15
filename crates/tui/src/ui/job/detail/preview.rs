@@ -66,12 +66,18 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, _store: &data_
             let total = states_current.proj_files.len(); 
             let mut sel_idx = states_current.list_state_file.selected().unwrap_or(0);
             sel_idx = (sel_idx + total - 1) % total; 
+            while states_current.proj_files.get(sel_idx).unwrap().starts_with("---")  {
+                sel_idx = (sel_idx + total - 1) % total; 
+            }
             states_current.list_state_file.select(Some(sel_idx));
         }
         KeyCode::Down => {
             let total = states_current.proj_files.len(); 
             let mut sel_idx = states_current.list_state_file.selected().unwrap_or(0);
             sel_idx = (sel_idx + 1) % total;
+            while states_current.proj_files.get(sel_idx).unwrap().starts_with("---")  {
+                sel_idx = (sel_idx + 1) % total;
+            }
             states_current.list_state_file.select(Some(sel_idx));
         }
         _ => ()

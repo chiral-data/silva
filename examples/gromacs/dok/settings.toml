@@ -3,9 +3,9 @@ inputs = [
   "1AKI_clean.pdb"
 ]
 outputs = [
-  "1AKI_processed.gro ",
+  "1AKI_processed.gro",
   "posre.itp",
-  "topol.top ",
+  "topol.top",
 ]
 scripts = [
   "job.sh"

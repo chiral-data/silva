@@ -11,17 +11,20 @@ pub struct Files {
     /// scripts to be executed in sequence 
     pub scripts: Vec<String>,
 }
-
+ 
 impl Files {
-    pub fn all_files(&self) -> Vec<&str> {
-        vec![
+    pub fn all_files(&self) -> Vec<String> {
+        [
+            &["settings.toml", "--- input ---"].into_iter().map(|s| s.to_string()).collect(),
             &self.inputs,
+            &vec!["--- script ---".to_string()],
+            &self.scripts,
+            &vec!["--- output ---".to_string()],
             &self.outputs,
-            &self.scripts
+            // TODO: &vec!["--- build files ---", "Dockerfile", "run.sh"].into_iter().map(String::from).collect() // file for building docker image
         ]
-        .into_iter()
-        .map(|v| v.iter().map(|s| s.as_str()).collect::<Vec<&str>>())
-        .flatten()
+        .iter()
+        .flat_map(|v| v.iter().map(|s| s.to_string()).collect::<Vec<String>>())
         .collect()
     }
 }
