@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event;
 use ratatui::prelude::*;
 
 use crate::data_model;
@@ -35,7 +35,7 @@ pub async fn handle_key(tick_rate: Duration, last_tick: &mut Instant, states: &m
         .unwrap_or_else(|| Duration::from_secs(0));
 
     if event::poll(timeout)? {
-        if let Event::Key(key) = event::read()? {
+        if let event::Event::Key(key) = event::read()? {
             if key.kind == event::KeyEventKind::Press {
                 if key.modifiers == event::KeyModifiers::CONTROL && key.code == event::KeyCode::Char('q') {
                     return Ok(Signal::Quit);
