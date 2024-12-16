@@ -49,11 +49,15 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
         Tab::Clear => 1,
         Tab::Run => 2,
     };
-    let tabs_strings: Vec<String> = ["[P]review", "[C]lear", "[R]un"].into_iter()
+    let tabs_strings: Vec<String> = [
+            ("Preview", "[P]review"), 
+            ("Clear", "[C]lear"),
+            ("Run", "[R]un"),
+        ].into_iter()
         .enumerate()
-        .map(|(i, s)| format!("{}{s}", if i == action_selected {
-            "[Enter] "
-        } else { "" }))
+        .map(|(i, s)| if i == action_selected {
+            format!("[Enter] {}", s.0)
+        } else { s.1.to_string() })
         .collect();
     let actions = Tabs::new(tabs_strings)
         .block(Block::bordered().title(" Actions "))

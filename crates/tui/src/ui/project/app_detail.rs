@@ -20,7 +20,7 @@ impl States {
 }
 
 fn get_pod_types(states: &ui::States) -> &[data_model::pod_type::PodType] {
-    &states.infra.app_detail.pod_types
+    &states.project.app_detail.pod_types
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &data_model::Store) {
@@ -46,8 +46,8 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         .highlight_symbol(">>[Enter] ")
         .repeat_highlight_symbol(true)
         .direction(ListDirection::TopToBottom);
-    if states.infra.app_detail.list_state_pod_types.selected().is_none() {
-        states.infra.app_detail.list_state_pod_types.select(Some(0));
+    if states.project.app_detail.list_state_pod_types.selected().is_none() {
+        states.project.app_detail.list_state_pod_types.select(Some(0));
     }
 
     let top_bottom = Layout::default()
@@ -57,12 +57,12 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     let (top, bottom) = (top_bottom[0], top_bottom[1]);
 
     f.render_widget(paragraph, top);
-    let list_state = &mut states.infra.app_detail.list_state_pod_types;
+    let list_state = &mut states.project.app_detail.list_state_pod_types;
     f.render_stateful_widget(server_plan_list, bottom, list_state);
 }
 
 fn select_pod_type(states: &mut ui::States, is_up: bool) {
-    let states_current = &mut states.infra.app_detail;
+    let states_current = &mut states.project.app_detail;
     let total = states_current.pod_types.len(); 
     let mut sel_idx = states_current.list_state_pod_types.selected().unwrap_or(0);
     if is_up {
@@ -72,12 +72,12 @@ fn select_pod_type(states: &mut ui::States, is_up: bool) {
     }
     states_current.list_state_pod_types.select(Some(sel_idx));
     let pod_type = states_current.pod_types.get(sel_idx).unwrap();
-    states.infra.pod_type.pod_type_sel_id = pod_type.id;
+    states.project.pod_type.pod_type_sel_id = pod_type.id;
 }
 
 pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_model::Store) {
     use event::KeyCode;
-    let states_current = &mut states.infra.app_detail;
+    let states_current = &mut states.project.app_detail;
 
     match key.code {
         KeyCode::Up => select_pod_type(states, true),
@@ -86,17 +86,18 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_m
             let list_state = &states_current.list_state_pod_types;
             if let Some(sel_idx) = list_state.selected() {
                 let pod_type_sel = get_pod_types(states).get(sel_idx).unwrap().to_owned();
-                states.infra.show_page = ui::infra::ShowPage::PodType;
+                states.project.show_page = ui::project::ShowPage::PodType;
                 let pods_of_this_type = store.pod_mgr.pods.values()
                     .filter(|pod| pod.type_id == pod_type_sel.id)
                     .map(|sv| sv.to_owned())
                     .collect::<Vec<data_model::pod::Pod>>();
-                states.infra.pod_type.pods = pods_of_this_type;
-                states.infra.pod_type.pod_type_sel_id = pod_type_sel.id;
+                states.project.pod_type.pods = pods_of_this_type;
+                states.project.pod_type.pod_type_sel_id = pod_type_sel.id;
             } else {
                 states.info.message = "no server plan selected".to_string();
             }
         }
+        KeyCode::Esc => states.project.show_page = super::ShowPage::AppList,
         _ => ()
     }
 }

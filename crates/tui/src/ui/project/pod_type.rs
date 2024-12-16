@@ -14,7 +14,7 @@ pub struct States {
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &mut data_model::Store) {
     let current_style = states.get_style(true);
-    let states_current = &mut states.infra.pod_type;
+    let states_current = &mut states.project.pod_type;
 
     let server_plan = store.pod_type_mgr.pod_types.get(&states_current.pod_type_sel_id).unwrap();
     let text: Vec<Line> = server_plan.descs.iter().map(|s| Line::from(s.as_str())).collect();
@@ -23,7 +23,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &mut da
         .alignment(Alignment::Left)
         .wrap(Wrap { trim: true });
 
-    let pt_selected = states.infra.app_detail.pod_type_selected().unwrap(); 
+    let pt_selected = states.project.app_detail.pod_type_selected().unwrap(); 
     let actions = if pt_selected.is_service {
         vec![]
     } else {
@@ -62,7 +62,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &mut da
 
 pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut data_model::Store) {
     use event::KeyCode;
-    let states_current = &mut states.infra.pod_type;
+    let states_current = &mut states.project.pod_type;
 
     match key.code {
         KeyCode::Char('c') | KeyCode::Char('C') => {

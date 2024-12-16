@@ -28,11 +28,13 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
     let action_selected = match states_current.tab_action {
         Tab::New => 0,
     };
-    let tabs_strings: Vec<String> = ["[N]ew"].into_iter()
+    let tabs_strings: Vec<String> = [
+            ("New", "[N]ew"),
+        ].into_iter()
         .enumerate()
-        .map(|(i, s)| format!("{}{s}", if i == action_selected {
-            "[Enter] "
-        } else { "" }))
+        .map(|(i, s)| if i == action_selected {
+            format!("[Enter] {}", s.0)
+        } else { s.1.to_string() })
         .collect();
     let actions = Tabs::new(tabs_strings)
         .block(Block::bordered().title(" Actions "))

@@ -6,7 +6,6 @@ use crate::{data_model, ui};
 pub struct States {
     pub tab: ui::tabs::States,
     pub info: ui::info::States,
-    pub infra: ui::infra::States,
     pub project: ui::project::States,
     pub job: ui::job::States,
     pub setting: ui::setting::States,

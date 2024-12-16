@@ -17,7 +17,7 @@ pub struct States {
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, _store: &data_model::Store) {
     let current_style = states.get_style(true);
-    let states_current = &mut states.project.list;
+    let states_current = &mut states.project.proj_list;
     if states_current.list.selected().is_none() {
         states_current.list.select(Some(0));
     }
@@ -33,7 +33,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, _store: &data_
     let list = List::new(states_current.proj_dirs.iter().map(|path| path.to_str().unwrap()))
         .block(Block::bordered().title("All Projets"))
         .highlight_style(Style::new().reversed())
-        .highlight_symbol(">>[Space] ")
+        .highlight_symbol(">>[Enter] ")
         .repeat_highlight_symbol(true)
         .style(current_style)
         .direction(ListDirection::TopToBottom);
@@ -43,7 +43,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, _store: &data_
 
 pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut data_model::Store) {
     use event::KeyCode;
-    let states_current = &mut states.project.list;
+    let states_current = &mut states.project.proj_list;
 
     match key.code {
         KeyCode::Up => {
@@ -62,11 +62,11 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut da
                 states_current.list.select(Some(sel_idx));
             }
         }
-        KeyCode::Char(' ')=> {
+        KeyCode::Enter => {
             if let Some(sel_idx) = states_current.list.selected() {
                 store.proj_selected = Some(states_current.proj_dirs.get(sel_idx).unwrap().to_owned());
                 match states.job.detail.update(store) {
-                    Ok(_) => (),
+                    Ok(_) => states.project.show_page = super::ShowPage::AppList,
                     Err(e) => states.info.message = format!("cannot selecte project{}: {e}", store.proj_selected.as_ref().unwrap().to_str().unwrap())
                 }
             }

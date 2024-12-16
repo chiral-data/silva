@@ -23,7 +23,6 @@ pub fn render(f: &mut Frame, states: &mut states::States, store: &mut data_model
     tabs::render(f, top, states);
     match states.tab.tab {
         tabs::Tab::Project => project::render(f, mid, states, store),
-        tabs::Tab::Infra => infra::render(f, mid, states, store),
         tabs::Tab::Job => job::render(f, mid, states, store),
         tabs::Tab::Setting => setting::render(f, mid, states, store),
     }
@@ -48,15 +47,13 @@ pub async fn handle_key(tick_rate: Duration, last_tick: &mut Instant, states: &m
                 //     };
                 } else if key.code == event::KeyCode::Tab {
                     states.tab.tab = match states.tab.tab {
-                        tabs::Tab::Project => tabs::Tab::Infra,
-                        tabs::Tab::Infra => tabs::Tab::Job, 
+                        tabs::Tab::Project => tabs::Tab::Job,
                         tabs::Tab::Job => tabs::Tab::Setting, 
                         tabs::Tab::Setting => tabs::Tab::Project 
                     };
                 } else {
                     match states.tab.tab {
                         tabs::Tab::Project => project::handle_key(&key, states, store),
-                        tabs::Tab::Infra => infra::handle_key(&key, states, store),
                         tabs::Tab::Job => job::handle_key(&key, states, store),
                         tabs::Tab::Setting => setting::handle_key(&key, states, store) 
                     }
@@ -78,7 +75,6 @@ pub use states::States;
 // the top bar
 mod tabs;
 // the main body
-mod infra;
 mod project;
 mod job;
 mod setting;
