@@ -8,8 +8,7 @@ use super::provider;
 
 #[derive(Debug, Deserialize, Clone)]
 pub enum Settings {
-    // SakuraInternetServer(provider::sakura_internet::ServerSettings),
-    SakuraInternetServer,
+    SakuraInternetServer(provider::sakura_internet::ServerSettings),
     SakuraInternetService(provider::sakura_internet::DokGpuType),
 }
 
@@ -70,7 +69,7 @@ impl Manager {
         Manager { pods, pod_id_selected: None }
     }
 
-    pub fn selected(&self) -> Option<&Pod> {
+    pub fn pod_selected(&self) -> Option<&Pod> {
         self.pod_id_selected
             .map(|id_sel| self.pods.get(&id_sel))?
     }

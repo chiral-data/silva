@@ -1,18 +1,3 @@
-//! Sakura Internet API - Archive
-//! https://manual.sakura.ad.jp/cloud-api/1.1/archive/index.html
-//!
-//! - [x] GET    /archive                          - アーカイブ一覧を取得
-//! - [ ] POST   /archive                          - アーカイブを作成
-//! - [ ] GET    /archive/:archiveid               - 該当IDのアーカイブ情報を取得
-//! - [ ] PUT    /archive/:archiveid               - アーカイブを更新
-//! - [ ] DELETE /archive/:archiveid               - 該当IDのアーカイブを削除
-//! - [ ] PUT    /archive/:archiveid/ftp           - アーカイブのFTP共有を開始 または リセットする
-//! - [ ] DELETE /archive/:archiveid/ftp           - アーカイブのFTP共有を終了し、利用可能な状態にする
-//! - [ ] GET    /archive/:archiveid/tag           - 該当IDのアーカイブに付けられたタグを取得
-//! - [ ] PUT    /archive/:archiveid/tag           - 該当IDのアーカイブに付けられるタグを変更
-//! - [ ] POST   /archive/:archiveid/to/zone/:zoneid - アーカイブを他のゾーンに転送
-//! - [ ] GET    /archive/tag                      - アーカイブタグ一覧を取得
-
 use serde::{Deserialize, Serialize};
 
 create_struct!(Archive, "PascalCase",

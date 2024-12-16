@@ -212,7 +212,6 @@ impl Client {
     pub fn interfaceid(self, id: &str) -> Self { self.extend_url(format!("/{id}").as_str()) }
     pub fn power(self) -> Self { self.extend_url("/power") }
     pub fn product(self) -> Self { self.extend_url("/product") }
-    pub fn registries(self) -> Self { self.extend_url("/registries") }
     pub fn server(self) -> Self { self.extend_url("/server") }
     pub fn serverid(self, id: &str) -> Self { self.extend_url(format!("/{id}").as_str()) }
     pub fn shared(self) -> Self { self.extend_url("/shared") }

@@ -1,11 +1,11 @@
-use super::{params, ServerCreated, ServerQuery, ServerStatus, ServerList};
+use super::{parameter, ServerCreated, ServerQuery, ServerStatus, ServerList};
 use crate::api::interface;
 use crate::Client;
 use tokio::time::sleep;
 
 /// create server
 pub async fn create(client: Client, server_name: &str, server_plan_id: usize) -> anyhow::Result<String> {
-    let create_params = params::Params::default()
+    let create_params = parameter::Params::default()
         .name(server_name)
         .server_plan(server_plan_id);
     let new_server: ServerCreated = client
@@ -39,7 +39,7 @@ pub async fn create(client: Client, server_name: &str, server_plan_id: usize) ->
 #[inline]
 async fn remove_method_1(client: Client, server_id: &str, disk_ids: Vec<String>) -> anyhow::Result<()> {
     let disk_ids = disk_ids.iter().map(|id_str| id_str.parse().unwrap()).collect();
-    let delete_params = params::ParamsWithDisk::default().disk_ids(disk_ids);
+    let delete_params = parameter::ParamsWithDisk::default().disk_ids(disk_ids);
     let _resp = client.clone().server().serverid(server_id)
         .set_params(&delete_params).unwrap()
         .delete().await?;
@@ -53,7 +53,7 @@ async fn remove_method_2(client: Client, server_id: &str, disk_ids: Vec<String>)
     let _resp = client.clone().server().serverid(server_id)
         .delete().await?;
     for disk_id in disk_ids.into_iter() {
-        crate::api::disk::shortcuts::remove(client.clone(), &disk_id).await?;
+        crate::api::disk::shortcut::remove(client.clone(), &disk_id).await?;
     }
    Ok(())
 }
@@ -94,7 +94,7 @@ pub async fn power_off(client: Client, server_id: &str) -> anyhow::Result<()> {
                 .server().serverid(server_id)
                 .power().delete().await.unwrap();
         } else {
-            let params = params::ParamsDeleteServer { force: true };
+            let params = parameter::ParamsDeleteServer { force: true };
             let _res = client
                 .clone()
                 .server()
@@ -159,11 +159,11 @@ mod tests {
     #[ignore]
     async fn test_gpu_server_create_and_remove() {
         let client = Client::default().set_zone(Zone::Ishikari1);
-        let disk_id = crate::api::disk::shortcuts::create(client.clone(), "test_disk", 4, 20480, 113601993713, "ssh").await.unwrap();
+        let disk_id = crate::api::disk::shortcut::create(client.clone(), "test_disk", 4, 20480, 113601993713, "ssh").await.unwrap();
         dbg!("disk created", &disk_id);
         let server_id = create(client.clone(), "test_gpu_server", 201056004).await.unwrap();
         dbg!("server created", &server_id);
-        crate::api::disk::shortcuts::connect_to_server(client.clone(), &disk_id, &server_id).await.unwrap();
+        crate::api::disk::shortcut::connect_to_server(client.clone(), &disk_id, &server_id).await.unwrap();
         // sleep(std::time::Duration::from_secs(5)).await;
         // crate::api::disk::shortcut::remove(client.clone(), &disk_id).await.unwrap();
         // remove(client.clone(), server_id, vec!["113602013954".to_string()]).await.unwrap();
@@ -178,7 +178,7 @@ mod tests {
         let disk_id = "113602017877";
         let server_id = "113602017893";
         remove(client.clone(), server_id, vec![]).await.unwrap();
-        crate::api::disk::shortcuts::remove(client.clone(), disk_id).await.unwrap();
+        crate::api::disk::shortcut::remove(client.clone(), disk_id).await.unwrap();
     }
 
     #[tokio::test]

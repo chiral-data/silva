@@ -1,21 +1,15 @@
-//! Sakura Internet API - Disk
 //! https://manual.sakura.ad.jp/cloud-api/1.1/disk/index.html
 //!
-//! - [x] GET    /disk                           - ディスク一覧を取得
-//! - [x] POST   /disk                           - ディスクを作成
-//! - [ ] GET    /disk/:diskid                   - 該当IDのディスク情報を取得
-//! - [ ] PUT    /disk/:diskid                   - ディスク情報を更新
-//! - [ ] DELETE /disk/:diskid                   - 該当IDのディスクを削除
-//! - [ ] PUT    /disk/:diskid/config            - ディスクの内容を書き換える
-//! - [ ] GET    /disk/:diskid/monitor           - ディスクのリソースモニタ情報を取得
-//! - [ ] PUT    /disk/:diskid/plan              - 該当IDのディスクのプランを変更
-//! - [ ] PUT    /disk/:diskid/resize-partition  - ディスクのパーティションサイズを最適化する
-//! - [ ] GET    /disk/:diskid/tag               - 該当IDのディスクに付けられたタグを取得
-//! - [ ] PUT    /disk/:diskid/tag               - 該当IDのディスクに付けられるタグを変更
-//! - [ ] PUT    /disk/:diskid/to/blank          - ディスクを空にする
-//! - [ ] DELETE /disk/:diskid/to/server         - ディスクとサーバの接続を解除
-//! - [x] PUT    /disk/:diskid/to/server/:serverid - ディスクとサーバを接続
-//! - [ ] GET    /disk/tag                       - ディスクタグ一覧を取得
+//! API                                         Parameters              Response
+//! ---------------------------------------------------------------------------
+//! GET     /disk                               -                       DiskList
+//! POST    /disk                               Params                  DiskCreated
+//! GET     /disk/:diskid                       -                       DiskQuery
+//! PUT     /disk/:diskid/config                Config                  -
+//! PUT     /disk/:diskid/to/server/:serverid   ParamsEmpty             -
+
+pub mod parameter;
+pub mod shortcut;
 
 use serde::{Deserialize, Serialize};
 
@@ -86,7 +80,7 @@ mod tests {
         let dpl: crate::api::product::DiskPlanList =
             client.clone().clear().product().disk().get().await.unwrap();
         let ubuntu_2204 = 113402076879;
-        let disk_id = shortcuts::create(
+        let disk_id = shortcut::create(
             client.clone(),
             "test_disk",
             dpl.disk_plans[0].i_d,
@@ -108,7 +102,7 @@ mod tests {
             .await
             .unwrap();
         let server_id =
-            server::shortcuts::create(client.clone(), "test_server", spl.server_plans[0].i_d)
+            server::shortcut::create(client.clone(), "test_server", spl.server_plans[0].i_d)
                 .await
                 .unwrap();
         // connect disk and server
@@ -124,7 +118,7 @@ mod tests {
             .await
             .unwrap();
         // power on server
-        server::shortcuts::power_on(client.clone(), &server_id)
+        server::shortcut::power_on(client.clone(), &server_id)
             .await
             .unwrap();
         // test ssh
@@ -149,7 +143,7 @@ mod tests {
             .unwrap();
         assert!(sess.authenticated());
         // shut down server
-        server::shortcuts::power_off(client.clone(), &server_id).await.unwrap();
+        server::shortcut::power_off(client.clone(), &server_id).await.unwrap();
         // delete the disks
         for disk in dl.disks.iter() {
             let _res = client
@@ -162,7 +156,7 @@ mod tests {
                 .unwrap();
         }
         // delete the server & the disk
-        let delte_params = crate::api::server::params::ParamsWithDisk::default()
+        let delte_params = crate::api::server::parameter::ParamsWithDisk::default()
             .disk_ids(vec![disk_id.parse::<usize>().unwrap()]);
         let _res = client
             .clone()
@@ -181,6 +175,3 @@ mod tests {
         assert_eq!(dl.total, 0);
     }
 }
-
-pub mod params;
-pub mod shortcuts;

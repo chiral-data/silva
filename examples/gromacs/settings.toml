@@ -1,0 +1,10 @@
+input_files = [
+  "1AKI_clean.pdb"
+]
+
+output_files = [
+  "1AKI_processed.gro ",
+  "posre.itp",
+  "topol.top ",
+]
+entrypoint = ["sh", "job.sh"]

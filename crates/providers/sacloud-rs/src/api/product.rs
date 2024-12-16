@@ -1,20 +1,7 @@
-//! Sakura Internet API - Product
-//! https://manual.sakura.ad.jp/cloud-api/1.1/product/index.html
-//!
-//! - [x] GET    /product/disk                          - ディスクプラン一覧を取得
-//! - [ ] GET    /product/disk/:diskplanid              - 該当IDのディスクプラン情報を取得
-//! - [ ] GET    /product/internet                      - ルータ帯域一覧を取得
-//! - [ ] GET    /product/internet/:internetplanid      - 該当IDのルータ帯域情報を取得
-//! - [ ] GET    /product/license                       - ライセンス情報一覧を取得
-//! - [ ] GET    /product/license/:licenseid            - 該当IDのライセンス情報を取得
-//! - [ ] GET    /product/privatehost                   - 専有ホストプラン一覧を取得
-//! - [ ] GET    /product/privatehost/:privatehostplanid - 該当IDの専有ホストプラン情報を取得
-//! - [x] GET    /product/server                        - サーバプラン一覧を取得
-//! - [ ] GET    /product/server/:serverplanid          - 該当IDのサーバプラン情報を取得
-//! - [ ] GET    /public/price                          - リクエスト先ゾーンの価格表を取得
-
-
 use serde::{Deserialize, Serialize};
+
+pub mod parameter;
+pub mod shortcut;
 
 create_struct!(ServerPlan, "PascalCase",
     index : usize,
@@ -80,13 +67,13 @@ mod tests {
             .get().await.unwrap();
         assert_eq!(spl.server_plans.len(), 100);
         // use get_with_params, from 100 count 30
-        let params = params::Params::default().from(100).count(30);
+        let params = parameter::Params::default().from(100).count(30);
         let params_vec: Vec<_> = params.into();
         let spl: ServerPlanList = client.clone().product().server()
             .get_with_params(&params_vec).await.unwrap();
         assert_eq!(spl.server_plans.len(), 30);
         // use get_with_params, from 0 count 200
-        let params = params::Params::default().from(0).count(200);
+        let params = parameter::Params::default().from(0).count(200);
         let params_vec: Vec<_> = params.into();
         let spl: ServerPlanList = client.clone().clear().product().server()
             .get_with_params(&params_vec).await.unwrap();
@@ -101,7 +88,3 @@ mod tests {
         assert_eq!(dpl.disk_plans.len(), 2);
     }
 }
-
-
-pub mod params;
-pub mod shortcuts;
