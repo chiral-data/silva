@@ -1,8 +1,6 @@
-use std::path::PathBuf;
-
 use sacloud_rs::api::dok;
 
-use crate::data_model;
+use crate::{data_model, utils};
 
 pub struct ParametersDok {
     pub image_name: String, 
@@ -12,16 +10,8 @@ pub struct ParametersDok {
     pub plan: dok::params::Plan,
 }
 
-
-pub fn proj_dir(store: &data_model::Store) -> anyhow::Result<PathBuf> {
-    let proj_dir = store.proj_selected.as_ref()
-        .ok_or(anyhow::Error::msg("no project selected"))?;
-    Ok(proj_dir.to_owned())
-}
-
-
 pub fn params_dok(store: &data_model::Store) -> anyhow::Result<ParametersDok> {
-    let proj_dir = proj_dir(store)?;
+    let proj_dir = utils::project::dir(store)?;
     let proj_name = data_model::job::Job::get_project_name(&proj_dir)?;
     let image_name = format!("{proj_name}:latest").to_lowercase();
     let client = store.account_mgr.create_client(&store.setting_mgr)

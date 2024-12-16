@@ -11,7 +11,7 @@ pub struct States {
     pub list: ListState
 }
 
-pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
+pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &data_model::Store) {
     let current_style = states.get_style(true);
 
     if store.account_mgr.accounts.is_empty() {
@@ -41,7 +41,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
             .wrap(Wrap { trim: true });
         f.render_widget(paragraph, area);
     } else {
-        let states_current = &mut states.setting.account;
+        let states_current = &mut states.setting_states.account;
         if states_current.list.selected().is_none() {
             states_current.list.select(Some(0));
         }
@@ -64,10 +64,10 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
     }
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut data_model::Store) {
+pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &mut data_model::Store) {
     use event::KeyCode;
 
-    let states_current = &mut states.setting.account;
+    let states_current = &mut states.setting_states.account;
     match key.code {
         KeyCode::Up => {
             let total = store.account_mgr.accounts.len();

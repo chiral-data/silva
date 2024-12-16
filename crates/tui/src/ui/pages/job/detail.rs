@@ -23,16 +23,16 @@ pub enum Tab {
 
 #[derive(Default)]
 pub struct States {
-    proj_dir: PathBuf,
     job_settings: data_model::job::settings::Settings,
     tab_action: Tab,
+    proj_dir: PathBuf,
     proj_files: Vec<String>,
     list_state_file: ListState,
 }
 
 impl States {
     pub fn update(&mut self, store: &data_model::Store) -> anyhow::Result<()> {
-        self.proj_dir = params::proj_dir(store)?;
+        self.proj_dir = utils::project::dir(store)?;
         self.job_settings = data_model::job::Job::get_settings(&self.proj_dir)?;
         self.proj_files = self.job_settings.files.all_files();
 
@@ -40,9 +40,9 @@ impl States {
     }
 }
 
-pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
+pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &data_model::Store) {
     let current_style = states.get_style(true);
-    let states_current = &mut states.job.detail;
+    let states_current = &mut states.job_states.detail;
 
     let action_selected = match states_current.tab_action {
         Tab::Preview => 0,
@@ -92,18 +92,18 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
     }
 }
 
-fn action_clear(states: &mut ui::States, store: &data_model::Store) -> anyhow::Result<()> {
-    let proj_dir = params::proj_dir(store)?;
-    states.info.message = "Removing job intermediate files ...".to_string();
+fn action_clear(states: &mut ui::states::States, store: &data_model::Store) -> anyhow::Result<()> {
+    let proj_dir = utils::project::dir(store)?;
+    states.info_states.message = "Removing job intermediate files ...".to_string();
     utils::docker::clear_build_files(&proj_dir)?;
-    states.info.message = format!("File cleaning done for project {}", proj_dir.to_str().unwrap());
+    states.info_states.message = format!("File cleaning done for project {}", proj_dir.to_str().unwrap());
     Ok(())
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_model::Store) {
+pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &data_model::Store) {
     use event::KeyCode;
 
-    let states_current = &mut states.job.detail;
+    let states_current = &mut states.job_states.detail;
     match key.code {
         KeyCode::Char('p') | KeyCode::Char('P') => {
             states_current.tab_action = Tab::Preview;
@@ -121,10 +121,10 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_m
                 Tab::Run => run::action(states, store)
             } {
                 Ok(_) => (),
-                Err(e) => states.info.message = format!("job action error: {e}")
+                Err(e) => states.info_states.message = format!("job action error: {e}")
             }
         }
-        KeyCode::Esc => states.job.show_page = super::ShowPage::List,
+        KeyCode::Esc => states.job_states.show_page = super::ShowPage::List,
         _ => {
             match states_current.tab_action {
                 Tab::Preview => preview::handle_key(key, states, store),

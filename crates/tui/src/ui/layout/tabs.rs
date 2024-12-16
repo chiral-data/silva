@@ -16,10 +16,11 @@ pub struct States {
     pub tab: Tab
 }
 
-pub fn render(f: &mut Frame, area: Rect, states: &ui::States) {
+pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States) {
     let current_style = states.get_style(false);
-    let states = &states.tab;
-    let selected = match states.tab {
+    let states_current = &states.tabs_states;
+
+    let selected = match states_current.tab {
         Tab::Project => 0,
         Tab::Job => 1,
         Tab::Setting => 2

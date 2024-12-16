@@ -37,21 +37,21 @@ pub async fn run() -> anyhow::Result<()> {
     let tick_rate = Duration::from_millis(250);
     let mut last_tick = Instant::now();
 
-    let mut states = ui::States::default();
+    let mut states = ui::states::States::default();
     let mut store = data_model::Store::default();
     states.initialize(&store);
     store.registry_mgr.initialze(&store.account_mgr, &store.setting_mgr).await;
 
     loop {
-        terminal.draw(|f| ui::render(f, &mut states, &mut store))?;
+        terminal.draw(|f| ui::home::render(f, &mut states, &mut store))?;
 
-        match ui::handle_key(tick_rate, &mut last_tick, &mut states, &mut store).await? {
-            ui::Signal::Quit => {
+        match ui::home::handle_key(tick_rate, &mut last_tick, &mut states, &mut store).await? {
+            ui::home::Signal::Quit => {
                 process::Command::new("reset").status()
                     .unwrap_or_else(|e| panic!("failed to reset terminal with error: {e:?}"));
                 break;
             }
-            ui::Signal::None => {}
+            ui::home::Signal::None => {}
         }
 
         // for (job_id, jh) in states.handlers.iter() {

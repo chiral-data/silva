@@ -21,9 +21,9 @@ pub struct States {
     tab_action: Tab,
 }
 
-pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
+pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &data_model::Store) {
     let current_style = states.get_style(true);
-    let states_current = &mut states.job.list;
+    let states_current = &mut states.job_states.list;
 
     let action_selected = match states_current.tab_action {
         Tab::New => 0,
@@ -69,16 +69,16 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
     f.render_widget(job_list, bottom);
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, _store: &data_model::Store) {
+pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, _store: &data_model::Store) {
     use event::KeyCode;
 
     match key.code {
         KeyCode::Char('n') | KeyCode::Char('N') => {
-            let states_current = &mut states.job.list;
+            let states_current = &mut states.job_states.list;
             states_current.tab_action = Tab::New;
         }
         KeyCode::Enter => {
-            states.job.show_page = super::ShowPage::Detail;
+            states.job_states.show_page = super::ShowPage::Detail;
         }
         _ => ()
     }

@@ -13,9 +13,9 @@ pub const HELPER: &[&str] = &[
     "e.g., generate the docker file and script file for a DOK task for preview", 
 ];
 
-pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, _store: &data_model::Store) {
+pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, _store: &data_model::Store) {
     let current_style = states.get_style(true);
-    let states_current = &mut states.job.detail;
+    let states_current = &mut states.job_states.detail;
 
     // file list
     let file_list = List::new(states_current.proj_files.iter().map(|s| s.as_str()))
@@ -57,10 +57,10 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, _store: &data_
     f.render_widget(file_contents, right)
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, _store: &data_model::Store) {
+pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, _store: &data_model::Store) {
     use event::KeyCode;
 
-    let states_current = &mut states.job.detail;
+    let states_current = &mut states.job_states.detail;
     match key.code {
         KeyCode::Up => {
             let total = states_current.proj_files.len(); 
@@ -84,11 +84,11 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, _store: &data_
     }
 }
 
-pub fn action(states: &mut ui::States, store: &data_model::Store) -> anyhow::Result<()> {
-    let proj_dir = super::params::proj_dir(store)?;
+pub fn action(states: &mut ui::states::States, store: &data_model::Store) -> anyhow::Result<()> {
+    let proj_dir = utils::project::dir(store)?;
     let job_settings = data_model::job::Job::get_settings(&proj_dir)?;
-    states.info.message = "Creating job intermediate files ...".to_string();
+    states.info_states.message = "Creating job intermediate files ...".to_string();
     utils::docker::prepare_build_files(&proj_dir, &job_settings)?;
-    states.info.message = format!("Preview job done for project {}", proj_dir.to_str().unwrap());
+    states.info_states.message = format!("Preview job done for project {}", proj_dir.to_str().unwrap());
     Ok(())
 }

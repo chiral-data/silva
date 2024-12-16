@@ -10,9 +10,9 @@ pub struct States {
     pub list: ListState
 }
 
-pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
+pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &data_model::Store) {
     let current_style = states.get_style(true);
-    let states_current = &mut states.setting.registry;
+    let states_current = &mut states.setting_states.registry;
     if states_current.list.selected().is_none() {
         states_current.list.select(Some(0));
     }
@@ -35,10 +35,10 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
     f.render_stateful_widget(list, area, &mut states_current.list);
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut data_model::Store) {
+pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &mut data_model::Store) {
     use event::KeyCode;
 
-    let states_current = &mut states.setting.registry;
+    let states_current = &mut states.setting_states.registry;
     match key.code {
         KeyCode::Up => {
             let total = store.registry_mgr.registries.len();

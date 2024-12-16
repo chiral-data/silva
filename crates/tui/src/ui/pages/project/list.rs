@@ -15,9 +15,9 @@ pub struct States {
     proj_dirs: Vec<PathBuf>, 
 }
 
-pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, _store: &data_model::Store) {
+pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, _store: &data_model::Store) {
     let current_style = states.get_style(true);
-    let states_current = &mut states.project.proj_list;
+    let states_current = &mut states.project_states.list;
     if states_current.list.selected().is_none() {
         states_current.list.select(Some(0));
     }
@@ -31,7 +31,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, _store: &data_
         .collect();
 
     let list = List::new(states_current.proj_dirs.iter().map(|path| path.to_str().unwrap()))
-        .block(Block::bordered().title("All Projets"))
+        .block(Block::bordered().title("List of Projets"))
         .highlight_style(Style::new().reversed())
         .highlight_symbol(">>[Enter] ")
         .repeat_highlight_symbol(true)
@@ -41,9 +41,9 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, _store: &data_
     f.render_stateful_widget(list, area, &mut states_current.list);
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut data_model::Store) {
+pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &mut data_model::Store) {
     use event::KeyCode;
-    let states_current = &mut states.project.proj_list;
+    let states_current = &mut states.project_states.list;
 
     match key.code {
         KeyCode::Up => {
@@ -65,9 +65,9 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut da
         KeyCode::Enter => {
             if let Some(sel_idx) = states_current.list.selected() {
                 store.proj_selected = Some(states_current.proj_dirs.get(sel_idx).unwrap().to_owned());
-                match states.job.detail.update(store) {
-                    Ok(_) => states.project.show_page = super::ShowPage::AppList,
-                    Err(e) => states.info.message = format!("cannot selecte project{}: {e}", store.proj_selected.as_ref().unwrap().to_str().unwrap())
+                match states.project_states.browse.update(store) {
+                    Ok(_) => states.project_states.tabs.tab = super::tabs::Tab::Browse,
+                    Err(e) => states.info_states.message = format!("cannot selecte project{}: {e}", store.proj_selected.as_ref().unwrap().to_str().unwrap())
                 }
             }
         }

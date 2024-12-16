@@ -79,8 +79,8 @@ async fn launch_job(
     Ok(())
 }
 
-pub fn action(_states: &mut ui::States, store: &data_model::Store) -> anyhow::Result<()> {
-    let proj_dir = super::params::proj_dir(store)?;
+pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> anyhow::Result<()> {
+    let proj_dir = utils::project::dir(store)?;
     let job_settings = data_model::job::Job::get_settings(&proj_dir)?;
     let params_dok = super::params::params_dok(store)?;
     let job_mgr = store.job_mgr.clone();
@@ -95,10 +95,9 @@ pub fn action(_states: &mut ui::States, store: &data_model::Store) -> anyhow::Re
     });
 
     Ok(())
-        
 }
 
-pub fn render(f: &mut Frame, area: Rect, _states: &mut ui::States, store: &data_model::Store) {
+pub fn render(f: &mut Frame, area: Rect, _states: &mut ui::states::States, store: &data_model::Store) {
     // TODO: use job id 0 for testing first
     let job_id = 0;
     let job_mgr = store.job_mgr.lock().unwrap();

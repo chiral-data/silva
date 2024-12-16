@@ -16,9 +16,9 @@ pub struct States {
     pub tab: Tab
 }
 
-pub fn render(f: &mut Frame, area: Rect, states: &ui::States) {
+pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States) {
     let current_style = states.get_style(true);
-    let states_current = &states.setting.tabs;
+    let states_current = &states.setting_states.tabs;
     let selected = match states_current.tab {
         Tab::Account => 0,
         Tab::Registry => 1,
@@ -35,10 +35,10 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::States) {
     f.render_widget(tabs, area);
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States) {
+pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States) {
     use event::KeyCode;
 
-    let states_current = &mut states.setting.tabs;
+    let states_current = &mut states.setting_states.tabs;
     match key.code {
         KeyCode::Char('a') | KeyCode::Char('A')=> states_current.tab = Tab::Account, 
         KeyCode::Char('r') | KeyCode::Char('R')=> states_current.tab = Tab::Registry, 
