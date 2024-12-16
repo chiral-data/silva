@@ -13,7 +13,7 @@ pub struct States {
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &mut data_model::Store) {
-    let current_style = states.get_style(ui::Focus::Main);
+    let current_style = states.get_style(true);
     let states_current = &mut states.infra.pod_type;
 
     let server_plan = store.pod_type_mgr.pod_types.get(&states_current.pod_type_sel_id).unwrap();

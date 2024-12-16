@@ -24,7 +24,7 @@ fn get_pod_types(states: &ui::States) -> &[data_model::pod_type::PodType] {
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &data_model::Store) {
-    let current_style = states.get_style(ui::Focus::Main);
+    let current_style = states.get_style(true);
     let app_sel = super::app_list::get_selected(states, store).unwrap();
     let text = vec![
         Line::from("A free and open-source software suite for high-performance molecular dynamics and output analysis."),
@@ -43,7 +43,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         .block(Block::bordered().title(" Recommended Server Plans "))
         .style(current_style)
         .highlight_style(Style::new().reversed())
-        .highlight_symbol(">> ")
+        .highlight_symbol(">>[Enter] ")
         .repeat_highlight_symbol(true)
         .direction(ListDirection::TopToBottom);
     if states.infra.app_detail.list_state_pod_types.selected().is_none() {

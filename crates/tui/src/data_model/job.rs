@@ -1,11 +1,11 @@
 //! Jobs run locally to manage cloud infrastructure
 //!
 
-use std::{collections::{HashMap, VecDeque}, path::PathBuf};
+use std::{collections::{HashMap, VecDeque}, fs, path::{Path, PathBuf}};
 
 use serde::Deserialize;
 
-use crate::{constants, utils};
+use crate::constants;
 
 #[derive(Debug, Deserialize)]
 pub enum JobStatus {
@@ -49,6 +49,27 @@ impl Job {
     // pub fn set_complete(&mut self) {
     //     self.status = JobStatus::Completed;
     // }
+
+    pub fn get_settings(proj_dir: &Path) ->anyhow::Result<settings::Settings> {
+        let settings_filepath = proj_dir.join("settings.toml");
+        let job_settings = settings::Settings::new_from_file(&settings_filepath)
+            .map_err(|e| anyhow::Error::msg(format!("{e} no settings file {settings_filepath:?}")))?;
+
+        Ok(job_settings)
+    }
+
+    pub fn get_project_name(proj_dir: &Path) -> anyhow::Result<String> {
+        let proj_name = proj_dir.file_name()
+            .ok_or(anyhow::Error::msg("no file name for project "))?
+            .to_str()
+            .ok_or(anyhow::Error::msg("osString to str error"))?;
+        let proj_parent = proj_dir
+            .parent()
+            .map(|p| p.file_name().unwrap().to_str().unwrap_or(""))
+            .unwrap_or("");
+
+        Ok(format!("{proj_parent}_{proj_name}"))
+    }
 }
 
 
@@ -84,7 +105,7 @@ impl Manager {
             std::fs::File::create(&filepath)?;
         }
 
-        let content = utils::file::get_file_content(&filepath)?;
+        let content = fs::read_to_string(&filepath)?;
         let df = DataFile::new(&content)?;
         let jobs = match df.jobs {
             Some(jobs) => jobs.into_iter()

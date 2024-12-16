@@ -11,7 +11,7 @@ pub struct States {
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_model::Store) {
-    let current_style = states.get_style(ui::Focus::Main);
+    let current_style = states.get_style(true);
     let states_current = &mut states.setting.registry;
     if states_current.list.selected().is_none() {
         states_current.list.select(Some(0));

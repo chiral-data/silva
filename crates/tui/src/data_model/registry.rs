@@ -3,12 +3,12 @@
 //!     When selecting the Sakura Internet DOK service, a Docker registry from Sakura Internet
 //!     is recommended.
 
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use sacloud_rs::api::dok;
 use serde::Deserialize;
 
-use crate::{constants, utils};
+use crate::constants;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Registry {
@@ -67,7 +67,7 @@ impl Manager {
             std::fs::File::create(&filepath)?;
         }
 
-        let content = utils::file::get_file_content(&filepath)?;
+        let content = fs::read_to_string(&filepath)?;
         let df = DataFile::new(&content)?;
         let s = Self { 
             registries: df.registries.unwrap_or_default(),

@@ -1,9 +1,9 @@
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 use std::io::Write;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{constants, utils};
+use crate::constants;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct DataFile {
@@ -41,7 +41,7 @@ impl Manager {
             std::fs::File::create(&filepath)?;
         }
 
-        let content = utils::file::get_file_content(&filepath)?;
+        let content = fs::read_to_string(&filepath)?;
         let df = DataFile::new(&content)?;
         let s = Self {
             account_id_sel: df.account_id_sel,

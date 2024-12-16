@@ -1,9 +1,9 @@
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 use std::io::Write;
 
 use serde::Deserialize;
 
-use crate::{constants, utils};
+use crate::constants;
 
 #[derive(Debug, Deserialize)]
 pub struct SakuraAccount {
@@ -74,7 +74,7 @@ impl Manager {
     pub fn load() -> anyhow::Result<Self> {
         let filepath = Self::data_filepath()?;
         let accounts = if filepath.exists() {
-            let content = utils::file::get_file_content(&filepath)?;
+            let content = fs::read_to_string(&filepath)?;
             let df = DataFile::new(&content)?;
             df.accounts
         } else {

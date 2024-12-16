@@ -4,7 +4,7 @@ use std::env;
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
 use ratatui::prelude::*;
 
-use crate::{constants, envs, ui};
+use crate::{constants, envs, ui, utils};
 use crate::data_model;
 
 fn setup() {
@@ -14,9 +14,13 @@ fn setup() {
         std::fs::create_dir_all(data_dir).unwrap();
     }
 
-    // if project home directory is not set, use the directory "examples"
+    // if project home directory is not set, use the directories under "examples"
     if env::var_os(envs::SILVA_PROJECTS_HOME).is_none() {
-        env::set_var(envs::SILVA_PROJECTS_HOME, PathBuf::from(".").join("examples").canonicalize().unwrap())
+        let project_homes: String = utils::file::get_child_dirs(PathBuf::from(".").join("examples"))
+            .map(|child_dir| child_dir.canonicalize().unwrap().to_str().unwrap().to_string())
+            .collect::<Vec<String>>()
+            .join(";");
+         env::set_var(envs::SILVA_PROJECTS_HOME, project_homes);
     }
 }
 
@@ -41,7 +45,7 @@ pub async fn run() -> anyhow::Result<()> {
     loop {
         terminal.draw(|f| ui::render(f, &mut states, &mut store))?;
 
-        match ui::input(tick_rate, &mut last_tick, &mut states, &mut store).await? {
+        match ui::handle_key(tick_rate, &mut last_tick, &mut states, &mut store).await? {
             ui::Signal::Quit => {
                 process::Command::new("reset").status()
                     .unwrap_or_else(|e| panic!("failed to reset terminal with error: {e:?}"));

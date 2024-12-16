@@ -1,0 +1,18 @@
+[files]
+# the mp3 audio file is downloaded from the following page
+# https://www.mitsue.co.jp/english/service/audio_and_video/audio_production/narrators_sample.html
+inputs = [
+  "alisa_fujii_sample_2.mp3",
+  "example.py"
+]
+
+outputs = [
+  "output.txt",
+]
+
+scripts = [
+  "job.sh"
+]
+
+[dok]
+base_image = "chiral.sakuracr.jp/whisper:1214"
