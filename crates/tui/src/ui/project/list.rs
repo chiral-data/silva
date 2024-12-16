@@ -39,7 +39,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, _store: &data_
     let list = List::new(states_current.proj_dirs.iter().map(|path| path.to_str().unwrap()))
         .block(Block::bordered().title("All Projets"))
         .highlight_style(Style::new().reversed())
-        .highlight_symbol(">>[S] ")
+        .highlight_symbol(">>[Space] ")
         .repeat_highlight_symbol(true)
         .style(current_style)
         .direction(ListDirection::TopToBottom);
@@ -68,7 +68,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &mut da
                 states_current.list.select(Some(sel_idx));
             }
         }
-        KeyCode::Char('s') | KeyCode::Char('S') => {
+        KeyCode::Char(' ')=> {
             if let Some(sel_idx) = states_current.list.selected() {
                 store.proj_selected = Some(states_current.proj_dirs.get(sel_idx).unwrap().to_owned());
             }

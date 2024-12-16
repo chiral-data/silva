@@ -7,4 +7,7 @@ output_files = [
   "posre.itp",
   "topol.top ",
 ]
-entrypoint = ["sh", "job.sh"]
+
+script_files = [
+  "job.sh"
+]
