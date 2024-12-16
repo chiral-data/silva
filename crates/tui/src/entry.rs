@@ -1,13 +1,32 @@
-use std::{io, process, time::{Duration, Instant}};
+use std::{io, path::PathBuf, process, time::{Duration, Instant}};
+use std::env;
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
 use ratatui::prelude::*;
 
-use crate::{envs, ui};
+use crate::{constants, envs, ui, utils};
 use crate::data_model;
 
+fn setup() {
+    let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME).unwrap();
+    let data_dir = xdg_dirs.get_data_home();
+    if !data_dir.exists() {
+        std::fs::create_dir_all(data_dir).unwrap();
+    }
+
+    // if project home directory is not set, use the directories under "examples"
+    if env::var_os(envs::SILVA_PROJECTS_HOME).is_none() {
+        let project_homes: String = utils::file::get_child_dirs(PathBuf::from(".").join("examples"))
+            .map(|child_dir| child_dir.canonicalize().unwrap().to_str().unwrap().to_string())
+            .collect::<Vec<String>>()
+            .join(";");
+         env::set_var(envs::SILVA_PROJECTS_HOME, project_homes);
+    }
+}
+
+
 pub async fn run() -> anyhow::Result<()> {
-    envs::setup();
+    setup();
 
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture, )?;
@@ -20,14 +39,13 @@ pub async fn run() -> anyhow::Result<()> {
 
     let mut states = ui::States::default();
     let mut store = data_model::Store::default();
-    if !store.ac_mgr.get_accounts().is_empty() {
-        states.account.list.list.select(Some(0));
-    }
+    states.initialize(&store);
+    store.registry_mgr.initialze(&store.account_mgr, &store.setting_mgr).await;
 
     loop {
         terminal.draw(|f| ui::render(f, &mut states, &mut store))?;
 
-        match ui::input(tick_rate, &mut last_tick, &mut states, &mut store).await? {
+        match ui::handle_key(tick_rate, &mut last_tick, &mut states, &mut store).await? {
             ui::Signal::Quit => {
                 process::Command::new("reset").status()
                     .unwrap_or_else(|e| panic!("failed to reset terminal with error: {e:?}"));
@@ -36,14 +54,14 @@ pub async fn run() -> anyhow::Result<()> {
             ui::Signal::None => {}
         }
 
-        for (job_id, jh) in states.handlers.iter() {
-            if jh.is_finished() {
-                let job_local = store.jl_mgr.jobs.get_mut(job_id).unwrap();
-                job_local.set_complete();
-            }
-        }
+        // for (job_id, jh) in states.handlers.iter() {
+        //     if jh.is_finished() {
+        //         let job_local = store.jl_mgr.jobs.get_mut(job_id).unwrap();
+        //         job_local.set_complete();
+        //     }
+        // }
 
-        states.handlers.retain(|_, jh| !jh.is_finished());
+        // states.handlers.retain(|_, jh| !jh.is_finished());
     }
 
     disable_raw_mode()?;

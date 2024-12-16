@@ -2,13 +2,37 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+use crate::data_model::provider;
+
+#[derive(Debug, Default, Deserialize)]
+pub struct Files {
+    pub inputs: Vec<String>,
+    pub outputs: Vec<String>,
+    /// scripts to be executed in sequence 
+    pub scripts: Vec<String>,
+}
+ 
+impl Files {
+    pub fn all_files(&self) -> Vec<String> {
+        [
+            &["settings.toml", "--- input ---"].into_iter().map(|s| s.to_string()).collect(),
+            &self.inputs,
+            &vec!["--- script ---".to_string()],
+            &self.scripts,
+            &vec!["--- output ---".to_string()],
+            &self.outputs,
+            // TODO: &vec!["--- build files ---", "Dockerfile", "run.sh"].into_iter().map(String::from).collect() // file for building docker image
+        ]
+        .iter()
+        .flat_map(|v| v.iter().map(|s| s.to_string()).collect::<Vec<String>>())
+        .collect()
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
 pub struct Settings {
-    pub input_files: Vec<String>,
-    pub output_files: Vec<String>,
-    /// default executable
-    /// if a docker image will be build, it will be used for ENTRYPOINT
-    pub entrypoint: Vec<String>
+    pub files: Files,
+    pub dok: Option<provider::sakura_internet::DokSettings>,
 }
 
 impl Settings {
@@ -31,21 +55,31 @@ mod tests {
     #[test]
     fn test_load_from_file() {
         let toml_str = r#"
-        input_files = [
+        [files]
+        inputs = [
             "a.in",
             "b.in",
             "c.in"
         ]
-        output_files = [
+        outputs = [
             "1.out",
         ]
-        entrypoint = ["top", "-b"]
+        scripts = [
+            "start.sh",
+            "finish.sh"
+        ]
+
+        [dok]
+        base_image = "a"
+        extra_build_commands = ["python load_model.py"]
         "#;
-        
         let s = Settings::new(toml_str).unwrap();
-        assert_eq!(s.input_files.len(), 3);
-        assert_eq!(s.output_files.len(), 1);
-        assert_eq!(s.entrypoint.len(), 2);
+        assert_eq!(s.files.inputs.len(), 3);
+        assert_eq!(s.files.outputs.len(), 1);
+        assert_eq!(s.files.scripts.len(), 2);
+        let dok = s.dok.unwrap();
+        assert_eq!(dok.base_image, "a");
+        assert_eq!(dok.extra_build_commands.unwrap().len(), 1);
     }
 }
 

@@ -10,6 +10,7 @@ pub enum ShowPage {
 pub struct States {
     pub show_page: ShowPage,
     pub list: list::States,
+    pub detail: detail::States,
 }
 
 pub fn render(f: &mut ratatui::prelude::Frame, area: ratatui::prelude::Rect, states: &mut crate::ui::States, store: &crate::data_model::Store) {

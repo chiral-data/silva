@@ -1,6 +1,9 @@
+use std::{fs, path::PathBuf};
+use std::io::Write;
+
 use serde::Deserialize;
 
-use crate::ui;
+use crate::constants;
 
 #[derive(Debug, Deserialize)]
 pub struct SakuraAccount {
@@ -24,11 +27,17 @@ impl std::fmt::Display for Account {
 }
 
 impl Account {
-    pub fn create_client(&self) -> sacloud_rs::Client {
+    pub fn id(&self) -> &str {
         match self {
-            Account::Sakura(sa) => sacloud_rs::Client::new(sa.access_token.to_string(), Some(sa.access_token_secret.to_string()))
+            Account::Sakura(sa) => &sa.resource_id
         }
     }
+
+    // pub fn create_client(&self) -> sacloud_rs::Client {
+    //     match self {
+    //         Account::Sakura(sa) => sacloud_rs::Client::new(sa.access_token.to_string(), Some(sa.access_token_secret.to_string()))
+    //     }
+    // }
 }
 
 #[derive(Debug, Deserialize)]
@@ -43,28 +52,57 @@ impl DataFile {
     }
 }
 
-#[derive(Debug, Deserialize)]
+const TEMPORY_CONTENT: &str = r#"[[accounts]]
+Sakura.name = ""
+Sakura.resource_id = ""
+Sakura.access_token = ""
+Sakura.access_token_secret = ""
+"#;
+
+#[derive(Debug)]
 pub struct Manager {
-    accounts: Vec<Account>,
+    pub accounts: Vec<Account>,
 }
 
 impl Manager {
-    pub fn new(content: &str) -> Self {
-        let accounts = match DataFile::new(content) {
-            Ok(df) => df.accounts,
-            Err(_e) => vec![]
+    fn data_filepath() -> anyhow::Result<PathBuf> {
+        let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME)?;
+        let fp = xdg_dirs.get_data_home().join(constants::FILENAME_ACCOUNTS);
+        Ok(fp)
+    }
+
+    pub fn load() -> anyhow::Result<Self> {
+        let filepath = Self::data_filepath()?;
+        let accounts = if filepath.exists() {
+            let content = fs::read_to_string(&filepath)?;
+            let df = DataFile::new(&content)?;
+            df.accounts
+        } else {
+            // create a temporary file for user
+            let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME)?;
+            let fp = xdg_dirs.get_data_home().join(format!("{}.tmp", constants::FILENAME_ACCOUNTS));
+            let mut file = std::fs::File::create(fp)?;
+            writeln!(&mut file, "{}", TEMPORY_CONTENT)?;
+
+            vec![]
         };
 
-        Self { accounts }
+        let s = Self { accounts };
+        Ok(s)
     }
 
-    pub fn get_accounts(&self) -> &Vec<Account> {
-        &self.accounts
+    pub fn selected(&self, setting_mgr: &super::settings::Manager) -> Option<&Account> {
+        setting_mgr.account_id_sel.as_ref()
+            .map(|id| self.accounts.iter().find(|acc| acc.id() == id))?
     }
 
-    pub fn selected(&self, states: &ui::States) -> Option<&Account> {
-        states.account.list.list.selected()
-            .map(|index| self.accounts.get(index))?
+    pub fn create_client(&self, setting_mgr: &super::settings::Manager) -> Option<sacloud_rs::Client> {
+        self.selected(setting_mgr)
+            .map(|account_sel| {
+                match account_sel {
+                    Account::Sakura(sa) => sacloud_rs::Client::new(sa.access_token.to_string(), Some(sa.access_token_secret.to_string()))
+                }
+            })
     }
 }
 
