@@ -11,22 +11,6 @@ pub enum Tab {
     Registry,
 }
 
-impl Tab {
-    fn left(&self) -> Self {
-        match self {
-            Self::Account => Self::Registry,
-            Self::Registry => Self::Account
-        }
-    }
-
-    fn right(&self) -> Self {
-        match self {
-            Self::Account => Self::Registry,
-            Self::Registry => Self::Account
-        }
-    }
-}
-
 #[derive(Default)]
 pub struct States {
     pub tab: Tab
@@ -40,8 +24,8 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::States) {
         Tab::Registry => 1,
     };
     let tabs = Tabs::new(vec![
-            "Account",
-            "Registry",
+            "[A]ccount",
+            "[R]egistry",
         ])
         .block(Block::default().title("").borders(Borders::ALL))
         .select(selected)
@@ -56,8 +40,8 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States) {
 
     let states_current = &mut states.setting.tabs;
     match key.code {
-        KeyCode::Left => states_current.tab = states_current.tab.left(),
-        KeyCode::Right => states_current.tab = states_current.tab.right(),
+        KeyCode::Char('a') | KeyCode::Char('A')=> states_current.tab = Tab::Account, 
+        KeyCode::Char('r') | KeyCode::Char('R')=> states_current.tab = Tab::Registry, 
         _ => ()
     }
 }

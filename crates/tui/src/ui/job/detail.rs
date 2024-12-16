@@ -55,7 +55,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::States, store: &data_m
             ("Run", "[R]un"),
         ].into_iter()
         .enumerate()
-        .map(|(i, s)| if i == action_selected {
+        .map(|(i, s)| if i == action_selected && i != 0 {
             format!("[Enter] {}", s.0)
         } else { s.1.to_string() })
         .collect();
@@ -124,6 +124,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::States, store: &data_m
                 Err(e) => states.info.message = format!("job action error: {e}")
             }
         }
+        KeyCode::Esc => states.job.show_page = super::ShowPage::List,
         _ => {
             match states_current.tab_action {
                 Tab::Preview => preview::handle_key(key, states, store),
