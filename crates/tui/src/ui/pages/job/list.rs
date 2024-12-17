@@ -5,6 +5,7 @@ use crossterm::event;
 use crate::data_model;
 use crate::ui;
 use crate::ui::components;
+use crate::ui::layout::info::MessageLevel;
 
 #[derive(Default, PartialEq)]
 pub enum Tab {
@@ -67,7 +68,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
         }
         KeyCode::Enter => {
             if store.proj_selected.is_none() {
-                states.info_states.message = "no project selected".to_string();
+                states.info_states.message = ("no project selected".to_string(), MessageLevel::Warn);
             } else {
                 states.job_states.show_page = super::ShowPage::Detail;
             }

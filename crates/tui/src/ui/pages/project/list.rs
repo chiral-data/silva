@@ -7,6 +7,7 @@ use ratatui::widgets::*;
 use crate::data_model;
 use crate::envs;
 use crate::ui;
+use crate::ui::layout::info::MessageLevel;
 use crate::utils;
 
 #[derive(Default)]
@@ -67,7 +68,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
                 store.proj_selected = Some(states_current.proj_dirs.get(sel_idx).unwrap().to_owned());
                 match states.project_states.browse.update(store) {
                     Ok(_) => states.project_states.tabs.tab = super::tabs::Tab::Browse,
-                    Err(e) => states.info_states.message = format!("cannot selecte project{}: {e}", store.proj_selected.as_ref().unwrap().to_str().unwrap())
+                    Err(e) => states.info_states.message = (format!("cannot selecte project{}: {e}", store.proj_selected.as_ref().unwrap().to_str().unwrap()), MessageLevel::Error)
                 }
             }
         }

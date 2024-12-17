@@ -35,7 +35,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, _store
     );
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &mut data_model::Store) {
+pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, _store: &mut data_model::Store) {
     let states_current = &mut states.project_states.browse;
     ui::components::proj_browser::handle_key(
         key, 

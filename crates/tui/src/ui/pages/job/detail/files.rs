@@ -6,7 +6,6 @@ use crossterm::event;
 
 use crate::data_model;
 use crate::ui;
-use crate::utils;
 
 pub const HELPER: &[&str] = &[
     "Preview a job", 
@@ -84,11 +83,3 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, _store
     }
 }
 
-pub fn action(states: &mut ui::states::States, store: &data_model::Store) -> anyhow::Result<()> {
-    let proj_dir = utils::project::dir(store)?;
-    let job_settings = data_model::job::Job::get_settings(&proj_dir)?;
-    states.info_states.message = "Creating job intermediate files ...".to_string();
-    utils::docker::prepare_build_files(&proj_dir, &job_settings)?;
-    states.info_states.message = format!("Preview job done for project {}", proj_dir.to_str().unwrap());
-    Ok(())
-}

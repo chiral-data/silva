@@ -7,8 +7,26 @@ use crate::ui;
 use crate::data_model;
 
 #[derive(Default)]
+pub enum MessageLevel {
+    #[default]
+    Info,
+    Warn,
+    Error
+}
+
+impl MessageLevel {
+    fn color(&self) -> Color {
+        match &self {
+            MessageLevel::Info => Color::Green,
+            MessageLevel::Warn => Color::Yellow,
+            MessageLevel::Error => Color::Red,
+        }
+    }
+}
+
+#[derive(Default)]
 pub struct States {
-    pub message: String 
+    pub message: (String , MessageLevel)
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &data_model::Store) {
@@ -32,11 +50,11 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &da
     let paragrah = Paragraph::new(text)
         .block(Block::default().title(" Info ").borders(Borders::ALL));
 
-    if states_current.message.is_empty() {
+    if states_current.message.0.is_empty() {
         f.render_widget(paragrah, area);
     } else {
         let messages = vec![
-            Line::from(format!("[Message] {}", states_current.message))
+            Line::from(format!("[Message] {}", states_current.message.0)).style(states_current.message.1.color())
         ];
         let notification = Paragraph::new(messages)
             .style(Style::default().fg(Color::Red))
