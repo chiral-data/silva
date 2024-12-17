@@ -1,7 +1,6 @@
-use std::path::PathBuf;
-
 use ratatui::prelude::*;
-use ratatui::widgets::*;
+
+use crate::ui;
 
 #[derive(Default)]
 pub struct States {
@@ -25,7 +24,10 @@ pub fn render(f: &mut ratatui::prelude::Frame, area: ratatui::prelude::Rect, sta
     match states_current.tabs.tab {
         tabs::Tab::List => list::render(f, bottom, states, store),
         tabs::Tab::Browse => browse::render(f, bottom, states, store),
-        tabs::Tab::NewJob => (),
+        tabs::Tab::NewJob => {
+            let current_style = states.get_style(true);
+            ui::components::job_new_helper::render(f, bottom, current_style);
+        }
         // ShowPage::AppList => app_list::render(f, bottom, states, store),
         // ShowPage::AppDetail => app_detail::render(f, bottom, states, store),
         // ShowPage::PodType => pod_type::render(f, bottom, states, store),
