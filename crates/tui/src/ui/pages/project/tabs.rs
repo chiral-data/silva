@@ -53,11 +53,6 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States) {
         KeyCode::Char('l') | KeyCode::Char('L') => states_current.tab = Tab::List, 
         KeyCode::Char('b') | KeyCode::Char('B') => states_current.tab = Tab::Browse, 
         KeyCode::Char('n') | KeyCode::Char('N') => states_current.tab = Tab::NewJob, 
-        KeyCode::Enter => {
-            if states_current.tab == Tab::NewJob {
-                states.tabs_states.tab = ui::layout::tabs::Tab::Job;
-            }
-        } 
         _ => ()
     }
 }

@@ -3,7 +3,7 @@ use ratatui::widgets::*;
 
 const HELPER_NEW_JOB: &[&str] = &[
     "Create a new job", 
-    "based on the selected project and execute it on the chosen pod",
+    "based on the selected project",
 ];
 
 pub fn render(

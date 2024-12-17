@@ -1,7 +1,5 @@
 use ratatui::prelude::*;
 
-use crate::ui;
-
 #[derive(Default)]
 pub struct States {
     tabs: tabs::States,
@@ -24,10 +22,7 @@ pub fn render(f: &mut ratatui::prelude::Frame, area: ratatui::prelude::Rect, sta
     match states_current.tabs.tab {
         tabs::Tab::List => list::render(f, bottom, states, store),
         tabs::Tab::Browse => browse::render(f, bottom, states, store),
-        tabs::Tab::NewJob => {
-            let current_style = states.get_style(true);
-            ui::components::job_new_helper::render(f, bottom, current_style);
-        }
+        tabs::Tab::NewJob => new_job::render(f, bottom, states, store),
         // ShowPage::AppList => app_list::render(f, bottom, states, store),
         // ShowPage::AppDetail => app_detail::render(f, bottom, states, store),
         // ShowPage::PodType => pod_type::render(f, bottom, states, store),
@@ -41,7 +36,7 @@ pub fn handle_key(key: &crossterm::event::KeyEvent, states: &mut crate::ui::stat
     match states_current.tabs.tab {
         tabs::Tab::List => list::handle_key(key, states, store),
         tabs::Tab::Browse => browse::handle_key(key, states, store),
-        tabs::Tab::NewJob => (), 
+        tabs::Tab::NewJob => new_job::handle_key(key, states, store),
         // ShowPage::AppList => app_list::handle_key(key, states, store),
         // ShowPage::AppDetail => app_detail::handle_key(key, states, store),
         // ShowPage::PodType => pod_type::handle_key(key, states, store),
@@ -51,6 +46,7 @@ pub fn handle_key(key: &crossterm::event::KeyEvent, states: &mut crate::ui::stat
 mod tabs;
 mod list;
 mod browse;
+mod new_job;
 // mod app_list;
 // mod app_detail;
 // mod pod_type;
