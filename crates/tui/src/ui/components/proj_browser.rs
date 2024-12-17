@@ -5,9 +5,6 @@ use ratatui::prelude::*;
 use ratatui::widgets::*;
 use crossterm::event;
 
-use crate::data_model;
-use crate::ui;
-
 pub fn render(
     f: &mut Frame, area: Rect, 
     current_style: Style, proj_dir: &Path, proj_files: &[String], list_state_file: &mut ListState,

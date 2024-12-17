@@ -28,11 +28,27 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &da
         Line::from(format!("[Selected Project]   {project_sel}")).green(),
         // Line::from(format!("[Selected Pod Type]  {pod_type_sel_string}")).green(),
         Line::from(format!("[Selected Pod]       {pod_sel_string}")).green(),
-        Line::from(format!("[Message] {}", states_current.message)).yellow()
     ];
-
     let paragrah = Paragraph::new(text)
         .block(Block::default().title(" Info ").borders(Borders::ALL));
 
-    f.render_widget(paragrah, area) 
+    if states_current.message.is_empty() {
+        f.render_widget(paragrah, area);
+    } else {
+        let messages = vec![
+            Line::from(format!("[Message] {}", states_current.message))
+        ];
+        let notification = Paragraph::new(messages)
+            .style(Style::default().fg(Color::Red))
+            .block(Block::default().title(" Notification ").borders(Borders::ALL));
+
+
+        let top_bottom = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(3), Constraint::Min(1)]) 
+            .split(area);
+        let (top, bottom) = (top_bottom[0], top_bottom[1]);
+        f.render_widget(notification, top);
+        f.render_widget(paragrah, bottom);
+    }
 }

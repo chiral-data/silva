@@ -37,6 +37,8 @@ pub async fn handle_key(tick_rate: Duration, last_tick: &mut Instant, states: &m
     if event::poll(timeout)? {
         if let event::Event::Key(key) = event::read()? {
             if key.kind == event::KeyEventKind::Press {
+                states.info_states.message.clear();
+
                 if key.modifiers == event::KeyModifiers::CONTROL && key.code == event::KeyCode::Char('q') {
                     return Ok(Signal::Quit);
                 // } else if key.modifiers == event::KeyModifiers::ALT && key.code == event::KeyCode::Tab {

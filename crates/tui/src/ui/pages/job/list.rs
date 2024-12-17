@@ -4,11 +4,7 @@ use crossterm::event;
 
 use crate::data_model;
 use crate::ui;
-
-const HELPER_NEW_JOB: &[&str] = &[
-    "Create a new job", 
-    "based on the selected project and execute it on the chosen pod",
-];
+use crate::ui::components;
 
 #[derive(Default, PartialEq)]
 pub enum Tab {
@@ -40,14 +36,6 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         .block(Block::bordered().title(" Actions "))
         .select(action_selected)
         .style(current_style);
-    let helper_lines: Vec<Line> = HELPER_NEW_JOB.iter()
-        .map(|&s| Line::from(s))
-        .collect();
-    let helper = Paragraph::new(helper_lines)
-        .style(current_style)
-        .block(Block::bordered())
-        .alignment(Alignment::Left)
-        .wrap(Wrap { trim: true });
 
     let job_mgr  = store.job_mgr.lock().unwrap();
     let jobs_string: Vec<String> = job_mgr.jobs.values()
@@ -65,11 +53,11 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     let (top, mid, bottom) = (top_mid_bottom[0], top_mid_bottom[1], top_mid_bottom[2]);
 
     f.render_widget(actions, top);
-    f.render_widget(helper, mid);
+    components::job_new_helper::render(f, mid, current_style);
     f.render_widget(job_list, bottom);
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, _store: &data_model::Store) {
+pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &data_model::Store) {
     use event::KeyCode;
 
     match key.code {
@@ -78,7 +66,11 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, _store
             states_current.tab_action = Tab::New;
         }
         KeyCode::Enter => {
-            states.job_states.show_page = super::ShowPage::Detail;
+            if store.proj_selected.is_none() {
+                states.info_states.message = "no project selected".to_string();
+            } else {
+                states.job_states.show_page = super::ShowPage::Detail;
+            }
         }
         _ => ()
     }

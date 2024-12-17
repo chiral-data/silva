@@ -25,7 +25,7 @@ pub fn render(f: &mut ratatui::prelude::Frame, area: ratatui::prelude::Rect, sta
     match states_current.tabs.tab {
         tabs::Tab::List => list::render(f, bottom, states, store),
         tabs::Tab::Browse => browse::render(f, bottom, states, store),
-        tabs::Tab::NewJob => todo!()
+        tabs::Tab::NewJob => (),
         // ShowPage::AppList => app_list::render(f, bottom, states, store),
         // ShowPage::AppDetail => app_detail::render(f, bottom, states, store),
         // ShowPage::PodType => pod_type::render(f, bottom, states, store),
@@ -39,7 +39,7 @@ pub fn handle_key(key: &crossterm::event::KeyEvent, states: &mut crate::ui::stat
     match states_current.tabs.tab {
         tabs::Tab::List => list::handle_key(key, states, store),
         tabs::Tab::Browse => browse::handle_key(key, states, store),
-        tabs::Tab::NewJob => todo!()
+        tabs::Tab::NewJob => (), 
         // ShowPage::AppList => app_list::handle_key(key, states, store),
         // ShowPage::AppDetail => app_detail::handle_key(key, states, store),
         // ShowPage::PodType => pod_type::handle_key(key, states, store),
