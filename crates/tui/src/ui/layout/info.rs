@@ -35,16 +35,16 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &da
     let project_sel = if let Some(proj) = store.project_sel.as_ref() {
         proj.dir.to_str().unwrap()
     } else { "None" };
-    // let pod_type_sel_string = if let Some(pt) = states.project_states.app_detail.pod_type_selected() {
-    //    pt.name.to_string()
-    // } else { "None".to_string() };
+    let pod_type_sel_string = if let Some(pt) = states.job_states.app_detail.pod_type_selected() {
+       pt.name.to_string()
+    } else { "None".to_string() };
     let pod_sel_string = if let Some(pod) = store.pod_mgr.selected() {
         pod.name.to_string()
     } else { "None".to_string() };
 
     let text: Vec<Line> = vec![
         Line::from(format!("[Selected Project]   {project_sel}")).green(),
-        // Line::from(format!("[Selected Pod Type]  {pod_type_sel_string}")).green(),
+        Line::from(format!("[Selected Pod Type]  {pod_type_sel_string}")).green(),
         Line::from(format!("[Selected Pod]       {pod_sel_string}")).green(),
     ];
     let paragrah = Paragraph::new(text)

@@ -70,7 +70,8 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
             if store.project_sel.is_none() {
                 states.info_states.message = ("no project selected".to_string(), MessageLevel::Warn);
             } else {
-                states.job_states.show_page = super::ShowPage::Detail;
+                // only "new job" action at the moment
+                states.job_states.show_page = super::ShowPage::AppList;
             }
         }
         _ => ()

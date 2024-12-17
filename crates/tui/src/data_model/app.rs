@@ -21,27 +21,27 @@ impl From<&str> for App {
     }
 }
 
-// impl App {
-//     pub fn as_str(&self) -> &str {
-//         match self {
-//             Self::Unknown => "Unknown",
-//             Self::Gromacs => "Gromacs",
-//             Self::MyPresto => "myPresto",
-//             Self::OpenAIWhisper => "OpenAI Whisper",
-//             Self::Psi4 => "Psi4",
-//         }
-//     }
+impl App {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Unknown => "Unknown",
+            Self::Gromacs => "Gromacs",
+            Self::MyPresto => "myPresto",
+            Self::OpenAIWhisper => "OpenAI Whisper",
+            Self::Psi4 => "Psi4",
+        }
+    }
 
-//     pub fn keywords(&self) -> &str {
-//         match self {
-//             Self::Unknown => "Unknown",
-//             Self::Gromacs => "molecular simulation",
-//             Self::MyPresto => "myPresto",
-//             Self::OpenAIWhisper => "speech recognition",
-//             Self::Psi4 => "Psi4",
-//         }
-//     }
-// }
+    pub fn keywords(&self) -> &str {
+        match self {
+            Self::Unknown => "Unknown",
+            Self::Gromacs => "molecular simulation",
+            Self::MyPresto => "myPresto",
+            Self::OpenAIWhisper => "speech recognition",
+            Self::Psi4 => "Psi4",
+        }
+    }
+}
 
 #[derive(Debug, Deserialize)]
 pub struct Manager {

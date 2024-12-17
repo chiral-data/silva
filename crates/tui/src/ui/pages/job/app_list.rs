@@ -12,7 +12,7 @@ pub struct States {
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &data_model::Store) {
     let current_style = states.get_style(true);
-    let states_current = &mut states.project_states.app_list;
+    let states_current = &mut states.job_states.app_list;
 
     if states_current.list.selected().is_none() {
         states_current.list.select(Some(0));
@@ -36,25 +36,25 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
 pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &data_model::Store) {
     use event::KeyCode;
 
-    let states_current = &mut states.project_states.app_list;
+    let states_current = &mut states.job_states.app_list;
     match key.code {
         KeyCode::Enter => {
             if let Some(idx_sel) = states_current.list.selected() {
-                states.project_states.show_page = super::ShowPage::AppDetail;
+                states.job_states.show_page = super::ShowPage::AppDetail;
                 let app_sel = store.app_mgr.apps.get(idx_sel).unwrap();
-                if states.project_states.app_detail.app != *app_sel {
-                    states.project_states.app_detail.pod_types = store.pod_type_mgr.for_applications.get(app_sel)
+                if states.job_states.app_detail.app != *app_sel {
+                    states.job_states.app_detail.pod_types = store.pod_type_mgr.for_applications.get(app_sel)
                         .map(|sp_ids| sp_ids
                             .iter()
                             .map(|id| store.pod_type_mgr.pod_types.get(id).unwrap().to_owned())
                             .collect()
                         )
                         .unwrap_or_default();
-                    states.project_states.app_detail.app.clone_from(app_sel);
+                    states.job_states.app_detail.app.clone_from(app_sel);
                 }
             }
         }
-        KeyCode::Esc => states.project_states.show_page = super::ShowPage::ProjectList,
+        KeyCode::Esc => states.job_states.show_page = super::ShowPage::List,
         KeyCode::Up => {
             let total = store.app_mgr.apps.len(); 
             let mut sel_idx = states_current.list.selected().unwrap_or(0);
@@ -71,6 +71,6 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
 }
 
 pub fn get_selected<'a>(states: &ui::states::States, store: &'a data_model::Store) -> Option<&'a data_model::app::App> {
-    states.project_states.app_list.list.selected()
+    states.job_states.app_list.list.selected()
         .map(|index| store.app_mgr.apps.get(index))?
 }
