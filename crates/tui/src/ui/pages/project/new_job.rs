@@ -14,7 +14,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
     use event::KeyCode;
 
     if key.code == KeyCode::Enter {
-        if store.proj_selected.is_none() {
+        if store.project_sel.is_none() {
             states.info_states.message = ("no project selected".to_string(), MessageLevel::Warn);
         } else {
             states.tabs_states.tab = ui::layout::tabs::Tab::Job;

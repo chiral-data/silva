@@ -1,6 +1,6 @@
 use sacloud_rs::api::dok;
 
-use crate::{data_model, utils};
+use crate::data_model;
 
 pub struct ParametersDok {
     pub image_name: String, 
@@ -11,8 +11,10 @@ pub struct ParametersDok {
 }
 
 pub fn params_dok(store: &data_model::Store) -> anyhow::Result<ParametersDok> {
-    let proj_dir = utils::project::dir(store)?;
-    let proj_name = data_model::job::Job::get_project_name(&proj_dir)?;
+    let proj_sel = store.project_sel.as_ref()
+        .ok_or(anyhow::Error::msg("no selected project"))?;
+    let proj_dir = &proj_sel.dir;
+    let proj_name = data_model::job::Job::get_project_name(proj_dir)?;
     let image_name = format!("{proj_name}:latest").to_lowercase();
     let client = store.account_mgr.create_client(&store.setting_mgr)
         .ok_or(anyhow::Error::msg("can not create cloud client"))?;

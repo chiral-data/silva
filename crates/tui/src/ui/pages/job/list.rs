@@ -67,7 +67,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
             states_current.tab_action = Tab::New;
         }
         KeyCode::Enter => {
-            if store.proj_selected.is_none() {
+            if store.project_sel.is_none() {
                 states.info_states.message = ("no project selected".to_string(), MessageLevel::Warn);
             } else {
                 states.job_states.show_page = super::ShowPage::Detail;

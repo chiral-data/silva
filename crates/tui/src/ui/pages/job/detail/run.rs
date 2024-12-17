@@ -80,7 +80,9 @@ async fn launch_job(
 }
 
 pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> anyhow::Result<()> {
-    let proj_dir = utils::project::dir(store)?;
+    let proj_sel = store.project_sel.as_ref()
+        .ok_or(anyhow::Error::msg("no selected project"))?;
+    let proj_dir = proj_sel.dir.to_owned();
     let job_settings = data_model::job::Job::get_settings(&proj_dir)?;
     let params_dok = super::params::params_dok(store)?;
     let job_mgr = store.job_mgr.clone();

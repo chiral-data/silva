@@ -32,8 +32,8 @@ pub struct States {
 pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &data_model::Store) {
     let states_current = &states.info_states;
 
-    let project_sel = if let Some(proj) = store.proj_selected.as_ref() {
-        proj.to_str().unwrap()
+    let project_sel = if let Some(proj) = store.project_sel.as_ref() {
+        proj.dir.to_str().unwrap()
     } else { "None" };
     // let pod_type_sel_string = if let Some(pt) = states.project_states.app_detail.pod_type_selected() {
     //    pt.name.to_string()
@@ -54,12 +54,11 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &da
         f.render_widget(paragrah, area);
     } else {
         let messages = vec![
-            Line::from(format!("[Message] {}", states_current.message.0)).style(states_current.message.1.color())
+            Line::from(format!("[Message] {}", states_current.message.0))
         ];
         let notification = Paragraph::new(messages)
-            .style(Style::default().fg(Color::Red))
+            .style(Style::default().fg(states_current.message.1.color()))
             .block(Block::default().title(" Notification ").borders(Borders::ALL));
-
 
         let top_bottom = Layout::default()
             .direction(Direction::Vertical)

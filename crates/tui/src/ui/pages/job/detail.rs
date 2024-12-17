@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use crossterm::event;
@@ -21,19 +19,10 @@ pub enum Tab {
 pub struct States {
     // job_settings: data_model::job::settings::Settings,
     tab_action: Tab,
-    proj_dir: PathBuf,
-    proj_files: Vec<String>,
     list_state_file: ListState,
 }
 
 // impl States {
-//     pub fn update(&mut self, store: &data_model::Store) -> anyhow::Result<()> {
-//         self.proj_dir = utils::project::dir(store)?;
-//         self.job_settings = data_model::job::Job::get_settings(&self.proj_dir)?;
-//         self.proj_files = self.job_settings.files.all_files();
-
-//         Ok(())
-//     }
 // }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &data_model::Store) {
@@ -48,7 +37,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     };
     let tabs_strings: Vec<String> = [
             ("Files", "[F]iles"), 
-            ("Build", "[B]lear"),
+            ("Build", "[B]build"),
             ("Clear", "[C]lear"),
             ("Run", "[R]un"),
         ].into_iter()

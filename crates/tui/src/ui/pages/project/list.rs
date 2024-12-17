@@ -65,10 +65,10 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
         }
         KeyCode::Enter => {
             if let Some(sel_idx) = states_current.list.selected() {
-                store.proj_selected = Some(states_current.proj_dirs.get(sel_idx).unwrap().to_owned());
-                match states.project_states.browse.update(store) {
+                let proj_dir = states_current.proj_dirs.get(sel_idx).unwrap().to_owned();
+                match store.update_project(&proj_dir) {
                     Ok(_) => states.project_states.tabs.tab = super::tabs::Tab::Browse,
-                    Err(e) => states.info_states.message = (format!("cannot selecte project{}: {e}", store.proj_selected.as_ref().unwrap().to_str().unwrap()), MessageLevel::Error)
+                    Err(e) => states.info_states.message = (format!("cannot selecte project{}: {e}", proj_dir.to_str().unwrap()), MessageLevel::Error)
                 }
             }
         }

@@ -9,11 +9,15 @@ pub const HELPER: &[&str] = &[
 ];
 
 pub fn action(states: &mut ui::states::States, store: &data_model::Store) -> anyhow::Result<()> {
-    let proj_dir = utils::project::dir(store)?;
-    let job_settings = data_model::job::Job::get_settings(&proj_dir)?;
+    let proj_sel = store.project_sel.as_ref()
+        .ok_or(anyhow::Error::msg("no selected project"))?;
+    let proj_dir = &proj_sel.dir;
     states.info_states.message = ("Removing job intermediate files ...".to_string(), MessageLevel::Info);
-    utils::docker::prepare_build_files(&proj_dir, &job_settings)?;
+    utils::docker::clear_build_files(proj_dir)?;
     states.info_states.message = (format!("Preview job done for project {}", proj_dir.to_str().unwrap()), MessageLevel::Info);
+
+    let states_current = &mut states.job_states.detail;
+    states_current.tab_action = super::Tab::Files;
     Ok(())
 }
 

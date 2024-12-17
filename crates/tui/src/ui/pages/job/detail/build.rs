@@ -8,10 +8,15 @@ pub const HELPER: &[&str] = &[
 ];
 
 pub fn action(states: &mut ui::states::States, store: &data_model::Store) -> anyhow::Result<()> {
-    let proj_dir = utils::project::dir(store)?;
-    let job_settings = data_model::job::Job::get_settings(&proj_dir)?;
+    let proj_sel = store.project_sel.as_ref()
+        .ok_or(anyhow::Error::msg("no selected project"))?;
+    let proj_dir = &proj_sel.dir;
+    let job_settings = data_model::job::Job::get_settings(proj_dir)?;
     states.info_states.message = ("Creating job intermediate files ...".to_string(), ui::layout::info::MessageLevel::Info);
-    utils::docker::prepare_build_files(&proj_dir, &job_settings)?;
+    utils::docker::prepare_build_files(proj_dir, &job_settings)?;
     states.info_states.message = (format!("Job intermediate files generated for project {}", proj_dir.to_str().unwrap()), ui::layout::info::MessageLevel::Info);
+
+    let states_current = &mut states.job_states.detail;
+    states_current.tab_action = super::Tab::Files;
     Ok(())
 }
