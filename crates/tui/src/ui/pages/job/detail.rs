@@ -37,7 +37,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     };
     let tabs_strings: Vec<String> = [
             ("Files", "[F]iles"), 
-            ("Build", "[B]build"),
+            ("Build", "[B]uild"),
             ("Clear", "[C]lear"),
             ("Run", "[R]un"),
         ].into_iter()

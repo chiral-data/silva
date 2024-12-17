@@ -141,7 +141,7 @@ pub async fn build_image(
 
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] [build image {image_name}] completed ..."));
+        job_mgr.add_log(0, format!("[docker] build image {image_name}] completed ..."));
         job_mgr.clear_log_tmp(&0);
     }
     

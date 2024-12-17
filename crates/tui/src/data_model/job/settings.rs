@@ -15,13 +15,13 @@ pub struct Files {
 impl Files {
     pub fn all_files(&self) -> Vec<String> {
         [
-            &["settings.toml", "--- input ---"].into_iter().map(|s| s.to_string()).collect(),
+            &["settings.toml", "[inputs]"].into_iter().map(|s| s.to_string()).collect(),
             &self.inputs,
-            &vec!["--- script ---".to_string()],
+            &vec!["[scripts]".to_string()],
             &self.scripts,
-            &vec!["--- output ---".to_string()],
+            &vec!["[outputs]".to_string()],
             &self.outputs,
-            &vec!["--- build files ---", "Dockerfile", "run.sh"].into_iter().map(String::from).collect() // file for building docker image
+            &vec!["[build files]", "Dockerfile", "run.sh"].into_iter().map(String::from).collect() // file for building docker image
         ]
         .iter()
         .flat_map(|v| v.iter().map(|s| s.to_string()).collect::<Vec<String>>())
