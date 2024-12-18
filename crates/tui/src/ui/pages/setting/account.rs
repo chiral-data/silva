@@ -58,7 +58,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
             .block(Block::bordered().title(" Select Cloud Account "))
             .style(Style::new().white())
             .highlight_style(Style::new().reversed())
-            .highlight_symbol(">>[Space] ")
+            .highlight_symbol(">>[Enter] ")
             .repeat_highlight_symbol(true)
             .style(current_style)
             .direction(ListDirection::TopToBottom);
@@ -67,7 +67,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     }
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &mut data_model::Store) {
+pub async fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &mut data_model::Store) {
     use event::KeyCode;
 
     let states_current = &mut states.setting_states.account;
@@ -83,11 +83,12 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
             sel_idx = (sel_idx + 1) % store.account_mgr.accounts.len();
             states_current.list.select(Some(sel_idx));
         }
-        KeyCode::Char(' ') => {
+        KeyCode::Enter => {
             let sel_idx = states_current.list.selected().unwrap_or(0);
             let account_sel = store.account_mgr.accounts.get(sel_idx).unwrap();
             store.setting_mgr.account_id_sel = Some(account_sel.id().to_string());
             store.setting_mgr.save().unwrap();
+            store.registry_mgr.initialze(&store.account_mgr, &store.setting_mgr).await;
         }
         _ => ()
     }

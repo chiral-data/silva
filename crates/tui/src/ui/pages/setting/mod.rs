@@ -23,12 +23,12 @@ pub fn render(f: &mut ratatui::prelude::Frame, area: ratatui::prelude::Rect, sta
     } 
 }
 
-pub fn handle_key(key: &crossterm::event::KeyEvent, states: &mut crate::ui::states::States, store: &mut crate::data_model::Store) {
+pub async fn handle_key(key: &crossterm::event::KeyEvent, states: &mut crate::ui::states::States, store: &mut crate::data_model::Store) {
     tabs::handle_key(key, states);
 
     let states_current = &mut states.setting_states;
     match states_current.tabs.tab {
-        tabs::Tab::Account => account::handle_key(key, states, store),
+        tabs::Tab::Account => account::handle_key(key, states, store).await,
         tabs::Tab::Registry => docker_registry::handle_key(key, states, store)
     } 
 }
