@@ -8,7 +8,7 @@ use std::{fs, path::PathBuf};
 use sacloud_rs::api::dok;
 use serde::Deserialize;
 
-use crate::constants;
+use crate::{constants, utils};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Registry {
@@ -56,8 +56,8 @@ pub struct Manager {
 
 impl Manager {
     fn data_filepath() -> anyhow::Result<PathBuf> {
-        let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME)?;
-        let fp = xdg_dirs.get_data_home().join(constants::FILENAME_REGISTRIES);
+        let data_dir = utils::file::get_data_dir();
+        let fp = data_dir.join(constants::FILENAME_REGISTRIES);
         Ok(fp)
     }
 

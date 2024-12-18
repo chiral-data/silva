@@ -1,6 +1,12 @@
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 
+use crate::constants;
+
+pub fn get_data_dir() -> PathBuf {
+    app_dirs2::app_root(app_dirs2::AppDataType::UserData, &constants::APP_INFO).unwrap()
+}
+
 /// download the file from url to file with filepath
 pub async fn download(url: &str, filepath: &Path) -> anyhow::Result<()> {
     let response = reqwest::get(url).await?;

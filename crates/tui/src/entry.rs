@@ -4,12 +4,13 @@ use std::env;
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
 use ratatui::prelude::*;
 
-use crate::{constants, envs, ui, utils};
+use crate::{envs, ui, utils};
 use crate::data_model;
 
 fn setup() {
-    let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME).unwrap();
-    let data_dir = xdg_dirs.get_data_home();
+    // let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME).unwrap();
+    // let data_dir = xdg_dirs.get_data_home();
+    let data_dir = utils::file::get_data_dir();
     if !data_dir.exists() {
         std::fs::create_dir_all(data_dir).unwrap();
     }
