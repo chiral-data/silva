@@ -3,7 +3,7 @@ use std::io::Write;
 
 use serde::{Deserialize, Serialize};
 
-use crate::constants;
+use crate::{constants, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct DataFile {
@@ -30,8 +30,8 @@ pub struct Manager {
 
 impl Manager {
     fn data_filepath() -> anyhow::Result<PathBuf> {
-        let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME)?;
-        let fp = xdg_dirs.get_data_home().join(constants::FILENAME_SETTINGS);
+        let data_dir = utils::file::get_data_dir();
+        let fp = data_dir.join(constants::FILENAME_SETTINGS);
         Ok(fp)
     }
 
