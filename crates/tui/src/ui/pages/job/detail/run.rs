@@ -25,13 +25,14 @@ async fn launch_job(
     // build & push the docker image
     utils::docker::build_image(&proj_dir, &job_settings, &params_dok.image_name, job_mgr.clone()).await?;
     utils::docker::push_image(params_dok.registry, &params_dok.image_name, job_mgr.clone()).await?;
+    let job_id = 0;
 
     // create the task
     let client = params_dok.client.clone();
     let task_created = dok::shortcuts::create_task(client.clone(), &params_dok.image_name, &params_dok.registry_dok.id, params_dok.plan).await?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[sakura internet DOK] task {} created", task_created.id));
+        job_mgr.add_log(job_id, format!("[sakura internet DOK] task {} created", task_created.id));
     }
 
     // check task status
@@ -39,8 +40,9 @@ async fn launch_job(
         tokio::time::sleep(Duration::from_secs(1)).await;
         let task = dok::shortcuts::get_task(client.clone(), &task_created.id).await?;
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log_tmp(0, format!("[sakura internet DOK] task {} status: {}", task.id, task.status));
+        job_mgr.add_log_tmp(job_id, format!("[sakura internet DOK] task {} status: {}", task.id, task.status));
         if task.status == "done" {
+            job_mgr.clear_log_tmp(&job_id);
             break task;
         }
     };
@@ -51,10 +53,14 @@ async fn launch_job(
         tokio::time::sleep(Duration::from_secs(1)).await;
         count += 1;
         match dok::shortcuts::get_artifact_download_url(client.clone(), &task).await {
-            Ok(af_url) => break af_url,
+            Ok(af_url) => {
+                let mut job_mgr = job_mgr.lock().unwrap();
+                job_mgr.clear_log_tmp(&job_id);
+                break af_url;
+            }
             Err(_e) => {
                 let mut job_mgr = job_mgr.lock().unwrap();
-                job_mgr.add_log_tmp(0, 
+                job_mgr.add_log_tmp(job_id, 
                     format!("[sakura internet DOK] output files (artifact {}) of task {} not ready {}",
                         task.artifact.as_ref().unwrap().id, task_created.id, ".".repeat(count % 5))
                 );
@@ -66,13 +72,13 @@ async fn launch_job(
     let filepath = proj_dir.join("artifact.tar.gz");
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[sakura internet DOK] downloading output files of task {}", task_created.id));
+        job_mgr.add_log(job_id, format!("[sakura internet DOK] downloading output files of task {}", task_created.id));
     }
     utils::file::download(&af_url.url, &filepath).await?;
     utils::file::unzip_tar_gz(&filepath, &proj_dir)?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[sakura internet DOK] downloaded output files of task {}", task_created.id));
+        job_mgr.add_log(job_id, format!("[sakura internet DOK] downloaded output files of task {}", task_created.id));
     }
     std::fs::remove_file(&filepath)?;
     
