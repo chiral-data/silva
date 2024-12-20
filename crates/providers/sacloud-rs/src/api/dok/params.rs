@@ -1,5 +1,19 @@
 use serde::Serialize;
 
+/// Request for POST /registries/
+#[derive(Serialize, Default)]
+pub struct PostRegistries {
+    hostname: String,
+    username: String,
+    password: String,
+}
+
+impl PostRegistries {
+    pub fn hostname(mut self, hostname: String) -> Self { self.hostname = hostname; self }
+    pub fn username(mut self, username: String) -> Self { self.username = username; self }
+    pub fn password(mut self, password: String) -> Self { self.password = password; self }
+}
+
 #[derive(Serialize,  Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Plan {
@@ -18,7 +32,7 @@ pub struct Container {
     registry: Option<String>,
     command: Vec<String>,
     entrypoint: Vec<String>,
-    // environment is mandatory parameter according to the manual
+    // TODO: environment is mandatory parameter according to the manual
     // however
     //  - it can be ignored
     //  - sending an empty value {} or null will lead to error
@@ -48,4 +62,7 @@ impl PostTasks {
     pub fn containers(mut self, containers: Vec<Container>) -> Self { self.containers = containers; self }
     pub fn tags(mut self, tags: Vec<String>) -> Self { self.tags = tags; self }
 }
+
+
+
 

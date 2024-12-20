@@ -9,7 +9,7 @@
 //!     - [] GET        /auth/
 //!     - [] POST       /auth/agree/
 //! Registry
-//!     - [] GET        /registries/
+//!     - [x] GET        /registries/
 //!     - [] POST       /registries/
 //!     - [] GET        /registries/{registryID}/
 //!     - [] DELETE     /registries/{registryID}/
@@ -85,6 +85,42 @@ mod tests {
         let registry_list: RegistryList = client.registries().dok_end().get()
             .await.unwrap();
         assert_eq!(registry_list.results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_post_delete_registries() {
+        let hostname = "test.sakuracr.jp";
+        let client = Client::default().dok();
+
+        // the registry does not exist
+        let registry_list: RegistryList = client.clone().registries().dok_end().get()
+            .await.unwrap();
+        assert_eq!(registry_list.results.len(), 0);
+        assert!(!registry_list.results.iter().map(|r| r.hostname.as_str()).collect::<Vec<&str>>().contains(&hostname));
+
+        // add the registry
+        let post_registries = params::PostRegistries::default()
+            .hostname(hostname.to_string())
+            .username("testuser".to_string())
+            .password("testpassword".to_string());
+        let registry: Registry = client.clone().registries().dok_end()
+            .set_params(&post_registries).unwrap()
+            .post().await.unwrap();
+
+        // the registry exist
+        let registry_list: RegistryList = client.clone().registries().dok_end().get()
+            .await.unwrap();
+        assert!(registry_list.results.iter().map(|r| r.hostname.as_str()).collect::<Vec<&str>>().contains(&hostname));
+
+        //  delete the registry
+        client.clone().registries().dok_end()
+            .registry_id(&registry.id)
+            .delete().await.unwrap();
+        
+        // the registry is confirmed to have been removed
+        let registry_list: RegistryList = client.clone().registries().dok_end().get()
+            .await.unwrap();
+        assert!(!registry_list.results.iter().map(|r| r.hostname.as_str()).collect::<Vec<&str>>().contains(&hostname));
     }
 
     #[tokio::test]
