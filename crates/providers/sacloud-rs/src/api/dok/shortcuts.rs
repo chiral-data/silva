@@ -2,7 +2,8 @@ use crate::Client;
 use crate::api::dok;
 
 pub async fn get_registries(client: Client) -> anyhow::Result<dok::RegistryList> {
-    let registry_list: dok::RegistryList = client.dok().registries().dok_end().get()
+    let registry_list: dok::RegistryList = client.dok()
+        .registries().dok_end().get()
         .await?;
     Ok(registry_list)
 }
@@ -12,7 +13,8 @@ pub async fn create_registry(client: Client, hostname: &str, username: &str, pas
         .hostname(hostname.to_string())
         .username(username.to_string())
         .password(password.to_string());
-    let registry: dok::Registry = client.clone().registries().dok_end()
+    let registry: dok::Registry = client.dok()
+        .registries().dok_end()
         .set_params(&post_registries)?
         .post().await?;
 
@@ -30,7 +32,8 @@ pub async fn create_task(client: Client, image_name: &str, registry_id: &str, pl
         .name("some_task".to_string())
         .containers(vec![container])
         .tags(vec![]);
-    let task_created: dok::TaskCreated = client.dok().tasks().dok_end()
+    let task_created: dok::TaskCreated = client.dok()
+        .tasks().dok_end()
         .set_params(&post_tasks)?
         .post().await?;
 

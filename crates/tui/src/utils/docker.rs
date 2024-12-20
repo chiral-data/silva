@@ -148,8 +148,7 @@ pub async fn build_image(
     Ok(())
 }
 
-// pub async fn push_image(image_name: &str, username: Option<String>, password: Option<String>, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
-pub async fn push_image(registry: data_model::registry::Registry, image_name: &str, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
+pub async fn push_image(username: Option<String>, password: Option<String>, image_name: &str, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
     {
         let mut job_mgr = job_mgr.lock().unwrap();
         job_mgr.add_log(0, format!("[docker] push image({image_name}) started ..."));
@@ -158,7 +157,7 @@ pub async fn push_image(registry: data_model::registry::Registry, image_name: &s
     let docker = bollard::Docker::connect_with_local_defaults().unwrap();
     let push_options = bollard::image::PushImageOptions::<&str>::default();
     let credentials = bollard::auth::DockerCredentials { // for sakuracr.jp
-        username: registry.username, password: registry.password,
+        username, password,
         ..Default::default()
     };
     let mut image_push_stream = docker.push_image(image_name, Some(push_options), Some(credentials));
@@ -222,7 +221,7 @@ mod tests {
         let examples_dir = Path::new(std::env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().join("examples");
         let (hostname, username, password) = get_sakura_container_registry();
         let registry = data_model::registry::Registry {
-            hostname, username: Some(username), password: Some(password)
+            hostname, username: Some(username), password: Some(password), dok_id: None
         };
 
         let proj_dir = examples_dir.join("gromacs");

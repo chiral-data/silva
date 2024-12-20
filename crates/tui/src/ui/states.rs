@@ -33,4 +33,8 @@ impl States {
             Style::default()
         }
     }
+
+    pub fn update_info(&mut self, m: String, l: info::MessageLevel) {
+        self.info_states.message = (m, l);
+    }
 }

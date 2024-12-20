@@ -6,7 +6,6 @@ pub struct ParametersDok {
     pub image_name: String, 
     pub registry: data_model::registry::Registry,
     pub client: sacloud_rs::Client,
-    pub registry_dok: dok::Registry,
     pub plan: dok::params::Plan,
 }
 
@@ -20,8 +19,6 @@ pub fn params_dok(store: &data_model::Store) -> anyhow::Result<ParametersDok> {
         .ok_or(anyhow::Error::msg("can not create cloud client"))?;
     let registry_sel = store.registry_mgr.selected(&store.setting_mgr)
         .ok_or(anyhow::Error::msg("no registry selected"))?;
-    let registry_dok = registry_sel.find_registry_dok(&store.registry_mgr.registries_dok)
-        .ok_or(anyhow::Error::msg(format!("can not find registry for Sakura DOK service {:?}", store.registry_mgr.registries_dok)))?;
     let pod_sel = store.pod_mgr.selected()
         .ok_or(anyhow::Error::msg("no pod selected"))?;
     let plan = match &pod_sel.settings {
@@ -31,7 +28,7 @@ pub fn params_dok(store: &data_model::Store) -> anyhow::Result<ParametersDok> {
             data_model::provider::sakura_internet::DokGpuType::H100 => dok::params::Plan::H100GB80,
         }
     };
-    let params_dok = ParametersDok { image_name: format!("{}/{image_name}", registry_sel.hostname), registry: registry_sel.to_owned(), client, registry_dok, plan };
+    let params_dok = ParametersDok { image_name: format!("{}/{image_name}", registry_sel.hostname), registry: registry_sel.to_owned(), client, plan };
 
     Ok(params_dok) 
 }

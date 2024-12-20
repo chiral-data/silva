@@ -29,7 +29,12 @@ async fn launch_job(
 
     // create the task
     let client = params_dok.client.clone();
-    let task_created = dok::shortcuts::create_task(client.clone(), &params_dok.image_name, &params_dok.registry_dok.id, params_dok.plan).await?;
+    let registry_id = params_dok.registry.dok_id.as_ref()
+        .ok_or(anyhow::Error::msg(format!("registry {} with username {} has not been added into DOK service", 
+            params_dok.registry.hostname.as_str(),
+            if let Some(un) = &params_dok.registry.username.as_ref() { un } else { "" }
+        )))?;
+    let task_created = dok::shortcuts::create_task(client.clone(), &params_dok.image_name, &registry_id, params_dok.plan).await?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
         job_mgr.add_log(job_id, format!("[sakura internet DOK] task {} created", task_created.id));
