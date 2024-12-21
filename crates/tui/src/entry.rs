@@ -41,7 +41,11 @@ pub async fn run() -> anyhow::Result<()> {
     let mut states = ui::states::States::default();
     let mut store = data_model::Store::default();
     states.initialize(&store);
-    store.registry_mgr.initialze(&store.account_mgr, &store.setting_mgr).await;
+    match store.registry_mgr.initialze(&store.account_mgr, &store.setting_mgr).await {
+        Ok(_) => (),
+        Err(e) => states.update_info(format!("initialze registry error {e}"), ui::layout::info::MessageLevel::Error)
+
+    }
 
     loop {
         terminal.draw(|f| ui::home::render(f, &mut states, &mut store))?;

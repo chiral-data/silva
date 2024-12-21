@@ -231,6 +231,6 @@ mod tests {
         let job_settings = data_model::job::Job::get_settings(&proj_dir).unwrap();
         let job_mgr = Arc::new(Mutex::new(data_model::job::Manager::load().unwrap()));
         build_image(&proj_dir, &job_settings, &image_name, job_mgr.clone()).await.unwrap();
-        push_image(registry, &image_name, job_mgr).await.unwrap();
+        push_image(registry.username, registry.password, &image_name, job_mgr).await.unwrap();
     }
 }

@@ -24,7 +24,7 @@ async fn launch_job(
 ) -> anyhow::Result<()> {
     // build & push the docker image
     utils::docker::build_image(&proj_dir, &job_settings, &params_dok.image_name, job_mgr.clone()).await?;
-    utils::docker::push_image(params_dok.registry, &params_dok.image_name, job_mgr.clone()).await?;
+    utils::docker::push_image(params_dok.registry.username.clone(), params_dok.registry.password.clone(), &params_dok.image_name, job_mgr.clone()).await?;
     let job_id = 0;
 
     // create the task
@@ -34,7 +34,7 @@ async fn launch_job(
             params_dok.registry.hostname.as_str(),
             if let Some(un) = &params_dok.registry.username.as_ref() { un } else { "" }
         )))?;
-    let task_created = dok::shortcuts::create_task(client.clone(), &params_dok.image_name, &registry_id, params_dok.plan).await?;
+    let task_created = dok::shortcuts::create_task(client.clone(), &params_dok.image_name, registry_id, params_dok.plan).await?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
         job_mgr.add_log(job_id, format!("[sakura internet DOK] task {} created", task_created.id));

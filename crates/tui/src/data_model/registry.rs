@@ -89,18 +89,22 @@ impl Manager {
         if let Some(client) = account_mgr.create_client(setting_mgr) {
             let registries_dok = dok::shortcuts::get_registries(client.clone()).await?.results;
             for registry in self.registries.iter_mut() {
-                if registries_dok.iter().find(
+                if registries_dok.iter().any(
                     |r| r.hostname == registry.hostname 
                         && registry.username.is_some() 
                         && *registry.username.as_ref().unwrap() == r.username
                         && registry.dok_id.is_some()
                         && *registry.dok_id.as_ref().unwrap() == r.id
-                ).is_none() {
-                    let r_dok = dok::shortcuts::create_registry(client.clone(), &registry.hostname, registry.username.as_ref().unwrap(), registry.password.as_ref().unwrap()).await?;
-                    registry.dok_id = Some(r_dok.id);
+                ) { continue; } else if let Some(username) = registry.username.as_ref() {
+                    if let Some(password) = registry.password.as_ref() {
+                        let r_dok = dok::shortcuts::create_registry(client.clone(), &registry.hostname, username, password).await?;
+                        registry.dok_id = Some(r_dok.id);
+                    }
                 }
             }
+            self.save()?;
         }
+
 
         Ok(())
     }
