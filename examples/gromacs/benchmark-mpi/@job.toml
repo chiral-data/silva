@@ -1,14 +1,11 @@
 [files]
 inputs = [
-  "1AKI_clean.pdb"
+  "cmet_eq.tpr"
 ]
 outputs = [
-  "1AKI_processed.gro",
-  "posre.itp",
-  "topol.top",
 ]
 scripts = [
-  "job.sh"
+  "run.sh"
 ]
 
 [dok]

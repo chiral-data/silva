@@ -21,7 +21,7 @@ impl Files {
             &self.scripts,
             &vec!["[outputs]".to_string()],
             &self.outputs,
-            &vec!["[build files]", "Dockerfile", "run.sh"].into_iter().map(String::from).collect() // file for building docker image
+            &vec!["[build files]", "Dockerfile", "@run.sh"].into_iter().map(String::from).collect() // file for building docker image
         ]
         .iter()
         .flat_map(|v| v.iter().map(|s| s.to_string()).collect::<Vec<String>>())

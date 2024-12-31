@@ -4,7 +4,5 @@
 #
 
 echo "post processing"
-rm *.pdb
-rm 1AKI_processed.gro
-rm posre.itp
-rm topol.top
+rm *.zip
+rm *.tpr

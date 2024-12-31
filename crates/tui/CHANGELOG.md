@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 - [x] automatically add dok registries
 - [x] @job.toml, @pre.sh, @post.sh used as default job setting files; move pod selection out as a seperate process
-- [] gromacs benchmark example: [A free GROMACS benchmark set](https://www.mpinat.mpg.de/grubmueller/bench) by Max Planck Institute
+- [x] gromacs benchmark example: [A free GROMACS benchmark set](https://www.mpinat.mpg.de/grubmueller/bench) by Max Planck Institute
 
 ### Fixed
 
