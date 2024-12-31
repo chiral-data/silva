@@ -86,24 +86,23 @@ impl Manager {
     }
 
     pub async fn initialze(&mut self, account_mgr: &super::account::Manager, setting_mgr: &super::settings::Manager) -> anyhow::Result<()> {
-        if let Some(client) = account_mgr.create_client(setting_mgr) {
-            let registries_dok = dok::shortcuts::get_registries(client.clone()).await?.results;
-            for registry in self.registries.iter_mut() {
-                if registries_dok.iter().any(
-                    |r| r.hostname == registry.hostname 
-                        && registry.username.is_some() 
-                        && *registry.username.as_ref().unwrap() == r.username
-                        && registry.dok_id.is_some()
-                        && *registry.dok_id.as_ref().unwrap() == r.id
-                ) { continue; } else if let Some(username) = registry.username.as_ref() {
-                    if let Some(password) = registry.password.as_ref() {
-                        let r_dok = dok::shortcuts::create_registry(client.clone(), &registry.hostname, username, password).await?;
-                        registry.dok_id = Some(r_dok.id);
-                    }
+        let client = account_mgr.create_client(setting_mgr)?; 
+        let registries_dok = dok::shortcuts::get_registries(client.clone()).await?.results;
+        for registry in self.registries.iter_mut() {
+            if registries_dok.iter().any(
+                |r| r.hostname == registry.hostname 
+                    && registry.username.is_some() 
+                    && *registry.username.as_ref().unwrap() == r.username
+                    && registry.dok_id.is_some()
+                    && *registry.dok_id.as_ref().unwrap() == r.id
+            ) { continue; } else if let Some(username) = registry.username.as_ref() {
+                if let Some(password) = registry.password.as_ref() {
+                    let r_dok = dok::shortcuts::create_registry(client.clone(), &registry.hostname, username, password).await?;
+                    registry.dok_id = Some(r_dok.id);
                 }
             }
-            self.save()?;
         }
+        self.save()?;
 
 
         Ok(())

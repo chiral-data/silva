@@ -91,18 +91,22 @@ impl Manager {
         Ok(s)
     }
 
-    pub fn selected(&self, setting_mgr: &super::settings::Manager) -> Option<&Account> {
-        setting_mgr.account_id_sel.as_ref()
-            .map(|id| self.accounts.iter().find(|acc| acc.id() == id))?
+    pub fn selected(&self, setting_mgr: &super::settings::Manager) -> anyhow::Result<&Account> {
+        let account_id = setting_mgr.account_id_sel.as_ref()
+            .ok_or(anyhow::Error::msg("no account selected, select an account from the Setting Page"))?;
+        let account = self.accounts.iter().find(|acc| acc.id() == account_id)
+            .ok_or(anyhow::Error::msg(format!("can not find account with id {account_id}")))?;
+
+        Ok(account)
     }
 
-    pub fn create_client(&self, setting_mgr: &super::settings::Manager) -> Option<sacloud_rs::Client> {
-        self.selected(setting_mgr)
-            .map(|account_sel| {
-                match account_sel {
-                    Account::Sakura(sa) => sacloud_rs::Client::new(sa.access_token.to_string(), Some(sa.access_token_secret.to_string()))
-                }
-            })
+    pub fn create_client(&self, setting_mgr: &super::settings::Manager) -> anyhow::Result<sacloud_rs::Client> {
+        let account_sel = self.selected(setting_mgr)?;
+        let client = match account_sel {
+            Account::Sakura(sa) => sacloud_rs::Client::new(sa.access_token.to_string(), Some(sa.access_token_secret.to_string()))
+        };
+
+        Ok(client)
     }
 }
 

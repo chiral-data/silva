@@ -6,8 +6,7 @@ use crate::ui;
 use crate::ui::layout::info::MessageLevel;
 
 pub const HELPER: &[&str] = &[
-    "Preview a job", 
-    "e.g., generate the docker file and script file for a DOK task for preview", 
+    "Preview job files", 
 ];
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &data_model::Store) {

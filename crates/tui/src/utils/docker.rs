@@ -6,7 +6,7 @@ use futures_util::stream::StreamExt;
 use crate::data_model;
 use data_model::job::settings::Settings as JobSettings;
 
-const FILENAME_ENTRYPOINT: &str = "run.sh";
+const FILENAME_ENTRYPOINT: &str = "@run.sh";
 const FILENAME_DOCKER: &str = "Dockerfile";
 
 pub fn prepare_build_files(
@@ -18,7 +18,7 @@ pub fn prepare_build_files(
         .ok_or(anyhow::Error::msg("no DOK settings"))?;
     let base_image = &dok.base_image;
 
-    // create entrypoint run.sh
+    // create entrypoint @run.sh
     let entrypoint_filepath = proj_dir.join(FILENAME_ENTRYPOINT);
     let mut entrypoint_file = std::fs::File::create(entrypoint_filepath)?;
     writeln!(entrypoint_file, "#!/bin/bash")?;
@@ -58,19 +58,19 @@ pub fn prepare_build_files(
     Ok(())
 }
 
-pub fn clear_build_files(proj_dir: &Path) -> anyhow::Result<()> {
-    for filename in vec![
-        FILENAME_ENTRYPOINT,
-        FILENAME_DOCKER
-    ].into_iter() {
-        let filepath = proj_dir.join(filename);
-        if filepath.exists() {
-            std::fs::remove_file(filepath)?;
-        }
-    }
+// pub fn clear_build_files(proj_dir: &Path) -> anyhow::Result<()> {
+//     for filename in vec![
+//         FILENAME_ENTRYPOINT,
+//         FILENAME_DOCKER
+//     ].into_iter() {
+//         let filepath = proj_dir.join(filename);
+//         if filepath.exists() {
+//             std::fs::remove_file(filepath)?;
+//         }
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 pub async fn build_image(
     proj_dir: &PathBuf, 
@@ -92,8 +92,8 @@ pub async fn build_image(
     let tar_file = tokio::fs::File::create(filename_tar)
         .await.unwrap().into_std().await;
     let mut a = tar::Builder::new(tar_file);
-    a.append_path("Dockerfile")?;
-    a.append_path("run.sh")?;
+    a.append_path(FILENAME_ENTRYPOINT)?;
+    a.append_path(FILENAME_DOCKER)?;
     for input_file in job_settings.files.inputs.iter() {
         a.append_path(input_file)?;
     }

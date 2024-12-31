@@ -26,8 +26,8 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States) {
         Tab::NewJob => 2,
     };
     let tabs_strings: Vec<String> = [
-            ("List", "[L]ist"), 
-            ("Browse", "[B]rowse"),
+            ("List of Projects", "[L]ist"), 
+            ("Browse Project Files", "[F]iles"),
             ("New Job", "[N]ew Job"),
         ].into_iter()
         .enumerate()
@@ -51,7 +51,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States) {
     let states_current = &mut states.project_states.tabs;
     match key.code {
         KeyCode::Char('l') | KeyCode::Char('L') => states_current.tab = Tab::List, 
-        KeyCode::Char('b') | KeyCode::Char('B') => states_current.tab = Tab::Browse, 
+        KeyCode::Char('f') | KeyCode::Char('F') => states_current.tab = Tab::Browse, 
         KeyCode::Char('n') | KeyCode::Char('N') => states_current.tab = Tab::NewJob, 
         _ => ()
     }

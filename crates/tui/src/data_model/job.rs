@@ -51,7 +51,7 @@ impl Job {
     // }
 
     pub fn get_settings(proj_dir: &Path) ->anyhow::Result<settings::Settings> {
-        let settings_filepath = proj_dir.join("settings.toml");
+        let settings_filepath = proj_dir.join("@job.toml");
         let job_settings = settings::Settings::new_from_file(&settings_filepath)
             .map_err(|e| anyhow::Error::msg(format!("{e} no settings file {settings_filepath:?}")))?;
 

@@ -15,7 +15,7 @@ pub struct Files {
 impl Files {
     pub fn all_files(&self) -> Vec<String> {
         [
-            &["settings.toml", "[inputs]"].into_iter().map(|s| s.to_string()).collect(),
+            &["@job.toml", "@pre.sh", "@post.sh", "[inputs]"].into_iter().map(|s| s.to_string()).collect(),
             &self.inputs,
             &vec!["[scripts]".to_string()],
             &self.scripts,
