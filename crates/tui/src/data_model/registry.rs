@@ -3,18 +3,20 @@
 //!     When selecting the Sakura Internet DOK service, a Docker registry from Sakura Internet
 //!     is recommended.
 
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
+use std::io::Write;
 
 use sacloud_rs::api::dok;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{constants, utils};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Registry {
     pub hostname: String,
     pub username: Option<String>,
-    pub password: Option<String>
+    pub password: Option<String>,
+    pub dok_id: Option<String>,
 }
 
 impl std::fmt::Display for Registry {
@@ -27,17 +29,9 @@ impl Registry {
     pub fn id(&self) -> String {
         format!("{}_{}", self.hostname, self.username.as_deref().unwrap_or(""))
     }
-
-    pub fn find_registry_dok(&self, registries_dok: &[dok::Registry]) -> Option<dok::Registry> {
-        self.username.as_ref()
-            .map(|username| {
-                registries_dok.iter().find(|r| r.username == *username && r.hostname == self.hostname)
-                    .map(|r| r.to_owned())
-            })?
-    }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct DataFile {
     registries: Option<Vec<Registry>>,
 }
@@ -47,17 +41,21 @@ impl DataFile {
         let df: Self = toml::from_str(content)?;
         Ok(df)
     }
+
+    fn to_string(&self) -> anyhow::Result<String> {
+        let content = toml::to_string(&self)?;
+        Ok(content)
+    }
 }
 
 pub struct Manager {
     pub registries: Vec<Registry>,
-    pub registries_dok: Vec<dok::Registry>,
 }
 
 impl Manager {
     fn data_filepath() -> anyhow::Result<PathBuf> {
-        let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME)?;
-        let fp = xdg_dirs.get_data_home().join(constants::FILENAME_REGISTRIES);
+        let data_dir = utils::file::get_data_dir();
+        let fp = data_dir.join(constants::FILENAME_REGISTRIES);
         Ok(fp)
     }
 
@@ -67,23 +65,47 @@ impl Manager {
             std::fs::File::create(&filepath)?;
         }
 
-        let content = utils::file::get_file_content(&filepath)?;
+        let content = fs::read_to_string(&filepath)?;
         let df = DataFile::new(&content)?;
         let s = Self { 
             registries: df.registries.unwrap_or_default(),
-            registries_dok: vec![]
         };
 
         Ok(s)
     }
 
-    pub async fn initialze(&mut self, account_mgr: &super::account::Manager, setting_mgr: &super::settings::Manager) {
-        if let Some(client) = account_mgr.create_client(setting_mgr) {
-            if let Ok(registries_dok) = dok::shortcuts::get_registries(client).await {
-                self.registries_dok = registries_dok.results;
+    pub fn save(&self) -> anyhow::Result<()> {
+        let df = DataFile {
+            registries: Some(self.registries.clone())
+        };
+
+        let filepath = Self::data_filepath()?; 
+        let mut file = std::fs::File::create(filepath)?;
+        write!(file, "{}", df.to_string()?)?;
+        Ok(())
+    }
+
+    pub async fn initialze(&mut self, account_mgr: &super::account::Manager, setting_mgr: &super::settings::Manager) -> anyhow::Result<()> {
+        let client = account_mgr.create_client(setting_mgr)?; 
+        let registries_dok = dok::shortcuts::get_registries(client.clone()).await?.results;
+        for registry in self.registries.iter_mut() {
+            if registries_dok.iter().any(
+                |r| r.hostname == registry.hostname 
+                    && registry.username.is_some() 
+                    && *registry.username.as_ref().unwrap() == r.username
+                    && registry.dok_id.is_some()
+                    && *registry.dok_id.as_ref().unwrap() == r.id
+            ) { continue; } else if let Some(username) = registry.username.as_ref() {
+                if let Some(password) = registry.password.as_ref() {
+                    let r_dok = dok::shortcuts::create_registry(client.clone(), &registry.hostname, username, password).await?;
+                    registry.dok_id = Some(r_dok.id);
+                }
             }
         }
+        self.save()?;
 
+
+        Ok(())
     }
 
     pub fn selected(&self, setting_mgr: &super::settings::Manager) -> Option<&Registry> {

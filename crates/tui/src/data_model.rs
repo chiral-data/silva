@@ -1,5 +1,7 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::Path;
+use std::sync::Arc;
 use std::sync::Mutex;
+
 
 pub struct Store {
     pub account_mgr: account::Manager,
@@ -8,8 +10,8 @@ pub struct Store {
     pub app_mgr: app::Manager,
     pub pod_type_mgr: pod_type::Manager,
     pub pod_mgr: pod::Manager,
-    pub proj_selected: Option<PathBuf>,
-    pub job_mgr: Arc<Mutex<job::Manager>>
+    pub job_mgr: Arc<Mutex<job::Manager>>,
+    pub project_sel: Option<project::Project>, 
 }
 
 impl std::default::Default for Store {
@@ -25,9 +27,20 @@ impl std::default::Default for Store {
         Self { 
             account_mgr, registry_mgr, setting_mgr,
             app_mgr, pod_type_mgr, pod_mgr,
-            proj_selected: None, 
+            project_sel: None,
             job_mgr: Arc::new(Mutex::new(job_mgr)), 
         }
+    }
+}
+
+impl Store {
+    pub fn update_project(&mut self, proj_dir: &Path) -> anyhow::Result<()> {
+        let job_settings = job::Job::get_settings(proj_dir)?;
+        let files = job_settings.files.all_files();
+        let proj = project::Project { dir: proj_dir.to_path_buf(), files, jh_pre: None, jh_post: None };
+        self.project_sel = Some(proj);
+
+        Ok(())
     }
 }
 
@@ -41,3 +54,4 @@ mod account;
 pub mod pod_type;
 pub mod pod;
 pub mod job;
+mod project;

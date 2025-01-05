@@ -2,23 +2,38 @@ use crate::Client;
 use crate::api::dok;
 
 pub async fn get_registries(client: Client) -> anyhow::Result<dok::RegistryList> {
-    let registry_list: super::RegistryList = client.dok().registries().dok_end().get()
+    let registry_list: dok::RegistryList = client.dok()
+        .registries().dok_end().get()
         .await?;
     Ok(registry_list)
 }
 
+pub async fn create_registry(client: Client, hostname: &str, username: &str, password: &str) -> anyhow::Result<dok::Registry> {
+    let post_registries = dok::params::PostRegistries::default()
+        .hostname(hostname.to_string())
+        .username(username.to_string())
+        .password(password.to_string());
+    let registry: dok::Registry = client.dok()
+        .registries().dok_end()
+        .set_params(&post_registries)?
+        .post().await?;
+
+    Ok(registry)
+}
+
 pub async fn create_task(client: Client, image_name: &str, registry_id: &str, plan: dok::params::Plan) -> anyhow::Result<dok::TaskCreated> {
-    let container = super::params::Container::default()
+    let container = dok::params::Container::default()
         .image(image_name.to_string())
         .registry(Some(registry_id.to_string()))
         .command(vec![])
         .entrypoint(vec![])
         .plan(plan);
-    let post_tasks = super::params::PostTasks::default()
+    let post_tasks = dok::params::PostTasks::default()
         .name("some_task".to_string())
         .containers(vec![container])
         .tags(vec![]);
-    let task_created: super::TaskCreated = client.dok().tasks().dok_end()
+    let task_created: dok::TaskCreated = client.dok()
+        .tasks().dok_end()
         .set_params(&post_tasks)?
         .post().await?;
 

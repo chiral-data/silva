@@ -1,15 +1,81 @@
-use std::{path::PathBuf, sync::{Arc, Mutex}};
+use std::{path::{Path, PathBuf}, sync::{Arc, Mutex}};
 use std::io::{Read, Write};
 
 use futures_util::stream::StreamExt;
 
 use crate::data_model;
+use data_model::job::settings::Settings as JobSettings;
 
+const FILENAME_ENTRYPOINT: &str = "@run.sh";
+const FILENAME_DOCKER: &str = "Dockerfile";
+
+pub fn prepare_build_files(
+    proj_dir: &Path,
+    job_settings: &JobSettings
+) -> anyhow::Result<()> {
+    let proj_name = data_model::job::Job::get_project_name(proj_dir)?;
+    let dok = job_settings.dok.as_ref()
+        .ok_or(anyhow::Error::msg("no DOK settings"))?;
+    let base_image = &dok.base_image;
+
+    // create entrypoint @run.sh
+    let entrypoint_filepath = proj_dir.join(FILENAME_ENTRYPOINT);
+    let mut entrypoint_file = std::fs::File::create(entrypoint_filepath)?;
+    writeln!(entrypoint_file, "#!/bin/bash")?;
+    writeln!(entrypoint_file, "#")?;
+    writeln!(entrypoint_file)?;
+    for script_file in job_settings.files.scripts.iter() {
+        writeln!(entrypoint_file, "sh {}", script_file)?;
+    }
+    writeln!(entrypoint_file)?;
+    for output_file in job_settings.files.outputs.iter() {
+        writeln!(entrypoint_file, "cp {} /opt/artifact", output_file)?;
+    }
+
+    // create Docker file
+    let mut docker_file = std::fs::File::create(proj_dir.join(FILENAME_DOCKER))?;
+    writeln!(docker_file, "FROM {base_image}")?;
+    writeln!(docker_file)?;
+    writeln!(docker_file, "RUN mkdir -p /opt/{proj_name}")?;
+    for input_file in job_settings.files.inputs.iter() {
+        writeln!(docker_file, "ADD ./{input_file} /opt/{proj_name}")?;
+    }
+    for script_file in job_settings.files.scripts.iter() {
+        writeln!(docker_file, "ADD ./{script_file} /opt/{proj_name}")?;
+    }
+    if let Some(dok) = &job_settings.dok {
+        if let Some(extra_build_commands) = &dok.extra_build_commands {
+            for cmd in extra_build_commands.iter() {
+                writeln!(docker_file, "RUN {cmd}")?; 
+            }
+        }
+    }
+    writeln!(docker_file, "ADD ./{FILENAME_ENTRYPOINT} /opt/{proj_name}")?;
+    writeln!(docker_file)?;
+    writeln!(docker_file, "WORKDIR /opt/{proj_name}")?;
+    writeln!(docker_file, "CMD [\"sh\", \"{}\"]", FILENAME_ENTRYPOINT)?;
+
+    Ok(())
+}
+
+// pub fn clear_build_files(proj_dir: &Path) -> anyhow::Result<()> {
+//     for filename in vec![
+//         FILENAME_ENTRYPOINT,
+//         FILENAME_DOCKER
+//     ].into_iter() {
+//         let filepath = proj_dir.join(filename);
+//         if filepath.exists() {
+//             std::fs::remove_file(filepath)?;
+//         }
+//     }
+
+//     Ok(())
+// }
 
 pub async fn build_image(
     proj_dir: &PathBuf, 
+    job_settings: &JobSettings,
     image_name: &str, 
-    base_image: &str,
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
     {
@@ -19,57 +85,19 @@ pub async fn build_image(
 
     std::env::set_current_dir(proj_dir)?;
 
-    let proj_name = proj_dir.file_name()
-        .ok_or(anyhow::Error::msg("no file name for project "))?
-        .to_str()
-        .ok_or(anyhow::Error::msg("osString to str error"))?;
-
-    let settings_filepath = proj_dir.join("settings.toml");
-    let proj_settings = data_model::job::settings::Settings::new_from_file(&settings_filepath)
-        .map_err(|e| anyhow::Error::msg(format!("{e} no settings file {settings_filepath:?}")))?;
-
-    // create entrypoint run.sh
-    let filename_entrypoint = "run.sh";
-    let mut entrypoint_file = std::fs::File::create(proj_dir.join(filename_entrypoint))?;
-    writeln!(entrypoint_file, "#!/bin/bash")?;
-    writeln!(entrypoint_file, "#")?;
-    writeln!(entrypoint_file)?;
-    for script_file in proj_settings.script_files.iter() {
-        writeln!(entrypoint_file, "sh {}", script_file)?;
-    }
-    writeln!(entrypoint_file)?;
-    for output_file in proj_settings.output_files.iter() {
-        writeln!(entrypoint_file, "cp {} /opt/artifact", output_file)?;
-    }
-
-    // create Docker file
-    let filename_docker = "Dockerfile";
-    let mut docker_file = std::fs::File::create(proj_dir.join(filename_docker))?;
-    writeln!(docker_file, "FROM {base_image}")?;
-    writeln!(docker_file)?;
-    writeln!(docker_file, "RUN mkdir -p /opt/{proj_name}")?;
-    for input_file in proj_settings.input_files.iter() {
-        writeln!(docker_file, "ADD ./{input_file} /opt/{proj_name}")?;
-    }
-    for script_file in proj_settings.script_files.iter() {
-        writeln!(docker_file, "ADD ./{script_file} /opt/{proj_name}")?;
-    }
-    writeln!(docker_file, "ADD ./{filename_entrypoint} /opt/{proj_name}")?;
-    writeln!(docker_file)?;
-    writeln!(docker_file, "WORKDIR /opt/{proj_name}")?;
-    writeln!(docker_file, "CMD [\"sh\", \"{}\"]", filename_entrypoint)?;
+    prepare_build_files(proj_dir, job_settings)?;
    
     // create tar file for building the image
     let filename_tar = "image.tar";
     let tar_file = tokio::fs::File::create(filename_tar)
         .await.unwrap().into_std().await;
     let mut a = tar::Builder::new(tar_file);
-    a.append_path("Dockerfile")?;
-    a.append_path("run.sh")?;
-    for input_file in proj_settings.input_files.iter() {
+    a.append_path(FILENAME_ENTRYPOINT)?;
+    a.append_path(FILENAME_DOCKER)?;
+    for input_file in job_settings.files.inputs.iter() {
         a.append_path(input_file)?;
     }
-    for script_file in proj_settings.script_files.iter() {
+    for script_file in job_settings.files.scripts.iter() {
         a.append_path(script_file)?;
     }
 
@@ -107,21 +135,20 @@ pub async fn build_image(
             Err(e) => return Err(anyhow::Error::msg(format!("[docker] push image error {e}")))
         }
     }
-    tokio::fs::remove_file(filename_docker).await.unwrap();
-    tokio::fs::remove_file(filename_entrypoint).await.unwrap();
+    tokio::fs::remove_file(FILENAME_DOCKER).await.unwrap();
+    tokio::fs::remove_file(FILENAME_ENTRYPOINT).await.unwrap();
     tokio::fs::remove_file(filename_tar).await.unwrap();
 
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] [build image {image_name}] completed ..."));
+        job_mgr.add_log(0, format!("[docker] build image {image_name}] completed ..."));
         job_mgr.clear_log_tmp(&0);
     }
     
     Ok(())
 }
 
-// pub async fn push_image(image_name: &str, username: Option<String>, password: Option<String>, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
-pub async fn push_image(registry: data_model::registry::Registry, image_name: &str, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
+pub async fn push_image(username: Option<String>, password: Option<String>, image_name: &str, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
     {
         let mut job_mgr = job_mgr.lock().unwrap();
         job_mgr.add_log(0, format!("[docker] push image({image_name}) started ..."));
@@ -130,7 +157,7 @@ pub async fn push_image(registry: data_model::registry::Registry, image_name: &s
     let docker = bollard::Docker::connect_with_local_defaults().unwrap();
     let push_options = bollard::image::PushImageOptions::<&str>::default();
     let credentials = bollard::auth::DockerCredentials { // for sakuracr.jp
-        username: registry.username, password: registry.password,
+        username, password,
         ..Default::default()
     };
     let mut image_push_stream = docker.push_image(image_name, Some(push_options), Some(credentials));
@@ -194,16 +221,16 @@ mod tests {
         let examples_dir = Path::new(std::env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().join("examples");
         let (hostname, username, password) = get_sakura_container_registry();
         let registry = data_model::registry::Registry {
-            hostname, username: Some(username), password: Some(password)
+            hostname, username: Some(username), password: Some(password), dok_id: None
         };
 
         let proj_dir = examples_dir.join("gromacs");
         assert!(proj_dir.exists());
         let image_name = "gromacs:test_241211_2";
         let image_name = format!("{}/{image_name}", registry.hostname);
-        let base_image = "nvcr.io/hpc/gromacs:2023.2";
+        let job_settings = data_model::job::Job::get_settings(&proj_dir).unwrap();
         let job_mgr = Arc::new(Mutex::new(data_model::job::Manager::load().unwrap()));
-        build_image(&proj_dir, &image_name, base_image, job_mgr.clone()).await.unwrap();
-        push_image(registry, &image_name, job_mgr).await.unwrap();
+        build_image(&proj_dir, &job_settings, &image_name, job_mgr.clone()).await.unwrap();
+        push_image(registry.username, registry.password, &image_name, job_mgr).await.unwrap();
     }
 }

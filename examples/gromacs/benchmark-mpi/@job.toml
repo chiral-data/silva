@@ -1,0 +1,13 @@
+[files]
+inputs = [
+  "cmet_eq.tpr"
+]
+outputs = [
+]
+scripts = [
+  "run.sh"
+]
+
+[dok]
+base_image = "nvcr.io/hpc/gromacs:2023.2"
+

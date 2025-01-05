@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 use std::io::Write;
 
 use serde::{Deserialize, Serialize};
@@ -30,8 +30,8 @@ pub struct Manager {
 
 impl Manager {
     fn data_filepath() -> anyhow::Result<PathBuf> {
-        let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME)?;
-        let fp = xdg_dirs.get_data_home().join(constants::FILENAME_SETTINGS);
+        let data_dir = utils::file::get_data_dir();
+        let fp = data_dir.join(constants::FILENAME_SETTINGS);
         Ok(fp)
     }
 
@@ -41,7 +41,7 @@ impl Manager {
             std::fs::File::create(&filepath)?;
         }
 
-        let content = utils::file::get_file_content(&filepath)?;
+        let content = fs::read_to_string(&filepath)?;
         let df = DataFile::new(&content)?;
         let s = Self {
             account_id_sel: df.account_id_sel,

@@ -5,8 +5,9 @@ pub enum App {
     #[default]
     Unknown,
     Gromacs,
-    Psi4,
     MyPresto,
+    OpenAIWhisper,
+    Psi4,
 }
 
 impl From<&str> for App {
@@ -23,10 +24,21 @@ impl From<&str> for App {
 impl App {
     pub fn as_str(&self) -> &str {
         match self {
+            Self::Unknown => "Unknown",
             Self::Gromacs => "Gromacs",
-            Self::Psi4 => "Psi4",
             Self::MyPresto => "myPresto",
-            Self::Unknown => "Unknown"
+            Self::OpenAIWhisper => "OpenAI Whisper",
+            Self::Psi4 => "Psi4",
+        }
+    }
+
+    pub fn keywords(&self) -> &str {
+        match self {
+            Self::Unknown => "Unknown",
+            Self::Gromacs => "molecular simulation",
+            Self::MyPresto => "myPresto",
+            Self::OpenAIWhisper => "speech recognition",
+            Self::Psi4 => "Psi4",
         }
     }
 }
@@ -38,11 +50,15 @@ pub struct Manager {
 
 impl Manager {
     pub fn new() -> Self {
-        // TODO: temporarily hard coding
-        let apps = vec!["gromacs"].into_iter()
-            .map(App::from)
-            .collect();
+        let apps = vec![
+            App::Gromacs, App::OpenAIWhisper
+        ];
         Self { apps }
     }
+
+    // pub fn selected(&self, states: &ui::States) -> Option<&App> {
+    //     states.infra.app_list.list.selected()
+    //         .map(|index| self.apps.get(index))?
+    // }
 }
 

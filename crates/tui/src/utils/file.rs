@@ -1,12 +1,10 @@
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
+use std::fs::{self, File};
+use std::path::{Path, PathBuf};
 
-pub fn get_file_content(filepath: &Path) -> anyhow::Result<String> {
-    let mut file_accounts = File::open(filepath)?;
-    let mut buf = String::new();
-    let _read_size = file_accounts.read_to_string(&mut buf)?;
-    Ok(buf)
+use crate::constants;
+
+pub fn get_data_dir() -> PathBuf {
+    app_dirs2::app_root(app_dirs2::AppDataType::UserData, &constants::APP_INFO).unwrap()
 }
 
 /// download the file from url to file with filepath
@@ -37,6 +35,18 @@ pub fn unzip_tar_gz(filepath: &Path, to_folder: &Path) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+pub fn get_child_dirs<P: AsRef<Path>>(dir: P) -> impl Iterator<Item = PathBuf> {
+    fs::read_dir(dir).unwrap()
+        .filter_map(|entry| match entry {
+            Ok(e) => {
+                if e.path().is_dir() {
+                    e.path().to_str().map(PathBuf::from)
+                } else { None }
+            }
+            Err(_) => None
+        })
 }
 
 
