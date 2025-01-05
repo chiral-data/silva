@@ -10,6 +10,8 @@ pub struct ParametersDok {
 }
 
 pub fn params_dok(store: &data_model::Store) -> anyhow::Result<ParametersDok> {
+    use data_model::pod::Settings;
+
     let proj_sel = store.project_sel.as_ref()
         .ok_or(anyhow::Error::msg("no selected project"))?;
     let proj_dir = &proj_sel.dir;
@@ -21,15 +23,15 @@ pub fn params_dok(store: &data_model::Store) -> anyhow::Result<ParametersDok> {
     let pod_sel = store.pod_mgr.selected()
         .ok_or(anyhow::Error::msg("no pod selected"))?;
     let plan = match &pod_sel.settings {
-        data_model::pod::Settings::SakuraInternetServer => { return Err(anyhow::Error::msg("not DOK service")); },
-        data_model::pod::Settings::SakuraInternetService(dok_gpu_type) => match dok_gpu_type {
+        Settings::None | Settings::SakuraInternetServer => { return Err(anyhow::Error::msg("not DOK service")); },
+        Settings::SakuraInternetService(dok_gpu_type) => match dok_gpu_type {
             data_model::provider::sakura_internet::DokGpuType::V100 => dok::params::Plan::V100,
             data_model::provider::sakura_internet::DokGpuType::H100 => dok::params::Plan::H100GB80,
         }
     };
     let params_dok = ParametersDok { image_name: format!("{}/{image_name}", registry_sel.hostname), registry: registry_sel.to_owned(), client, plan };
 
-    Ok(params_dok) 
+    Ok(params_dok)
 }
 
 

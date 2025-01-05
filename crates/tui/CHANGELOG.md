@@ -3,6 +3,8 @@ All notable changes will be documented in this file.
 
 ## [Unreleased]
 - [] job management
+- [] SSH accessible servers as a computation pod 
+- [] Applications setting file (pod_type::for_application)
 
 ## [Unreleased]
 - [] local computer as a computation pod

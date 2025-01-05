@@ -50,7 +50,7 @@ pub mod provider;
 pub mod registry;
 mod settings;
 pub mod app;
-mod account;
+pub mod account;
 pub mod pod_type;
 pub mod pod;
 pub mod job;

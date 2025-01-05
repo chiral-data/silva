@@ -76,7 +76,7 @@ fn select_pod_type(states: &mut ui::states::States, is_up: bool) {
     states.job_states.pod_type.pod_type_sel_id = pod_type.id;
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &data_model::Store) {
+pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &mut data_model::Store) {
     use event::KeyCode;
     let states_current = &mut states.job_states.app_detail;
 
@@ -87,7 +87,15 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
             let list_state = &states_current.list_state_pod_types;
             if let Some(sel_idx) = list_state.selected() {
                 let pod_type_sel = get_pod_types(states).get(sel_idx).unwrap().to_owned();
-                states.job_states.show_page = super::ShowPage::PodType;
+
+                if pod_type_sel.is_localhost() {
+                    let localhost_pod_id = 0;
+                    store.pod_mgr.pod_id_selected = Some(localhost_pod_id);
+                    states.job_states.show_page = super::ShowPage::Detail;
+                } else {
+                    states.job_states.show_page = super::ShowPage::PodType;
+                }
+
                 let pods_of_this_type = store.pod_mgr.pods.values()
                     .filter(|pod| pod.type_id == pod_type_sel.id)
                     .map(|sv| sv.to_owned())

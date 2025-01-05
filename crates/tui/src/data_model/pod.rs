@@ -8,6 +8,7 @@ use super::provider;
 
 #[derive(Debug, Deserialize, Clone)]
 pub enum Settings {
+    None,
     // SakuraInternetServer(provider::sakura_internet::ServerSettings),
     SakuraInternetServer,
     SakuraInternetService(provider::sakura_internet::DokGpuType),
@@ -29,16 +30,12 @@ pub struct Manager {
 
 impl Manager {
     pub fn new() -> Self {
-        // TODO: right now only hard coding
-        // let pod_0 = Pod { 
-        //     id: 0, 
-        //     type_id: 0,
-        //     settings: Settings::SakuraInternetServer(provider::sakura_internet::ServerSettings {
-        //         server_id: "server_1".to_string(),
-        //         disk_id: "disk_1".to_string(),
-        //     }),
-        //     name: "gpu server 0".to_string(),
-        // };
+        let pod_0 = Pod { 
+            id: 0, 
+            type_id: 0,
+            settings: Settings::None,
+            name: "Localhost".to_string(),
+        };
         let pod_1 = Pod { 
             id: 1, 
             type_id: 1,
@@ -51,20 +48,10 @@ impl Manager {
             settings: Settings::SakuraInternetService(provider::sakura_internet::DokGpuType::H100),
             name: "DOK service H100".to_string(),
         };
-        // let pod_3 = Pod {
-        //     id: 3,
-        //     type_id: 5,
-        //     settings: Settings::SakuraInternetServer(provider::sakura_internet::ServerSettings {
-        //         server_id: "server_3".to_string(),
-        //         disk_id: "disk_3".to_string(),
-        //     }),
-        //     name: "cpu server 3".to_string()
-        // };
         let pods = vec![
-            // (0, pod_0), 
+            (0, pod_0), 
             (1, pod_1), 
             (2, pod_2), 
-            // (3, pod_3)
         ].into_iter().collect();
 
         Manager { pods, pod_id_selected: None }

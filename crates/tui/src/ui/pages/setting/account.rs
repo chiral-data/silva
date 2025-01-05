@@ -54,8 +54,9 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
                 } else { "  " })
             )
             .collect();
+        let title = format!(" Select Cloud Account (account file: {:?})", data_model::account::Manager::data_filepath().unwrap());
         let list = List::new(account_strings)
-            .block(Block::bordered().title(" Select Cloud Account "))
+            .block(Block::bordered().title(title))
             .style(Style::new().white())
             .highlight_style(Style::new().reversed())
             .highlight_symbol(">>[Enter] ")
