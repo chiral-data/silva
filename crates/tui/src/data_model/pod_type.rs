@@ -5,11 +5,11 @@ use serde::Deserialize;
 use super::app::App;
 
 
-#[derive(Debug, Deserialize, Clone)]
-pub enum Kind {
-    // SakuraInternetServer(provider::sakura_internet::ServerPlan), 
-    SakuraInternetService,
-}
+// #[derive(Debug, Deserialize, Clone)]
+// pub enum Kind {
+//     // SakuraInternetServer(provider::sakura_internet::ServerPlan), 
+//     SakuraInternetService,
+// }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct PodType {

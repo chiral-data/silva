@@ -7,6 +7,5 @@ mod ui;
 mod entry;
 pub use entry::run;
 
-mod sakura;
 mod config;
 

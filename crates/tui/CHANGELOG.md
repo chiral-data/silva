@@ -3,9 +3,9 @@ All notable changes will be documented in this file.
 
 ## [Unreleased]
 - [] job management
-- [] local computer as a computation pod
 
 ## [Unreleased]
+- [] local computer as a computation pod
 
 ## [v0.2.1]
 
