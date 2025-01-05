@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 use std::io::Write;
 
 use serde::Deserialize;
@@ -66,21 +66,21 @@ pub struct Manager {
 
 impl Manager {
     fn data_filepath() -> anyhow::Result<PathBuf> {
-        let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME)?;
-        let fp = xdg_dirs.get_data_home().join(constants::FILENAME_ACCOUNTS);
+        let data_dir = utils::file::get_data_dir();
+        let fp = data_dir.join(constants::FILENAME_ACCOUNTS);
         Ok(fp)
     }
 
     pub fn load() -> anyhow::Result<Self> {
         let filepath = Self::data_filepath()?;
         let accounts = if filepath.exists() {
-            let content = utils::file::get_file_content(&filepath)?;
+            let content = fs::read_to_string(&filepath)?;
             let df = DataFile::new(&content)?;
             df.accounts
         } else {
             // create a temporary file for user
-            let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME)?;
-            let fp = xdg_dirs.get_data_home().join(format!("{}.tmp", constants::FILENAME_ACCOUNTS));
+            let data_dir = utils::file::get_data_dir();
+            let fp = data_dir.join(format!("{}.tmp", constants::FILENAME_ACCOUNTS));
             let mut file = std::fs::File::create(fp)?;
             writeln!(&mut file, "{}", TEMPORY_CONTENT)?;
 
@@ -91,18 +91,22 @@ impl Manager {
         Ok(s)
     }
 
-    pub fn selected(&self, setting_mgr: &super::settings::Manager) -> Option<&Account> {
-        setting_mgr.account_id_sel.as_ref()
-            .map(|id| self.accounts.iter().find(|acc| acc.id() == id))?
+    pub fn selected(&self, setting_mgr: &super::settings::Manager) -> anyhow::Result<&Account> {
+        let account_id = setting_mgr.account_id_sel.as_ref()
+            .ok_or(anyhow::Error::msg("no account selected, select an account from the Setting Page"))?;
+        let account = self.accounts.iter().find(|acc| acc.id() == account_id)
+            .ok_or(anyhow::Error::msg(format!("can not find account with id {account_id}")))?;
+
+        Ok(account)
     }
 
-    pub fn create_client(&self, setting_mgr: &super::settings::Manager) -> Option<sacloud_rs::Client> {
-        self.selected(setting_mgr)
-            .map(|account_sel| {
-                match account_sel {
-                    Account::Sakura(sa) => sacloud_rs::Client::new(sa.access_token.to_string(), Some(sa.access_token_secret.to_string()))
-                }
-            })
+    pub fn create_client(&self, setting_mgr: &super::settings::Manager) -> anyhow::Result<sacloud_rs::Client> {
+        let account_sel = self.selected(setting_mgr)?;
+        let client = match account_sel {
+            Account::Sakura(sa) => sacloud_rs::Client::new(sa.access_token.to_string(), Some(sa.access_token_secret.to_string()))
+        };
+
+        Ok(client)
     }
 }
 

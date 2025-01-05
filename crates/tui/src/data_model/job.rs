@@ -1,7 +1,7 @@
 //! Jobs run locally to manage cloud infrastructure
 //!
 
-use std::{collections::{HashMap, VecDeque}, path::PathBuf};
+use std::{collections::{HashMap, VecDeque}, fs, path::{Path, PathBuf}};
 
 use serde::Deserialize;
 
@@ -38,17 +38,26 @@ impl std::fmt::Display for Job {
 }
 
 impl Job {
-    // pub fn new(id: usize, desc: String) -> Self {
-    //     Self { id, desc, status: JobStatus::Created }
-    // }
+    pub fn get_settings(proj_dir: &Path) ->anyhow::Result<settings::Settings> {
+        let settings_filepath = proj_dir.join("@job.toml");
+        let job_settings = settings::Settings::new_from_file(&settings_filepath)
+            .map_err(|e| anyhow::Error::msg(format!("{e} no settings file {settings_filepath:?}")))?;
 
-    // pub fn set_running(&mut self) {
-    //     self.status = JobStatus::Running;
-    // }
+        Ok(job_settings)
+    }
 
-    // pub fn set_complete(&mut self) {
-    //     self.status = JobStatus::Completed;
-    // }
+    pub fn get_project_name(proj_dir: &Path) -> anyhow::Result<String> {
+        let proj_name = proj_dir.file_name()
+            .ok_or(anyhow::Error::msg("no file name for project "))?
+            .to_str()
+            .ok_or(anyhow::Error::msg("osString to str error"))?;
+        let proj_parent = proj_dir
+            .parent()
+            .map(|p| p.file_name().unwrap().to_str().unwrap_or(""))
+            .unwrap_or("");
+
+        Ok(format!("{proj_parent}_{proj_name}"))
+    }
 }
 
 
@@ -73,8 +82,8 @@ pub struct Manager {
 
 impl Manager {
     fn data_filepath() -> anyhow::Result<PathBuf> {
-        let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME)?;
-        let fp = xdg_dirs.get_data_home().join(constants::FILENAME_JOBS);
+        let data_dir = utils::file::get_data_dir();
+        let fp = data_dir.join(constants::FILENAME_JOBS);
         Ok(fp)
     }
 
@@ -84,7 +93,7 @@ impl Manager {
             std::fs::File::create(&filepath)?;
         }
 
-        let content = utils::file::get_file_content(&filepath)?;
+        let content = fs::read_to_string(&filepath)?;
         let df = DataFile::new(&content)?;
         let jobs = match df.jobs {
             Some(jobs) => jobs.into_iter()
