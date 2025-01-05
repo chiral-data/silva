@@ -38,18 +38,6 @@ impl std::fmt::Display for Job {
 }
 
 impl Job {
-    // pub fn new(id: usize, desc: String) -> Self {
-    //     Self { id, desc, status: JobStatus::Created }
-    // }
-
-    // pub fn set_running(&mut self) {
-    //     self.status = JobStatus::Running;
-    // }
-
-    // pub fn set_complete(&mut self) {
-    //     self.status = JobStatus::Completed;
-    // }
-
     pub fn get_settings(proj_dir: &Path) ->anyhow::Result<settings::Settings> {
         let settings_filepath = proj_dir.join("@job.toml");
         let job_settings = settings::Settings::new_from_file(&settings_filepath)

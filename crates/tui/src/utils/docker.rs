@@ -58,20 +58,6 @@ pub fn prepare_build_files(
     Ok(())
 }
 
-// pub fn clear_build_files(proj_dir: &Path) -> anyhow::Result<()> {
-//     for filename in vec![
-//         FILENAME_ENTRYPOINT,
-//         FILENAME_DOCKER
-//     ].into_iter() {
-//         let filepath = proj_dir.join(filename);
-//         if filepath.exists() {
-//             std::fs::remove_file(filepath)?;
-//         }
-//     }
-
-//     Ok(())
-// }
-
 pub async fn build_image(
     proj_dir: &PathBuf, 
     job_settings: &JobSettings,
