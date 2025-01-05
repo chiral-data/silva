@@ -2,6 +2,12 @@
 All notable changes will be documented in this file.
 
 ## [Unreleased]
+- [] job management
+- [] local computer as a computation pod
+
+## [Unreleased]
+
+## [v0.2.1]
 
 ### Added
 - [x] automatically add dok registries
