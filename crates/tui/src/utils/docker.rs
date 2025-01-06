@@ -1,4 +1,4 @@
-use std::{path::{Path, PathBuf}, sync::{Arc, Mutex}};
+use std::{collections::HashMap, path::{Path, PathBuf}, sync::{Arc, Mutex}};
 use std::io::{Read, Write};
 
 use futures_util::stream::StreamExt;
@@ -175,6 +175,20 @@ pub async fn push_image(username: Option<String>, password: Option<String>, imag
     Ok(())
 }
 
+fn gpu_host_config() -> bollard::models::HostConfig  {
+    bollard::models::HostConfig {
+        extra_hosts: Some(vec!["host.docker.internal:host-gateway".into()]),
+        device_requests: Some(vec![bollard::models::DeviceRequest {
+            driver: Some("".into()),
+            count: Some(-1),
+            device_ids: None,
+            capabilities: Some(vec![vec!["gpu".into()]]),
+            options: Some(HashMap::new()),
+        }]),
+        ..Default::default()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -259,6 +273,58 @@ mod tests {
             ..Default::default()
         };
         docker.remove_container(&id, Some(remove_container_options)).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_exec_gromacs() {
+        use bollard::container;
+        use bollard::Docker;
+        use bollard::exec::{CreateExecOptions, StartExecResults};
+        use bollard::image::CreateImageOptions;
+        use futures_util::stream::StreamExt;
+        use futures_util::TryStreamExt;
+
+        const IMAGE: &str = "nvcr.io/hpc/gromacs:2023.2";
+        let docker = Docker::connect_with_socket_defaults().unwrap();
+        let create_image_options = CreateImageOptions { from_image: IMAGE, ..Default::default() };
+        docker.create_image(Some(create_image_options), None, None).try_collect::<Vec<_>>().await.unwrap();
+
+        let binds = vec![
+            format!(
+                "{}:{}",
+                "/home/qw/Downloads",
+                "/mnt/test"
+        )];
+        let mut host_config = gpu_host_config();
+        host_config.binds = Some(binds);
+        let container_config = container::Config { 
+            image: Some(IMAGE), tty: Some(true), host_config: Some(host_config), 
+            ..Default::default() 
+        };
+        let id = docker.create_container::<&str, &str>(None, container_config).await.unwrap().id;
+        docker.start_container::<String>(&id, None).await.unwrap();
+
+        // non interactive
+        let create_exec_options = CreateExecOptions {
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            cmd: Some(vec!["/usr/local/gromacs/avx2_256/bin/gmx", "--version"]),
+            ..Default::default()
+        };
+        let exec = docker.create_exec(&id, create_exec_options).await.unwrap().id;
+        if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&exec, None).await.unwrap() {
+            while let Some(Ok(msg)) = output.next().await {
+                print!("{msg}");
+            }
+        } else {
+            unreachable!();
+        }
+
+        // let remove_container_options = RemoveContainerOptions {
+        //     force: true,
+        //     ..Default::default()
+        // };
+        // docker.remove_container(&id, Some(remove_container_options)).await.unwrap();
     }
 
 }
