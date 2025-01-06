@@ -17,6 +17,30 @@ pub enum Tab {
     Post,
 }
 
+impl Tab {
+    fn texts(&self) -> (&str, &str) {
+        match self {
+            Self::Pod => ("Select a Pod", "[P]ods"), 
+            Self::Files => ("Files", "[F]iles"), 
+            Self::Build => ("Build Docker Image", "[B]uild"),
+            Self::Pre => ("Pre-processing", "Pr[e]"),
+            Self::Run => ("Run", "[R]un"),
+            Self::Post => ("Post-processing", "Po[s]t"),
+        }
+    }
+
+    fn index(&self) -> usize {
+        match self {
+            Tab::Pod => 0,
+            Tab::Files => 1,
+            Tab::Build => 2,
+            Tab::Pre => 3,
+            Tab::Run => 4,
+            Tab::Post => 5,
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct States {
     // job_settings: data_model::job::settings::Settings,
@@ -27,36 +51,33 @@ pub struct States {
 // impl States {
 // }
 
+
+fn filter_tabs(tab: &Tab, states: &ui::states::States) -> bool {
+    match tab {
+        // build action not for localhost
+        Tab::Build => states.job_states.pod_type.pod_type_sel_id != Some(0),
+        _ => true
+    }
+}
+
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &data_model::Store) {
     let current_style = states.get_style(true);
-    let states_current = &mut states.job_states.detail;
 
-    let action_selected = match states_current.tab_action {
-        Tab::Pod => 0,
-        Tab::Files => 1,
-        Tab::Build => 2,
-        Tab::Pre => 3,
-        Tab::Run => 4,
-        Tab::Post => 5,
-    };
     let tabs_strings: Vec<String> = [
-            ("Select a Pod", "[P]ods"), 
-            ("Files", "[F]iles"), 
-            ("Build Docker Image", "[B]uild"),
-            ("Pre-processing", "Pr[e]"),
-            ("Run", "[R]un"),
-            ("Post-processing", "Po[s]t"),
+            Tab::Pod, Tab::Files, Tab::Build, Tab::Pre, Tab::Run, Tab::Post
         ].into_iter()
-        .enumerate()
-        .map(|(i, s)| if i == action_selected {
-            if i == 1 {
-                s.0.to_string()
-            } else { format!("[Enter] {}", s.0) }
-        } else { s.1.to_string() })
+        .filter(|t| filter_tabs(t, states))
+        .map(|t| {
+            let texts = t.texts();
+            if t == states.job_states.detail.tab_action {
+                if t == Tab::Files { texts.0.to_string() } else { format!("[Enter] {}", texts.0) }
+            } else { texts.1.to_string() }
+        })
         .collect();
+    let states_current = &mut states.job_states.detail;
     let actions = Tabs::new(tabs_strings)
         .block(Block::bordered().title(" Actions "))
-        .select(action_selected)
+        .select(states_current.tab_action.index())
         .divider(" ")
         .style(current_style);
     let helper_lines: Vec<Line> = match states_current.tab_action {

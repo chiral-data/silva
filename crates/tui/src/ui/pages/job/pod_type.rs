@@ -7,7 +7,7 @@ use crate::ui;
 
 #[derive(Default)]
 pub struct States {
-    pub pod_type_sel_id: usize,
+    pub pod_type_sel_id: Option<usize>,
     pub pods: Vec<data_model::pod::Pod>,
     pub list_state_pods: ListState, 
 }
@@ -16,7 +16,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     let current_style = states.get_style(true);
     let states_current = &mut states.job_states.pod_type;
 
-    let server_plan = store.pod_type_mgr.pod_types.get(&states_current.pod_type_sel_id).unwrap();
+    let server_plan = store.pod_type_mgr.pod_types.get(&states_current.pod_type_sel_id.unwrap_or_default()).unwrap();
     let text: Vec<Line> = server_plan.descs.iter().map(|s| Line::from(s.as_str())).collect();
     let paragraph = Paragraph::new(text)
         .block(Block::bordered().title(server_plan.name.as_str()))

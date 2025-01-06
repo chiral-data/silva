@@ -73,7 +73,7 @@ fn select_pod_type(states: &mut ui::states::States, is_up: bool) {
     }
     states_current.list_state_pod_types.select(Some(sel_idx));
     let pod_type = states_current.pod_types.get(sel_idx).unwrap();
-    states.job_states.pod_type.pod_type_sel_id = pod_type.id;
+    states.job_states.pod_type.pod_type_sel_id = Some(pod_type.id);
 }
 
 pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &mut data_model::Store) {
@@ -101,7 +101,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
                     .map(|sv| sv.to_owned())
                     .collect::<Vec<data_model::pod::Pod>>();
                 states.job_states.pod_type.pods = pods_of_this_type;
-                states.job_states.pod_type.pod_type_sel_id = pod_type_sel.id;
+                states.job_states.pod_type.pod_type_sel_id = Some(pod_type_sel.id);
             } else {
                 states.info_states.message = ("no server plan selected".to_string(), MessageLevel::Warn)
             }
