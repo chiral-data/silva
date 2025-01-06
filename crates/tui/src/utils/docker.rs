@@ -219,4 +219,10 @@ mod tests {
         build_image(&proj_dir, &job_settings, &image_name, job_mgr.clone()).await.unwrap();
         push_image(registry.username, registry.password, &image_name, job_mgr).await.unwrap();
     }
+
+    #[tokio::test]
+    async fn test_exec_ls() {
+        
+    }
+
 }

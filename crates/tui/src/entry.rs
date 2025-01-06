@@ -1,4 +1,4 @@
-use std::{io, path::PathBuf, process, time::{Duration, Instant}};
+use std::{io, path::PathBuf, time::{Duration, Instant}};
 use std::env;
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
@@ -53,12 +53,13 @@ pub async fn run() -> anyhow::Result<()> {
         match ui::home::handle_key(tick_rate, &mut last_tick, &mut states, &mut store).await? {
             ui::home::Signal::Quit => {
                 #[cfg(not(target_os = "windows"))]
-                let reset_program = "reset";
-                #[cfg(target_os = "windows")]
-                let reset_program = "cls";
-                process::Command::new(reset_program)
-                    .status()
-                    .unwrap_or_else(|e| panic!("failed to reset terminal with error: {e:?}"));
+                {
+                    let reset_program = "reset";
+                    std::process::Command::new(reset_program)
+                        .status()
+                        .unwrap_or_else(|e| panic!("failed to reset terminal by {reset_program} with error: {e:?}"));
+                }
+                // how to reset under windows?
                 break;
             }
             ui::home::Signal::None => {}
