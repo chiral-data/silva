@@ -222,7 +222,43 @@ mod tests {
 
     #[tokio::test]
     async fn test_exec_ls() {
-        
+        use bollard::container::{Config, RemoveContainerOptions};
+        use bollard::Docker;
+        use bollard::exec::{CreateExecOptions, StartExecResults};
+        use bollard::image::CreateImageOptions;
+        use futures_util::stream::StreamExt;
+        use futures_util::TryStreamExt;
+
+        const IMAGE: &str = "alpine:3";
+        let docker = Docker::connect_with_socket_defaults().unwrap();
+        let create_image_options = CreateImageOptions { from_image: IMAGE, ..Default::default() };
+        docker.create_image(Some(create_image_options), None, None).try_collect::<Vec<_>>().await.unwrap();
+
+        let alpine_config = Config { image: Some(IMAGE), tty: Some(true), ..Default::default() };
+        let id = docker.create_container::<&str, &str>(None, alpine_config).await.unwrap().id;
+        docker.start_container::<String>(&id, None).await.unwrap();
+
+        // non interactive
+        let create_exec_options = CreateExecOptions {
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            cmd: Some(vec!["ls", "-l", "/"]),
+            ..Default::default()
+        };
+        let exec = docker.create_exec(&id, create_exec_options).await.unwrap().id;
+        if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&exec, None).await.unwrap() {
+            while let Some(Ok(msg)) = output.next().await {
+                print!("{msg}");
+            }
+        } else {
+            unreachable!();
+        }
+
+        let remove_container_options = RemoveContainerOptions {
+            force: true,
+            ..Default::default()
+        };
+        docker.remove_container(&id, Some(remove_container_options)).await.unwrap();
     }
 
 }

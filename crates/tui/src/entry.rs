@@ -52,7 +52,7 @@ pub async fn run() -> anyhow::Result<()> {
 
         match ui::home::handle_key(tick_rate, &mut last_tick, &mut states, &mut store).await? {
             ui::home::Signal::Quit => {
-                #[cfg(not(target_os = "windows"))]
+                #[cfg(not(windows))]
                 {
                     let reset_program = "reset";
                     std::process::Command::new(reset_program)
