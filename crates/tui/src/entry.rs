@@ -52,7 +52,12 @@ pub async fn run() -> anyhow::Result<()> {
 
         match ui::home::handle_key(tick_rate, &mut last_tick, &mut states, &mut store).await? {
             ui::home::Signal::Quit => {
-                process::Command::new("reset").status()
+                #[cfg(not(target_os = "windows"))]
+                let reset_program = "reset";
+                #[cfg(target_os = "windows")]
+                let reset_program = "cls";
+                process::Command::new(reset_program)
+                    .status()
                     .unwrap_or_else(|e| panic!("failed to reset terminal with error: {e:?}"));
                 break;
             }

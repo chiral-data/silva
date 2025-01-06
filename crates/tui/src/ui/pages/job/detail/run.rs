@@ -16,7 +16,7 @@ pub const HELPER: &[&str] = &[
     "Launch a job", 
 ];
 
-async fn launch_job(
+async fn launch_job_dok(
     proj_dir: PathBuf, 
     job_settings: JobSettings,
     params_dok: super::params::ParametersDok,
@@ -98,7 +98,7 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
     let params_dok = super::params::params_dok(store)?;
     let job_mgr = store.job_mgr.clone();
     tokio::spawn(async move {
-        match launch_job(proj_dir, job_settings, params_dok, job_mgr.clone()).await {
+        match launch_job_dok(proj_dir, job_settings, params_dok, job_mgr.clone()).await {
             Ok(()) => (),
             Err(e) => {
                 let mut job_mgr = job_mgr.lock().unwrap();

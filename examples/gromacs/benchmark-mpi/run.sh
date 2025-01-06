@@ -7,7 +7,8 @@
 GMX=/usr/local/gromacs/avx2_256/bin/gmx
 BENCHMARK=cmet_eq
 
-$GMX mdrun -s $BENCHMARK.tpr -nsteps 10000 -ntomp 2
+# $GMX mdrun -s $BENCHMARK.tpr -nsteps 10000 -ntomp 2
+$GMX mdrun -s $BENCHMARK.tpr -nsteps 1000 
 
 # Benchmark result
 # Cloud provider: Sakura Internet
