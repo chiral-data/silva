@@ -1,107 +1,101 @@
+//! Input adapted from the example: https://ratatui.rs/examples/apps/user_input/
+
 use ratatui::prelude::*;
 use ratatui::widgets::*;
-use ratatui::style::Styled;
 use crossterm::event;
-use tui_scrollview::{ScrollView, ScrollViewState};
 
 use crate::data_model;
 use crate::ui;
 
-#[derive(Debug, Default, Clone)]
-struct ChatHistoryText {
-    text: [String; 3],
-    scroll_view_state: ScrollViewState,
-    // state: AppState,
+#[derive(Default)]
+pub struct States {
+    messages: Vec<String>, 
+    input: String,
+    character_index: usize
 }
 
-const SCROLLVIEW_HEIGHT: u16 = 100;
-
-impl ratatui::prelude::Widget for &mut ChatHistoryText { 
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        let layout = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]);
-        let [title, body] = layout.areas(area);
-
-        // self.title().render(title, buf);
-        let width = if buf.area.height < SCROLLVIEW_HEIGHT {
-            buf.area.width - 1
-        } else {
-            buf.area.width
-        };
-        let mut scroll_view = ScrollView::new(Size::new(width, SCROLLVIEW_HEIGHT));
-        self.render_widgets_into_scrollview(scroll_view.buf_mut());
-        scroll_view.render(body, buf, &mut self.scroll_view_state)
+impl States {
+    fn byte_index(&self) -> usize {
+        self.input
+            .char_indices()
+            .map(|(i, _)| i)
+            .nth(self.character_index)
+            .unwrap_or(self.input.len())
     }
-}
 
-impl ChatHistoryText {
-    fn new() -> Self {
-        Self {
-            text: [
-                "hello".to_string(),
-                "hello2".to_string(),
-                "hello3".to_string()
-            ],
-            ..Default::default()
+    fn enter_char(&mut self, new_char: char) {
+        let index = self.byte_index();
+        self.input.insert(index, new_char);
+        self.move_cursor_right();
+    }
+
+    fn move_cursor_left(&mut self) {
+        let cursor_moved_left = self.character_index.saturating_sub(1);
+        self.character_index = self.clamp_cursor(cursor_moved_left);
+    }
+
+    fn move_cursor_right(&mut self) {
+        let cursor_moved_right = self.character_index.saturating_add(1);
+        self.character_index = self.clamp_cursor(cursor_moved_right);
+    }
+
+    fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
+        new_cursor_pos.clamp(0, self.input.chars().count())
+    }
+
+    fn delete_char(&mut self) {
+        let is_not_cursor_leftmost = self.character_index != 0;
+        if is_not_cursor_leftmost {
+            let current_index = self.character_index;
+            let from_left_to_current_index = current_index - 1;
+            let before_char_to_delete = self.input.chars().take(from_left_to_current_index);
+            let after_char_to_delete = self.input.chars().skip(current_index);
+            self.input = before_char_to_delete.chain(after_char_to_delete).collect();
+            self.move_cursor_left();
         }
     }
 
-    fn render_widgets_into_scrollview(&self, buf: &mut Buffer) {
-        use Constraint::*;
-        let area = buf.area;
-        let [numbers, widgets] = Layout::horizontal([Length(5), Fill(1)]).areas(area);
-        let [bar_charts, text_0, text_1, text_2] =
-            Layout::vertical([Length(7), Fill(1), Fill(2), Fill(4)]).areas(widgets);
-        let [left_bar, right_bar] = Layout::horizontal([Length(20), Fill(1)]).areas(bar_charts);
-
-        self.line_numbers(area.height).render(numbers, buf);
-        self.text(0).render(text_0, buf);
-        self.text(1).render(text_1, buf);
-        self.text(2).render(text_2, buf);
-    }
-
-    fn line_numbers(&self, height: u16) -> impl Widget {
-        use std::fmt::Write;
-        let line_numbers = (1..=height).fold(String::new(), |mut output, n| {
-            let _ = writeln!(output, "{n:>4} ");
-            output
-        });
-        Text::from(line_numbers).dim()
-    }
-
-    fn text(&self, index: usize) -> impl Widget {
-        let block = Block::bordered().title(format!("Text {}", index));
-        Paragraph::new(self.text[index].clone())
-            .wrap(Wrap { trim: false })
-            .block(block)
+    fn submit(&mut self) {
+        self.messages.push(self.input.clone());
+        self.input.clear();
+        self.character_index = 0;
     }
 }
 
-struct MyScrollableWidget;
+pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, _store: &mut data_model::Store) {
+    let states_current = &mut states.job_states.chat;
 
-impl StatefulWidget for MyScrollableWidget {
-    type State = ScrollViewState;
-
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        // 100 lines of text
-        let line_numbers = (1..=100).map(|i| format!("{:>3} ", i)).collect::<String>();
-        let content =
-            std::iter::repeat("Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n")
-                .take(100)
-                .collect::<String>();
-
-        let content_size = Size::new(100, 40);
-        let mut scroll_view = ScrollView::new(content_size);
-
-        // the layout doesn't have to be hardcoded like this, this is just an example
-        scroll_view.render_widget(Paragraph::new(line_numbers), Rect::new(0, 0, 5, 100));
-        scroll_view.render_widget(Paragraph::new(content), Rect::new(5, 0, 95, 100));
-
-        scroll_view.render(buf.area, buf, state);
-    }
+    let vertical = Layout::vertical([
+        Constraint::Length(area.height - 1),
+        Constraint::Length(1),
+    ]);
+    let [message_area, input_area] = vertical.areas(f.area());
+    let input = Paragraph::new(format!(">>>{}", states_current.input.as_str()))
+        .style(Style::default().fg(Color::Yellow));
+    f.render_widget(input, input_area);
+    f.set_cursor_position(Position::new(
+        input_area.x + states_current.character_index as u16 + 3,
+        input_area.y,
+    ));
+    let messages: Vec<ListItem> = states_current.messages 
+        .iter().rev()
+        .map(|m| ListItem::new(m.as_str()))
+        .collect();
+    let messages = List::new(messages)
+        .direction(ListDirection::BottomToTop);
+    f.render_widget(messages, message_area);
 }
 
-pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &mut data_model::Store) {
-    let msw = MyScrollableWidget {};
-    let mut state = ScrollViewState::new();
-    f.render_stateful_widget(msw, area, &mut state);
+pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, _store: &mut data_model::Store) {
+    use event::KeyCode;
+    let states_current = &mut states.job_states.chat;
+
+    match key.code {
+        KeyCode::Enter => states_current.submit(),
+        KeyCode::Char(to_insert) => states_current.enter_char(to_insert),
+        KeyCode::Backspace => states_current.delete_char(),
+        KeyCode::Left => states_current.move_cursor_left(),
+        KeyCode::Right => states_current.move_cursor_right(),
+        _ => {}
+    }
 }
