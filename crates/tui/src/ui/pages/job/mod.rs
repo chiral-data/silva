@@ -7,6 +7,7 @@ pub enum ShowPage {
     AppList,
     AppDetail,
     PodType,
+    Chat,
 }
 
 #[derive(Default)]
@@ -27,6 +28,7 @@ pub fn render(f: &mut ratatui::prelude::Frame, area: ratatui::prelude::Rect, sta
         ShowPage::AppList => app_list::render(f, area, states, store),
         ShowPage::AppDetail => app_detail::render(f, area, states, store),
         ShowPage::PodType => pod_type::render(f, area, states, store),
+        ShowPage::Chat => chat::render(f, area, states, store),
     } 
 }
 
@@ -37,6 +39,7 @@ pub fn handle_key(key: &crossterm::event::KeyEvent, states: &mut crate::ui::stat
         ShowPage::AppList => app_list::handle_key(key, states, store),
         ShowPage::AppDetail => app_detail::handle_key(key, states, store),
         ShowPage::PodType => pod_type::handle_key(key, states, store),
+        ShowPage::Chat => todo!()
     } 
 }
 
@@ -48,3 +51,4 @@ mod detail;
 mod app_list;
 mod app_detail;
 mod pod_type;
+mod chat;

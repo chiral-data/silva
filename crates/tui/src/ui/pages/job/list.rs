@@ -10,7 +10,8 @@ use crate::ui::layout::info::MessageLevel;
 #[derive(Default, PartialEq)]
 pub enum Tab {
     #[default]
-    New
+    New,
+    Chat
 }
 
 #[derive(Default)]
@@ -24,9 +25,11 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
 
     let action_selected = match states_current.tab_action {
         Tab::New => 0,
+        Tab::Chat => 1
     };
     let tabs_strings: Vec<String> = [
             ("New", "[N]ew"),
+            ("Chat", "[C]ew"),
         ].into_iter()
         .enumerate()
         .map(|(i, s)| if i == action_selected {
@@ -66,13 +69,19 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
             let states_current = &mut states.job_states.list;
             states_current.tab_action = Tab::New;
         }
+        KeyCode::Char('c') | KeyCode::Char('C') => {
+            let states_current = &mut states.job_states.list;
+            states_current.tab_action = Tab::Chat;
+        }
         KeyCode::Enter => {
-            if store.project_sel.is_none() {
-                states.info_states.message = ("no project selected".to_string(), MessageLevel::Warn);
-            } else {
-                // only "new job" action at the moment
-                // states.job_states.show_page = super::ShowPage::AppList;
-                states.job_states.show_page = super::ShowPage::Detail;
+            let states_current = &mut states.job_states.list;
+            match states_current.tab_action {
+                Tab::New => if store.project_sel.is_none() {
+                    states.info_states.message = ("no project selected".to_string(), MessageLevel::Warn);
+                } else {
+                    states.job_states.show_page = super::ShowPage::Detail;
+                }
+                Tab::Chat => states.job_states.show_page = super::ShowPage::Chat,
             }
         }
         _ => ()
