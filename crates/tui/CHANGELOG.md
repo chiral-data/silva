@@ -1,7 +1,7 @@
 # Changelog
 All notable changes will be documented in this file.
 
-## [Unreleased]
+## [Planned]
 - [] job management
 - [] SSH accessible servers as a computation pod 
 - [] Applications setting file (pod_type::for_application)
