@@ -1,11 +1,35 @@
 //! Input adapted from the example: https://ratatui.rs/examples/apps/user_input/
 
+use std::sync::{Arc, Mutex};
+
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use crossterm::event;
 
 use crate::data_model;
 use crate::ui;
+
+
+async fn ollama_generate(prompt: String, job_mgr: Arc<Mutex<data_model::job::Manager>>) {
+    use ollama_rs::generation::completion::request::GenerationRequest;
+    // use ollama_rs::generation::chat::{request::ChatMessageRequest, ChatMessageResponseStream};
+    use tokio_stream::StreamExt;
+
+    use ollama_rs::Ollama;
+    let ollama = Ollama::new("http://100.98.250.114".to_string(), 11434);
+
+    let model = "deepseek-r1:1.5b".to_string();
+    let mut stream = ollama.generate_stream(GenerationRequest::new(model, prompt)).await.unwrap();
+
+    while let Some(res) = stream.next().await {
+        let responses = res.unwrap();
+        for resp in responses {
+            let mut job_mgr = job_mgr.lock().unwrap();
+            job_mgr.chat_stream.push_str(resp.response.as_str());
+        }
+    }
+
+}
 
 #[derive(Default)]
 pub struct States {
@@ -55,15 +79,29 @@ impl States {
         }
     }
 
-    fn submit(&mut self) {
+    fn submit(&mut self) -> String {
         self.messages.push(self.input.clone());
+        let prompt = self.input.clone();
         self.input.clear();
         self.character_index = 0;
+        prompt
     }
 }
 
-pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, _store: &mut data_model::Store) {
+pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &mut data_model::Store) {
     let states_current = &mut states.job_states.chat;
+
+    let mut job_mgr = store.job_mgr.lock().unwrap();
+    if !job_mgr.chat_stream.is_empty() {
+        let reply: String = job_mgr.chat_stream.drain(..).collect();
+        let last_msg = if let Some(mut last_msg) = states_current.messages.pop() {
+            last_msg.push_str(reply.as_str());
+            last_msg
+        } else {
+            reply
+        };
+        states_current.messages.push(last_msg);
+    }
 
     let vertical = Layout::vertical([
         Constraint::Length(area.height - 1),
@@ -79,19 +117,34 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, _store
     ));
     let messages: Vec<ListItem> = states_current.messages 
         .iter().rev()
-        .map(|m| ListItem::new(m.as_str()))
+        .map(|m| {
+            let options = textwrap::Options::new(message_area.width as usize);
+            let text = Text::from(
+                textwrap::wrap(m, options)
+                    .iter()
+                    .map(|s| Line::from(s.to_string()))
+                    .collect::<>()
+                );
+              ListItem::new(text)
+        })
         .collect();
     let messages = List::new(messages)
         .direction(ListDirection::BottomToTop);
     f.render_widget(messages, message_area);
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, _store: &mut data_model::Store) {
+pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &mut data_model::Store) {
     use event::KeyCode;
     let states_current = &mut states.job_states.chat;
 
     match key.code {
-        KeyCode::Enter => states_current.submit(),
+        KeyCode::Enter => {
+            let prompt = states_current.submit();
+            let job_mgr = store.job_mgr.clone();
+            tokio::spawn(async move {
+                ollama_generate(prompt, job_mgr.clone()).await 
+            });
+        }
         KeyCode::Char(to_insert) => states_current.enter_char(to_insert),
         KeyCode::Backspace => states_current.delete_char(),
         KeyCode::Left => states_current.move_cursor_left(),

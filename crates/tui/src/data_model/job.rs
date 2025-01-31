@@ -76,6 +76,7 @@ impl DataFile {
 pub struct Manager {
     pub jobs: HashMap<usize, Job>,
     /// job logs: <job id, log contents>
+    pub chat_stream: String,
     pub logs: HashMap<usize, VecDeque<String>>,
     pub logs_tmp: HashMap<usize, String>
 }
@@ -102,7 +103,7 @@ impl Manager {
             None => HashMap::new() 
         };
 
-        let s = Self { jobs, logs: HashMap::new(), logs_tmp: HashMap::new() };
+        let s = Self { jobs, chat_stream: String::new(), logs: HashMap::new(), logs_tmp: HashMap::new() };
         Ok(s)
     }
 
