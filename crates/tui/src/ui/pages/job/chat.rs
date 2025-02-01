@@ -81,7 +81,7 @@ impl States {
     }
 
     fn submit(&mut self) -> String {
-        self.messages.push(self.input.clone());
+        self.messages.push(format!(">> {}", self.input));
         let prompt = self.input.clone();
         self.input.clear();
         self.character_index = 0;
@@ -134,21 +134,10 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         .rev()
         .take(message_area.height as usize)
         .rev()
-        .enumerate()
-        .map(|(i, m)| if i % 2 == 0 {
-            Line::from(format!(">> {m}"))
-                .alignment(Alignment::Left)
-                .style(Style::default().italic())
-        } else {
-            Line::from(m.as_str())
-                .alignment(Alignment::Left)
-                .style(Style::default().light_green())
-        })
+        .flat_map(|s| tui_markdown::from_str(s))
         .collect();
-    let line_count: u16 = states_current.messages.iter()
-        .rev()
-        .take(message_area.height as usize)
-        .map(|s| s.len() as u16 / message_area.width + 1)
+    let line_count: u16 = text.iter()
+        .map(|l| l.width() as u16 / message_area.width + 1)
         .sum();
     let messages = Paragraph::new(text)
         // .alignment(Alignment::Left)
