@@ -5,9 +5,19 @@ All notable changes will be documented in this file.
 - [] job management
 - [] SSH accessible servers as a computation pod 
 - [] Applications setting file (pod_type::for_application)
-
-## [Unreleased]
 - [] local computer as a computation pod
+
+## [Unreleased] v0.2.2
+integrate DeepSeek; binary release;
+
+### Added
+- [x] talk to ollama server via [ollama-rs](https://github.com/pepperoni21/ollama-rs)
+- [] chat UI: [x] scrolling [] display Markdown
+
+### Changed
+
+
+### Removed
 
 ## [v0.2.1]
 

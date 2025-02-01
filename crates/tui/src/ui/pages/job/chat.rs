@@ -129,20 +129,31 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         input_area.x + states_current.character_index as u16 + 3,
         input_area.y,
     ));
-    let mut text: Vec<Line> = states_current.messages
-        .iter().rev()
+    let text: Vec<Line> = states_current.messages
+        .iter()
+        .rev()
         .take(message_area.height as usize)
         .rev()
-        .map(|m| Line::from(m.as_str()))
+        .enumerate()
+        .map(|(i, m)| if i % 2 == 0 {
+            Line::from(format!(">> {m}"))
+                .alignment(Alignment::Left)
+                .style(Style::default().italic())
+        } else {
+            Line::from(m.as_str())
+                .alignment(Alignment::Left)
+                .style(Style::default().light_green())
+        })
         .collect();
-    if text.len() < message_area.height as usize {
-        let padding = std::iter::repeat_with(|| Line::from(""))
-            .take(message_area.height as usize - text.len());
-        text = padding.chain(text).collect();
-    }
+    let line_count: u16 = states_current.messages.iter()
+        .rev()
+        .take(message_area.height as usize)
+        .map(|s| s.len() as u16 / message_area.width + 1)
+        .sum();
     let messages = Paragraph::new(text)
-        .alignment(Alignment::Left)
-        .wrap(Wrap { trim: true });
+        // .alignment(Alignment::Left)
+        .wrap(Wrap { trim: true })
+        .scroll((line_count.saturating_sub(message_area.height), 0));
 
     components::job_list_action_bar::render(f, top, current_style, action_selected);
     components::job_new_helper::render(f, mid, current_style);
