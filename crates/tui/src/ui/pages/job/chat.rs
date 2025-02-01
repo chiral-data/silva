@@ -8,6 +8,7 @@ use crossterm::event;
 
 use crate::data_model;
 use crate::ui;
+use crate::ui::components;
 
 
 async fn ollama_generate(prompt: String, job_mgr: Arc<Mutex<data_model::job::Manager>>) {
@@ -89,16 +90,23 @@ impl States {
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &mut data_model::Store) {
+    let current_style = states.get_style(true);
     let states_current = &mut states.job_states.chat;
 
+    let action_selected = match states.job_states.list.tab_action {
+        super::list::Tab::New => 0,
+        super::list::Tab::Chat => 1
+    };
+
     let mut job_mgr = store.job_mgr.lock().unwrap();
-    if !job_mgr.chat_stream.is_empty() {
+    if !job_mgr.chat_stream.is_empty() && !states_current.messages.is_empty() {
         let reply: String = job_mgr.chat_stream.drain(..).collect();
-        let last_msg = if let Some(mut last_msg) = states_current.messages.pop() {
+        let last_msg = if states_current.messages.len() % 2 == 1 {
+            reply
+        } else {
+            let mut last_msg = states_current.messages.pop().unwrap();
             last_msg.push_str(reply.as_str());
             last_msg
-        } else {
-            reply
         };
         states_current.messages.push(last_msg);
     }
@@ -107,29 +115,37 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         Constraint::Length(area.height - 1),
         Constraint::Length(1),
     ]);
-    let [message_area, input_area] = vertical.areas(f.area());
-    let input = Paragraph::new(format!(">>>{}", states_current.input.as_str()))
+    let top_mid_bottom = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Max(5), Constraint::Min(1)]) 
+        .split(area);
+    let (top, mid, bottom) = (top_mid_bottom[0], top_mid_bottom[1], top_mid_bottom[2]);
+    let [message_area, input_area] = vertical.areas(bottom);
+
+    let input = Paragraph::new(format!(">> {}", states_current.input.as_str()))
         .style(Style::default().fg(Color::Yellow));
     f.render_widget(input, input_area);
     f.set_cursor_position(Position::new(
         input_area.x + states_current.character_index as u16 + 3,
         input_area.y,
     ));
-    let messages: Vec<ListItem> = states_current.messages 
+    let mut text: Vec<Line> = states_current.messages
         .iter().rev()
-        .map(|m| {
-            let options = textwrap::Options::new(message_area.width as usize);
-            let text = Text::from(
-                textwrap::wrap(m, options)
-                    .iter()
-                    .map(|s| Line::from(s.to_string()))
-                    .collect::<>()
-                );
-              ListItem::new(text)
-        })
+        .take(message_area.height as usize)
+        .rev()
+        .map(|m| Line::from(m.as_str()))
         .collect();
-    let messages = List::new(messages)
-        .direction(ListDirection::BottomToTop);
+    if text.len() < message_area.height as usize {
+        let padding = std::iter::repeat_with(|| Line::from(""))
+            .take(message_area.height as usize - text.len());
+        text = padding.chain(text).collect();
+    }
+    let messages = Paragraph::new(text)
+        .alignment(Alignment::Left)
+        .wrap(Wrap { trim: true });
+
+    components::job_list_action_bar::render(f, top, current_style, action_selected);
+    components::job_new_helper::render(f, mid, current_style);
     f.render_widget(messages, message_area);
 }
 

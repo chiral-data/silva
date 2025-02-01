@@ -16,7 +16,7 @@ pub enum Tab {
 
 #[derive(Default)]
 pub struct States {
-    tab_action: Tab,
+    pub tab_action: Tab,
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &data_model::Store) {
@@ -27,19 +27,6 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         Tab::New => 0,
         Tab::Chat => 1
     };
-    let tabs_strings: Vec<String> = [
-            ("New", "[N]ew"),
-            ("Chat", "[C]ew"),
-        ].into_iter()
-        .enumerate()
-        .map(|(i, s)| if i == action_selected {
-            format!("[Enter] {}", s.0)
-        } else { s.1.to_string() })
-        .collect();
-    let actions = Tabs::new(tabs_strings)
-        .block(Block::bordered().title(" Actions "))
-        .select(action_selected)
-        .style(current_style);
 
     let job_mgr  = store.job_mgr.lock().unwrap();
     let jobs_string: Vec<String> = job_mgr.jobs.values()
@@ -56,7 +43,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         .split(area);
     let (top, mid, bottom) = (top_mid_bottom[0], top_mid_bottom[1], top_mid_bottom[2]);
 
-    f.render_widget(actions, top);
+    components::job_list_action_bar::render(f, top, current_style, action_selected);
     components::job_new_helper::render(f, mid, current_style);
     f.render_widget(job_list, bottom);
 }
