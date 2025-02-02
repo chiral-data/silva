@@ -58,7 +58,8 @@ impl Manager {
         // TODO: right now only hard coding
         let for_applications = vec![
             (App::Gromacs, vec![0, 1]),
-            (App::OpenAIWhisper, vec![1])
+            (App::OpenAIWhisper, vec![1]),
+            (App::Llm, vec![1])
         ].into_iter().collect();
 
         Manager { pod_types, for_applications }

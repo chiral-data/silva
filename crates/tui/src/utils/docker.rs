@@ -127,7 +127,7 @@ pub async fn build_image(
 
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] build image {image_name}] completed ..."));
+        job_mgr.add_log(0, format!("[docker] build image {image_name} completed ..."));
         job_mgr.clear_log_tmp(&0);
     }
     
@@ -137,7 +137,7 @@ pub async fn build_image(
 pub async fn push_image(username: Option<String>, password: Option<String>, image_name: &str, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] push image({image_name}) started ..."));
+        job_mgr.add_log(0, format!("[docker] push image {image_name} started ..."));
     }
 
     let docker = bollard::Docker::connect_with_local_defaults().unwrap();
@@ -169,7 +169,7 @@ pub async fn push_image(username: Option<String>, password: Option<String>, imag
 
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] push image({image_name}) completed ..."));
+        job_mgr.add_log(0, format!("[docker] push image {image_name} completed ..."));
         job_mgr.clear_log_tmp(&0);
     }
     Ok(())

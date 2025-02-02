@@ -16,7 +16,7 @@ async fn ollama_generate(prompt: String, job_mgr: Arc<Mutex<data_model::job::Man
     use tokio_stream::StreamExt;
 
     use ollama_rs::Ollama;
-    let ollama = Ollama::new("http://100.98.250.114".to_string(), 11434);
+    let ollama = Ollama::new("http://localhost".to_string(), 11434);
 
     let model = "deepseek-r1:1.5b".to_string();
     let mut stream = ollama.generate_stream(GenerationRequest::new(model, prompt)).await

@@ -5,8 +5,9 @@ pub enum App {
     #[default]
     Unknown,
     Gromacs,
-    MyPresto,
     OpenAIWhisper,
+    Llm,
+    MyPresto,
     Psi4,
 }
 
@@ -16,6 +17,8 @@ impl From<&str> for App {
             "gromacs" => App::Gromacs,
             "psi4" => App::Psi4,
             "mypresto" => App::MyPresto,
+            "openai_whisper" => App::OpenAIWhisper,
+            "llm" => App::Llm,
             _ => App::Unknown
         }
     }
@@ -26,8 +29,9 @@ impl App {
         match self {
             Self::Unknown => "Unknown",
             Self::Gromacs => "Gromacs",
-            Self::MyPresto => "myPresto",
             Self::OpenAIWhisper => "OpenAI Whisper",
+            Self::Llm => "LLM",
+            Self::MyPresto => "myPresto",
             Self::Psi4 => "Psi4",
         }
     }
@@ -38,6 +42,7 @@ impl App {
             Self::Gromacs => "molecular simulation",
             Self::MyPresto => "myPresto",
             Self::OpenAIWhisper => "speech recognition",
+            Self::Llm => "large language model",
             Self::Psi4 => "Psi4",
         }
     }
@@ -51,7 +56,7 @@ pub struct Manager {
 impl Manager {
     pub fn new() -> Self {
         let apps = vec![
-            App::Gromacs, App::OpenAIWhisper
+            App::Gromacs, App::OpenAIWhisper, App::Llm,
         ];
         Self { apps }
     }

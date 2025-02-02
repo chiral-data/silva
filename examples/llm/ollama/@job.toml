@@ -1,0 +1,12 @@
+[files]
+inputs = [
+]
+outputs = [
+]
+scripts = [
+  "run.sh"
+]
+
+[dok]
+base_image = "ollama/ollama"
+http_port = 11434
