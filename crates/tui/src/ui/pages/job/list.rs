@@ -44,7 +44,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     let (top, mid, bottom) = (top_mid_bottom[0], top_mid_bottom[1], top_mid_bottom[2]);
 
     components::job_list_action_bar::render(f, top, current_style, action_selected);
-    components::job_new_helper::render(f, mid, current_style);
+    components::helper_hint::render_job_new(f, mid, current_style);
     f.render_widget(job_list, bottom);
 }
 

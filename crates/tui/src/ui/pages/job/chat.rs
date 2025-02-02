@@ -11,25 +11,26 @@ use crate::ui;
 use crate::ui::components;
 
 
-async fn ollama_generate(prompt: String, job_mgr: Arc<Mutex<data_model::job::Manager>>) {
+async fn ollama_generate(prompt: String, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
     use ollama_rs::generation::completion::request::GenerationRequest;
-    // use ollama_rs::generation::chat::{request::ChatMessageRequest, ChatMessageResponseStream};
     use tokio_stream::StreamExt;
 
     use ollama_rs::Ollama;
     let ollama = Ollama::new("http://100.98.250.114".to_string(), 11434);
 
     let model = "deepseek-r1:1.5b".to_string();
-    let mut stream = ollama.generate_stream(GenerationRequest::new(model, prompt)).await.unwrap();
+    let mut stream = ollama.generate_stream(GenerationRequest::new(model, prompt)).await
+        .map_err(|e| anyhow::Error::msg(format!("ollama generate stream error: {e}")))?;
 
     while let Some(res) = stream.next().await {
-        let responses = res.unwrap();
+        let responses = res.map_err(|e| anyhow::Error::msg(format!("ollama stream response error: {e}")))?;
         for resp in responses {
             let mut job_mgr = job_mgr.lock().unwrap();
             job_mgr.chat_stream.push_str(resp.response.as_str());
         }
     }
 
+    Ok(())
 }
 
 #[derive(Default)]
@@ -145,7 +146,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         .scroll((line_count.saturating_sub(message_area.height), 0));
 
     components::job_list_action_bar::render(f, top, current_style, action_selected);
-    components::job_new_helper::render(f, mid, current_style);
+    components::helper_hint::render_chat(f, mid, current_style);
     f.render_widget(messages, message_area);
 }
 
@@ -158,7 +159,13 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
             let prompt = states_current.submit();
             let job_mgr = store.job_mgr.clone();
             tokio::spawn(async move {
-                ollama_generate(prompt, job_mgr.clone()).await 
+                match ollama_generate(prompt, job_mgr.clone()).await {
+                    Ok(()) => (),
+                    Err(e) => {
+                        let mut job_mgr = job_mgr.lock().unwrap();
+                        job_mgr.add_log(0, format!("run job error: {e}"));
+                    } 
+                }
             });
         }
         KeyCode::Char(to_insert) => states_current.enter_char(to_insert),
