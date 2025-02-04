@@ -7,7 +7,7 @@ pub fn render(
 ) {
     let tabs_strings: Vec<String> = [
             ("New", "[N]ew"),
-            ("Chat", "[C]ew"),
+            ("Chat", "[C]hat"),
         ].into_iter()
         .enumerate()
         .map(|(i, s)| if i == action_selected {

@@ -118,7 +118,7 @@ pub async fn build_image(
                     job_mgr.add_log_tmp(0, format!("[docker] non handled build_info {:?}", build_info));
                 }
             }
-            Err(e) => return Err(anyhow::Error::msg(format!("[docker] push image error {e}")))
+            Err(e) => return Err(anyhow::Error::msg(format!("[docker] build image error {e}")))
         }
     }
     tokio::fs::remove_file(FILENAME_DOCKER).await.unwrap();
