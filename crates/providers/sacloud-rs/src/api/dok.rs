@@ -16,7 +16,7 @@
 //!     - [] PUT        /registries/{registryID}/
 //! Task
 //!     - [x] GET       /tasks/
-//!     - [] POST       /tasks/
+//!     - [x] POST       /tasks/
 //!     - [x] GET       /tasks/{taskId}/
 //!     - [] DELETE     /tasks/{taskId}/
 //!     - [] POST       /tasks/{taskId}/cancel/
@@ -59,6 +59,7 @@ create_struct!(RegistryList, "lowercase",
 create_struct!(Task, "lowercase",
     id: String,
     status: String,
+    http_uri: Option<String>,
     artifact: Option<Artifact>
 );
 
@@ -143,15 +144,28 @@ mod tests {
             .registry(Some(registry.id.to_string()))
             .command(vec![])
             .entrypoint(vec![])
+            .http(params::Http { path: "/".to_string(), port: 7979 })
             .plan(params::Plan::V100);
         let post_tasks = params::PostTasks::default()
             .name("some_task".to_string())
             .containers(vec![container])
             .tags(vec![]);
-        let task_created: TaskCreated = client.tasks().dok_end()
+        let task_created: TaskCreated = client.clone().tasks().dok_end()
             .set_params(&post_tasks).unwrap()
             .post().await.unwrap();
-        dbg!(task_created);
+        dbg!(&task_created);
+
+        loop {
+            let client = client.clone();
+            let task: Task = client.tasks().task_id(&task_created.id)
+                .dok_end().get().await.unwrap();
+            if let Some(http_uri) = task.http_uri {
+                dbg!(http_uri);
+            }
+            if task.status == "done" {
+                break;
+            }
+        }
     }
 
     #[tokio::test]

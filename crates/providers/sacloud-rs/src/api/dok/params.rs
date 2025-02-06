@@ -27,6 +27,12 @@ pub enum Plan {
 }
 
 #[derive(Serialize, Default)]
+pub struct Http {
+    pub path: String,
+    pub port: u16
+}
+
+#[derive(Serialize, Default)]
 pub struct Container {
     image: String,
     registry: Option<String>,
@@ -37,7 +43,8 @@ pub struct Container {
     //  - it can be ignored
     //  - sending an empty value {} or null will lead to error
     // environment: Option<HashMap<String, String>>,
-    plan: Plan
+    plan: Plan,
+    http: Option<Http>
 }
 
 impl Container {
@@ -47,6 +54,7 @@ impl Container {
     pub fn entrypoint(mut self, entrypoint: Vec<String>) -> Self { self.entrypoint = entrypoint; self }
     // pub fn environment(mut self, environment: Option<HashMap<String, String>>) -> Self { self.environment = environment; self }
     pub fn plan(mut self, plan: Plan) -> Self { self.plan = plan; self }
+    pub fn http(mut self, http: Http) -> Self { self.http = Some(http); self }
 }
 
 /// Request for POST /tasks/
