@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::{Path, PathBuf}, sync::{Arc, Mutex}};
+use std::{path::{Path, PathBuf}, sync::{Arc, Mutex}};
 use std::io::{Read, Write};
 
 use futures_util::stream::StreamExt;
@@ -53,7 +53,8 @@ pub fn prepare_build_files(
     writeln!(docker_file, "ADD ./{FILENAME_ENTRYPOINT} /opt/{proj_name}")?;
     writeln!(docker_file)?;
     writeln!(docker_file, "WORKDIR /opt/{proj_name}")?;
-    writeln!(docker_file, "CMD [\"sh\", \"{}\"]", FILENAME_ENTRYPOINT)?;
+    writeln!(docker_file, "ENTRYPOINT [\"/bin/bash\"]")?;
+    writeln!(docker_file, "CMD [\"{}\"]", FILENAME_ENTRYPOINT)?;
 
     Ok(())
 }
@@ -175,26 +176,27 @@ pub async fn push_image(username: Option<String>, password: Option<String>, imag
     Ok(())
 }
 
-fn gpu_host_config() -> bollard::models::HostConfig  {
-    bollard::models::HostConfig {
-        extra_hosts: Some(vec!["host.docker.internal:host-gateway".into()]),
-        device_requests: Some(vec![bollard::models::DeviceRequest {
-            driver: Some("".into()),
-            count: Some(-1),
-            device_ids: None,
-            capabilities: Some(vec![vec!["gpu".into()]]),
-            options: Some(HashMap::new()),
-        }]),
-        ..Default::default()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::path::Path;
     use std::env;
+    use std::collections::HashMap;
 
     use super::*;
+
+    fn gpu_host_config() -> bollard::models::HostConfig  {
+        bollard::models::HostConfig {
+            extra_hosts: Some(vec!["host.docker.internal:host-gateway".into()]),
+            device_requests: Some(vec![bollard::models::DeviceRequest {
+                driver: Some("".into()),
+                count: Some(-1),
+                device_ids: None,
+                capabilities: Some(vec![vec!["gpu".into()]]),
+                options: Some(HashMap::new()),
+            }]),
+            ..Default::default()
+        }
+    }
 
     const SILVA_SAKURA_DOK_CONTAINER_REGISTRY_ADDRESS: &str = "SILVA_SAKURA_DOK_CONTAINER_REGISTRY_ADDRESS";
     const SILVA_SAKURA_DOK_CONTAINER_REGISTRY_USERNAME: &str = "SILVA_SAKURA_DOK_CONTAINER_REGISTRY_USERNAME";
