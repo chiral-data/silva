@@ -11,7 +11,7 @@ pub enum Tab {
     Pod,
     #[default]
     Files,
-    Build,
+    // Build,
     Pre,
     Run,
     Post,
@@ -22,7 +22,7 @@ impl Tab {
         match self {
             Self::Pod => ("Select a Pod", "[P]ods"), 
             Self::Files => ("Files", "[F]iles"), 
-            Self::Build => ("Build Docker Image", "[B]uild"),
+            // Self::Build => ("Build Docker Image", "[B]uild"),
             Self::Pre => ("Pre-processing", "Pr[e]"),
             Self::Run => ("Run", "[R]un"),
             Self::Post => ("Post-processing", "Po[s]t"),
@@ -33,7 +33,7 @@ impl Tab {
         match self {
             Tab::Pod => 0,
             Tab::Files => 1,
-            Tab::Build => 2,
+            // Tab::Build => 2,
             Tab::Pre => 3,
             Tab::Run => 4,
             Tab::Post => 5,
@@ -52,21 +52,21 @@ pub struct States {
 // }
 
 
-fn filter_tabs(tab: &Tab, states: &ui::states::States) -> bool {
-    match tab {
-        // build action not for localhost
-        Tab::Build => states.job_states.pod_type.pod_type_sel_id != Some(0),
-        _ => true
-    }
-}
+// fn filter_tabs(tab: &Tab, states: &ui::states::States) -> bool {
+//     match tab {
+//         // build action not for localhost
+//         Tab::Build => states.job_states.pod_type.pod_type_sel_id != Some(0),
+//         _ => true
+//     }
+// }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &data_model::Store) {
     let current_style = states.get_style(true);
 
     let tabs_strings: Vec<String> = [
-            Tab::Pod, Tab::Files, Tab::Build, Tab::Pre, Tab::Run, Tab::Post
+            Tab::Pod, Tab::Files, Tab::Pre, Tab::Run, Tab::Post
         ].into_iter()
-        .filter(|t| filter_tabs(t, states))
+        // .filter(|t| filter_tabs(t, states))
         .map(|t| {
             let texts = t.texts();
             if t == states.job_states.detail.tab_action {
@@ -83,7 +83,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     let helper_lines: Vec<Line> = match states_current.tab_action {
         Tab::Pod => pod::HELPER, 
         Tab::Files => files::HELPER,
-        Tab::Build => build::HELPER,
+        // Tab::Build => build::HELPER,
         Tab::Pre => pre::HELPER,
         Tab::Run => run::HELPER,
         Tab::Post => post::HELPER,
@@ -107,7 +107,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     match states_current.tab_action {
         Tab::Pod => (),
         Tab::Files => files::render(f, bottom, states, store),
-        Tab::Build => (),
+        // Tab::Build => (),
         Tab::Pre => (),
         Tab::Run => run::render(f, bottom, states, store),
         Tab::Post => (),
@@ -121,7 +121,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
     match key.code {
         KeyCode::Char('p') | KeyCode::Char('P') => states_current.tab_action = Tab::Pod,
         KeyCode::Char('f') | KeyCode::Char('F') => states_current.tab_action = Tab::Files,
-        KeyCode::Char('b') | KeyCode::Char('B') => states_current.tab_action = Tab::Build,
+        // KeyCode::Char('b') | KeyCode::Char('B') => states_current.tab_action = Tab::Build,
         KeyCode::Char('e') | KeyCode::Char('E') => states_current.tab_action = Tab::Pre,
         KeyCode::Char('r') | KeyCode::Char('R') => states_current.tab_action = Tab::Run,
         KeyCode::Char('s') | KeyCode::Char('S') => states_current.tab_action = Tab::Post,
@@ -129,7 +129,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
             match match states_current.tab_action {
                 Tab::Pod => pod::action(states, store),
                 Tab::Files => Ok(()),
-                Tab::Build => build::action(states, store),
+                // Tab::Build => build::action(states, store),
                 Tab::Pre => pre::action(states, store),
                 Tab::Run => run::action(states, store),
                 Tab::Post => post::action(states, store),
@@ -143,7 +143,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
             match states_current.tab_action {
                 Tab::Pod => (),
                 Tab::Files => files::handle_key(key, states, store),
-                Tab::Build => (),
+                // Tab::Build => (),
                 Tab::Pre => (),
                 Tab::Run => (),
                 Tab::Post => (),
@@ -155,7 +155,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
 mod params;
 mod pod;
 mod files;
-mod build;
+// mod build; TODO
 mod pre;
 mod run;
 mod post;

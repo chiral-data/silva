@@ -1,5 +1,5 @@
-use std::{path::{Path, PathBuf}, sync::{Arc, Mutex}};
-use std::io::{Read, Write};
+use std::{path::PathBuf, sync::{Arc, Mutex}};
+use std::io::Read;
 
 use futures_util::stream::StreamExt;
 
@@ -9,55 +9,55 @@ use data_model::job::settings::Settings as JobSettings;
 const FILENAME_ENTRYPOINT: &str = "@run.sh";
 const FILENAME_DOCKER: &str = "Dockerfile";
 
-pub fn prepare_build_files(
-    proj_dir: &Path,
-    job_settings: &JobSettings
-) -> anyhow::Result<()> {
-    let proj_name = data_model::job::Job::get_project_name(proj_dir)?;
-    let dok = job_settings.dok.as_ref()
-        .ok_or(anyhow::Error::msg("no DOK settings"))?;
-    let base_image = &dok.base_image;
+// pub fn prepare_build_files(
+//     proj_dir: &Path,
+//     job_settings: &JobSettings
+// ) -> anyhow::Result<()> {
+//     let proj_name = data_model::job::Job::get_project_name(proj_dir)?;
+//     let dok = job_settings.dok.as_ref()
+//         .ok_or(anyhow::Error::msg("no DOK settings"))?;
+//     let base_image = &dok.base_image;
 
-    // create entrypoint @run.sh
-    let entrypoint_filepath = proj_dir.join(FILENAME_ENTRYPOINT);
-    let mut entrypoint_file = std::fs::File::create(entrypoint_filepath)?;
-    writeln!(entrypoint_file, "#!/bin/bash")?;
-    writeln!(entrypoint_file, "#")?;
-    writeln!(entrypoint_file)?;
-    for script_file in job_settings.files.scripts.iter() {
-        writeln!(entrypoint_file, "sh {}", script_file)?;
-    }
-    writeln!(entrypoint_file)?;
-    for output_file in job_settings.files.outputs.iter() {
-        writeln!(entrypoint_file, "cp {} /opt/artifact", output_file)?;
-    }
+//     // create entrypoint @run.sh
+//     let entrypoint_filepath = proj_dir.join(FILENAME_ENTRYPOINT);
+//     let mut entrypoint_file = std::fs::File::create(entrypoint_filepath)?;
+//     writeln!(entrypoint_file, "#!/bin/bash")?;
+//     writeln!(entrypoint_file, "#")?;
+//     writeln!(entrypoint_file)?;
+//     for script_file in job_settings.files.scripts.iter() {
+//         writeln!(entrypoint_file, "sh {}", script_file)?;
+//     }
+//     writeln!(entrypoint_file)?;
+//     for output_file in job_settings.files.outputs.iter() {
+//         writeln!(entrypoint_file, "cp {} /opt/artifact", output_file)?;
+//     }
 
-    // create Docker file
-    let mut docker_file = std::fs::File::create(proj_dir.join(FILENAME_DOCKER))?;
-    writeln!(docker_file, "FROM {base_image}")?;
-    writeln!(docker_file)?;
-    writeln!(docker_file, "RUN mkdir -p /opt/{proj_name}")?;
-    for input_file in job_settings.files.inputs.iter() {
-        writeln!(docker_file, "ADD ./{input_file} /opt/{proj_name}")?;
-    }
-    for script_file in job_settings.files.scripts.iter() {
-        writeln!(docker_file, "ADD ./{script_file} /opt/{proj_name}")?;
-    }
-    if let Some(dok) = &job_settings.dok {
-        if let Some(extra_build_commands) = &dok.extra_build_commands {
-            for cmd in extra_build_commands.iter() {
-                writeln!(docker_file, "RUN {cmd}")?; 
-            }
-        }
-    }
-    writeln!(docker_file, "ADD ./{FILENAME_ENTRYPOINT} /opt/{proj_name}")?;
-    writeln!(docker_file)?;
-    writeln!(docker_file, "WORKDIR /opt/{proj_name}")?;
-    writeln!(docker_file, "ENTRYPOINT [\"/bin/bash\"]")?;
-    writeln!(docker_file, "CMD [\"{}\"]", FILENAME_ENTRYPOINT)?;
+//     // create Docker file
+//     let mut docker_file = std::fs::File::create(proj_dir.join(FILENAME_DOCKER))?;
+//     writeln!(docker_file, "FROM {base_image}")?;
+//     writeln!(docker_file)?;
+//     writeln!(docker_file, "RUN mkdir -p /opt/{proj_name}")?;
+//     for input_file in job_settings.files.inputs.iter() {
+//         writeln!(docker_file, "ADD ./{input_file} /opt/{proj_name}")?;
+//     }
+//     for script_file in job_settings.files.scripts.iter() {
+//         writeln!(docker_file, "ADD ./{script_file} /opt/{proj_name}")?;
+//     }
+//     if let Some(dok) = &job_settings.dok {
+//         if let Some(extra_build_commands) = &dok.extra_build_commands {
+//             for cmd in extra_build_commands.iter() {
+//                 writeln!(docker_file, "RUN {cmd}")?; 
+//             }
+//         }
+//     }
+//     writeln!(docker_file, "ADD ./{FILENAME_ENTRYPOINT} /opt/{proj_name}")?;
+//     writeln!(docker_file)?;
+//     writeln!(docker_file, "WORKDIR /opt/{proj_name}")?;
+//     writeln!(docker_file, "ENTRYPOINT [\"/bin/bash\"]")?;
+//     writeln!(docker_file, "CMD [\"{}\"]", FILENAME_ENTRYPOINT)?;
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 pub async fn build_image(
     proj_dir: &PathBuf, 
@@ -72,7 +72,7 @@ pub async fn build_image(
 
     std::env::set_current_dir(proj_dir)?;
 
-    prepare_build_files(proj_dir, job_settings)?;
+    // prepare_build_files(proj_dir, job_settings)?;
    
     // create tar file for building the image
     let filename_tar = "image.tar";
