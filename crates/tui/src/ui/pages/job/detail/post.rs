@@ -9,7 +9,9 @@ pub const HELPER: &[&str] = &[
 pub fn action(_states: &mut ui::states::States, store: &mut data_model::Store) -> anyhow::Result<()> {
     let proj_sel = store.project_sel.as_mut()
         .ok_or(anyhow::Error::msg("no selected project"))?;
-    let proj_dir = proj_sel.dir.to_owned();
+    let _ = proj_sel.get_dir().join("@post.sh").exists().then_some(0)
+        .ok_or(anyhow::Error::msg("script file @post.sh not exist"))?;
+    let proj_dir = proj_sel.get_dir().to_owned();
 
     let jh = tokio::spawn(async move {
         let _ = tokio::process::Command::new("sh")
@@ -17,7 +19,7 @@ pub fn action(_states: &mut ui::states::States, store: &mut data_model::Store) -
             .arg("@post.sh")
             .output().await.unwrap();
     });
-    proj_sel.jh_post = Some(jh);
+    proj_sel.add_post_processing(jh);
 
     Ok(())
 }

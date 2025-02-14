@@ -37,7 +37,7 @@ impl Store {
     pub fn update_project(&mut self, proj_dir: &Path) -> anyhow::Result<()> {
         let job_settings = job::Job::get_settings(proj_dir)?;
         let files = job_settings.files.all_files();
-        let proj = project::Project { dir: proj_dir.to_path_buf(), files, jh_pre: None, jh_post: None };
+        let proj = project::Project::new(proj_dir.to_path_buf(), files);
         self.project_sel = Some(proj);
 
         Ok(())

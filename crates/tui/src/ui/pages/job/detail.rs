@@ -34,9 +34,9 @@ impl Tab {
             Tab::Pod => 0,
             Tab::Files => 1,
             // Tab::Build => 2,
-            Tab::Pre => 3,
-            Tab::Run => 4,
-            Tab::Post => 5,
+            Tab::Pre => 2,
+            Tab::Run => 3,
+            Tab::Post => 4,
         }
     }
 }

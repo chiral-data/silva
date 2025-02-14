@@ -93,10 +93,15 @@ async fn launch_job_dok(
 pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> anyhow::Result<()> {
     let proj_sel = store.project_sel.as_ref()
         .ok_or(anyhow::Error::msg("no selected project"))?;
-    let proj_dir = proj_sel.dir.to_owned();
-    let job_settings = data_model::job::Job::get_settings(&proj_dir)?;
+    let proj_dir = proj_sel.get_dir().to_owned();
     let params_dok = super::params::params_dok(store)?;
     let job_mgr = store.job_mgr.clone();
+
+    let job_settings = data_model::job::Job::get_settings(&proj_dir)?;
+    if job_settings.dok.is_some() {
+        proj_dir.join("Dockerfile").exists().then_some(0)
+            .ok_or(anyhow::Error::msg("using DOK service requires a Dockerfile under the project folder"))?;
+    }
     tokio::spawn(async move {
         match launch_job_dok(proj_dir, job_settings, params_dok, job_mgr.clone()).await {
             Ok(()) => (),

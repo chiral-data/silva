@@ -32,8 +32,8 @@ pub struct States {
 pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mut data_model::Store) {
     let states_current = &states.info_states;
 
-    let project_sel = if let Some(proj) = store.project_sel.as_ref() {
-        proj.dir.to_str().unwrap()
+    let project_path = if let Some(proj) = store.project_sel.as_ref() {
+        proj.get_dir().to_str().unwrap()
     } else { "None" };
     let pod_type_sel_string = if let Some(pt) = states.job_states.app_detail.pod_type_selected() {
        pt.name.to_string()
@@ -43,24 +43,16 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mu
     } else { "None".to_string() };
 
     let mut text: Vec<Line> = vec![
-        Line::from(format!("[Selected Project]   {project_sel}")).green(),
+        Line::from(format!("[Selected Project]   {project_path}")).green(),
         Line::from(format!("[Selected Pod Type]  {pod_type_sel_string}")).green(),
         Line::from(format!("[Selected Pod]       {pod_sel_string}")).green(),
     ];
     if let Some(proj) = store.project_sel.as_mut() {
-        if let Some(jh_pre) = proj.jh_pre.as_ref() {
-            if jh_pre.is_finished() {
-                proj.jh_pre = None;
-            } else {
-                text.push(Line::from("[Pre-processing] running ...").green());
-            }
+        if !proj.is_pre_processing_finished() {
+            text.push(Line::from("[Pre-processing] running ...").green());
         }
-        if let Some(jh_post) = proj.jh_post.as_ref() {
-            if jh_post.is_finished() {
-                proj.jh_post = None;
-            } else {
-                text.push(Line::from("[Post-processing] running ...").green());
-            }
+        if !proj.is_post_processing_finished() {
+            text.push(Line::from("[Post-processing] running ...").green());
         }
     }
     let paragrah = Paragraph::new(text)
