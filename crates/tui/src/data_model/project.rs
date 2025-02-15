@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+#[derive(Clone)]
 pub struct Project {
     dir: PathBuf,
     job_settings: super::job::settings::Settings

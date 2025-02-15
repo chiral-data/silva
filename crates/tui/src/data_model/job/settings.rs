@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::data_model::provider;
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Clone)]
 pub struct Files {
     pub inputs: Vec<String>,
     pub outputs: Vec<String>,
@@ -29,7 +29,7 @@ impl Files {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Clone)]
 pub struct Settings {
     pub files: Files,
     pub dok: Option<provider::sakura_internet::DokSettings>,

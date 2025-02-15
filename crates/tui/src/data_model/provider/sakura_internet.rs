@@ -7,7 +7,7 @@ pub enum DokGpuType {
 }
 
 /// settings for Sakura Iternet DOK service
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Clone)]
 pub struct DokSettings {
     // pub base_image: String,
     // pub extra_build_commands: Option<Vec<String>>,
