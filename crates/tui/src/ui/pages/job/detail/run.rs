@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -7,8 +6,7 @@ use ratatui::widgets::*;
 
 use sacloud_rs::api::dok;
 
-use crate::data_model::{self, registry};
-use data_model::job::settings::Settings as JobSettings;
+use crate::data_model;
 use crate::ui;
 use crate::utils;
 
@@ -35,53 +33,56 @@ async fn launch_job_dok(
         job_mgr.add_log(job_id, format!("[sakura internet DOK] task {} created", task_created.id));
     }
 
-    // // check task status
-    // let task = loop {
-    //     tokio::time::sleep(Duration::from_secs(1)).await;
-    //     let task = dok::shortcuts::get_task(client.clone(), &task_created.id).await?;
-    //     let mut job_mgr = job_mgr.lock().unwrap();
-    //     job_mgr.add_log_tmp(job_id, format!("[sakura internet DOK] task {} status: {}", task.id, task.status));
-    //     if task.status == "done" {
-    //         job_mgr.clear_log_tmp(&job_id);
-    //         break task;
-    //     }
-    // };
+    // check task status
+    let task = loop {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let task = dok::shortcuts::get_task(client.clone(), &task_created.id).await?;
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log_tmp(job_id, format!("[sakura internet DOK] task {} status: {}", task.id, task.status));
+        if task.status == "done" {
+            job_mgr.clear_log_tmp(&job_id);
+            break task;
+        }
+        if let Some(http_uri) = task.http_uri.as_ref() {
+            job_mgr.dok_http_uri = Some(http_uri.to_string());
+        }
+    };
 
-    // // get artifact url
-    // let mut count = 0;
-    // let af_url = loop {
-    //     tokio::time::sleep(Duration::from_secs(1)).await;
-    //     count += 1;
-    //     match dok::shortcuts::get_artifact_download_url(client.clone(), &task).await {
-    //         Ok(af_url) => {
-    //             let mut job_mgr = job_mgr.lock().unwrap();
-    //             job_mgr.clear_log_tmp(&job_id);
-    //             break af_url;
-    //         }
-    //         Err(_e) => {
-    //             let mut job_mgr = job_mgr.lock().unwrap();
-    //             job_mgr.add_log_tmp(job_id, 
-    //                 format!("[sakura internet DOK] output files (artifact {}) of task {} not ready {}",
-    //                     task.artifact.as_ref().unwrap().id, task_created.id, ".".repeat(count % 5))
-    //             );
-    //         }
-    //     }
-    // };
+    // get artifact url
+    let mut count = 0;
+    let af_url = loop {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        count += 1;
+        match dok::shortcuts::get_artifact_download_url(client.clone(), &task).await {
+            Ok(af_url) => {
+                let mut job_mgr = job_mgr.lock().unwrap();
+                job_mgr.clear_log_tmp(&job_id);
+                break af_url;
+            }
+            Err(_e) => {
+                let mut job_mgr = job_mgr.lock().unwrap();
+                job_mgr.add_log_tmp(job_id, 
+                    format!("[sakura internet DOK] output files (artifact {}) of task {} not ready {}",
+                        task.artifact.as_ref().unwrap().id, task_created.id, ".".repeat(count % 5))
+                );
+            }
+        }
+    };
 
-    // // download outputs  
-    // let filepath = proj_dir.join("artifact.tar.gz");
-    // {
-    //     let mut job_mgr = job_mgr.lock().unwrap();
-    //     job_mgr.add_log(job_id, format!("[sakura internet DOK] downloading output files of task {}", task_created.id));
-    // }
-    // utils::file::download(&af_url.url, &filepath).await?;
-    // utils::file::unzip_tar_gz(&filepath, &proj_dir)?;
-    // {
-    //     let mut job_mgr = job_mgr.lock().unwrap();
-    //     job_mgr.add_log(job_id, format!("[sakura internet DOK] downloaded output files of task {}", task_created.id));
-    // }
-    // std::fs::remove_file(&filepath)?;
-    // 
+    // download outputs  
+    let filepath = proj.get_dir().join("artifact.tar.gz");
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[sakura internet DOK] downloading output files of task {}", task_created.id));
+    }
+    utils::file::download(&af_url.url, &filepath).await?;
+    utils::file::unzip_tar_gz(&filepath, proj.get_dir())?;
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[sakura internet DOK] downloaded output files of task {}", task_created.id));
+    }
+    std::fs::remove_file(&filepath)?;
+
     Ok(())
 }
 

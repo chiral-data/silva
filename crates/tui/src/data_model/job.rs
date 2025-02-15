@@ -64,6 +64,7 @@ pub struct Manager {
     pub jobs: HashMap<usize, Job>,
     /// job logs: <job id, log contents>
     pub chat_stream: String,
+    pub dok_http_uri: Option<String>,
     pub logs: HashMap<usize, VecDeque<String>>,
     pub logs_tmp: HashMap<usize, String>
 }
@@ -90,7 +91,9 @@ impl Manager {
             None => HashMap::new() 
         };
 
-        let s = Self { jobs, chat_stream: String::new(), logs: HashMap::new(), logs_tmp: HashMap::new() };
+        let chat_stream = String::new();
+        let dok_http_uri = None;
+        let s = Self { jobs, chat_stream, dok_http_uri, logs: HashMap::new(), logs_tmp: HashMap::new() };
         Ok(s)
     }
 
