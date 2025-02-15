@@ -28,7 +28,9 @@ async fn launch_job(
 
     // create the task
     let client = params_dok.client.clone();
-    let task_created = dok::shortcuts::create_task(client.clone(), &params_dok.image_name, &params_dok.registry_dok.id, params_dok.plan).await?;
+    let task_created = dok::shortcuts::create_task(
+        client.clone(), &params_dok.image_name, &params_dok.registry_dok.id, params_dok.plan
+    ).await?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
         job_mgr.add_log(0, format!("[sakura internet DOK] task {} created", task_created.id));

@@ -19,74 +19,70 @@ pub const HELPER: &[&str] = &[
 async fn launch_job_dok(
     proj_dir: PathBuf, 
     job_settings: JobSettings,
-    params_dok: super::params::ParametersDok,
+    params_dok: dok::params::Container, 
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
     // build & push the docker image
-    utils::docker::build_image(&proj_dir, &job_settings, &params_dok.image_name, job_mgr.clone()).await?;
-    utils::docker::push_image(params_dok.registry.username.clone(), params_dok.registry.password.clone(), &params_dok.image_name, job_mgr.clone()).await?;
+    // utils::docker::build_image(&proj_dir, &job_settings, &params_dok.image_name, job_mgr.clone()).await?;
+    // utils::docker::push_image(params_dok.registry.username.clone(), params_dok.registry.password.clone(), &params_dok.image_name, job_mgr.clone()).await?;
     let job_id = 0;
 
+    // construct post_task params
+
     // create the task
-    let client = params_dok.client.clone();
-    let registry_id = params_dok.registry.dok_id.as_ref()
-        .ok_or(anyhow::Error::msg(format!("registry {} with username {} has not been added into DOK service", 
-            params_dok.registry.hostname.as_str(),
-            if let Some(un) = &params_dok.registry.username.as_ref() { un } else { "" }
-        )))?;
-    let task_created = dok::shortcuts::create_task(client.clone(), &params_dok.image_name, registry_id, params_dok.plan).await?;
-    {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(job_id, format!("[sakura internet DOK] task {} created", task_created.id));
-    }
+    // let task_created = dok::shortcuts::create_task(client.clone(), &params_dok.image_name, registry_id, params_dok.plan).await?;
+    // {
+    //     let mut job_mgr = job_mgr.lock().unwrap();
+    //     job_mgr.add_log(job_id, format!("[sakura internet DOK] task {} created", task_created.id));
+    // }
 
-    // check task status
-    let task = loop {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        let task = dok::shortcuts::get_task(client.clone(), &task_created.id).await?;
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log_tmp(job_id, format!("[sakura internet DOK] task {} status: {}", task.id, task.status));
-        if task.status == "done" {
-            job_mgr.clear_log_tmp(&job_id);
-            break task;
-        }
-    };
+    // // check task status
+    // let task = loop {
+    //     tokio::time::sleep(Duration::from_secs(1)).await;
+    //     let task = dok::shortcuts::get_task(client.clone(), &task_created.id).await?;
+    //     let mut job_mgr = job_mgr.lock().unwrap();
+    //     job_mgr.add_log_tmp(job_id, format!("[sakura internet DOK] task {} status: {}", task.id, task.status));
+    //     if task.status == "done" {
+    //         job_mgr.clear_log_tmp(&job_id);
+    //         break task;
+    //     }
+    // };
 
-    // get artifact url
-    let mut count = 0;
-    let af_url = loop {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        count += 1;
-        match dok::shortcuts::get_artifact_download_url(client.clone(), &task).await {
-            Ok(af_url) => {
-                let mut job_mgr = job_mgr.lock().unwrap();
-                job_mgr.clear_log_tmp(&job_id);
-                break af_url;
-            }
-            Err(_e) => {
-                let mut job_mgr = job_mgr.lock().unwrap();
-                job_mgr.add_log_tmp(job_id, 
-                    format!("[sakura internet DOK] output files (artifact {}) of task {} not ready {}",
-                        task.artifact.as_ref().unwrap().id, task_created.id, ".".repeat(count % 5))
-                );
-            }
-        }
-    };
+    // // get artifact url
+    // let mut count = 0;
+    // let af_url = loop {
+    //     tokio::time::sleep(Duration::from_secs(1)).await;
+    //     count += 1;
+    //     match dok::shortcuts::get_artifact_download_url(client.clone(), &task).await {
+    //         Ok(af_url) => {
+    //             let mut job_mgr = job_mgr.lock().unwrap();
+    //             job_mgr.clear_log_tmp(&job_id);
+    //             break af_url;
+    //         }
+    //         Err(_e) => {
+    //             let mut job_mgr = job_mgr.lock().unwrap();
+    //             job_mgr.add_log_tmp(job_id, 
+    //                 format!("[sakura internet DOK] output files (artifact {}) of task {} not ready {}",
+    //                     task.artifact.as_ref().unwrap().id, task_created.id, ".".repeat(count % 5))
+    //             );
+    //         }
+    //     }
+    // };
 
-    // download outputs  
-    let filepath = proj_dir.join("artifact.tar.gz");
-    {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(job_id, format!("[sakura internet DOK] downloading output files of task {}", task_created.id));
-    }
-    utils::file::download(&af_url.url, &filepath).await?;
-    utils::file::unzip_tar_gz(&filepath, &proj_dir)?;
-    {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(job_id, format!("[sakura internet DOK] downloaded output files of task {}", task_created.id));
-    }
-    std::fs::remove_file(&filepath)?;
-    
+    // // download outputs  
+    // let filepath = proj_dir.join("artifact.tar.gz");
+    // {
+    //     let mut job_mgr = job_mgr.lock().unwrap();
+    //     job_mgr.add_log(job_id, format!("[sakura internet DOK] downloading output files of task {}", task_created.id));
+    // }
+    // utils::file::download(&af_url.url, &filepath).await?;
+    // utils::file::unzip_tar_gz(&filepath, &proj_dir)?;
+    // {
+    //     let mut job_mgr = job_mgr.lock().unwrap();
+    //     job_mgr.add_log(job_id, format!("[sakura internet DOK] downloaded output files of task {}", task_created.id));
+    // }
+    // std::fs::remove_file(&filepath)?;
+    // 
     Ok(())
 }
 
@@ -102,6 +98,8 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
         proj_dir.join("Dockerfile").exists().then_some(0)
             .ok_or(anyhow::Error::msg("using DOK service requires a Dockerfile under the project folder"))?;
     }
+
+    let client = store.account_mgr.create_client(&store.setting_mgr)?.clone();
     tokio::spawn(async move {
         match launch_job_dok(proj_dir, job_settings, params_dok, job_mgr.clone()).await {
             Ok(()) => (),

@@ -21,13 +21,14 @@ pub async fn create_registry(client: Client, hostname: &str, username: &str, pas
     Ok(registry)
 }
 
-pub async fn create_task(client: Client, image_name: &str, registry_id: &str, plan: dok::params::Plan) -> anyhow::Result<dok::TaskCreated> {
-    let container = dok::params::Container::default()
-        .image(image_name.to_string())
-        .registry(Some(registry_id.to_string()))
-        .command(vec![])
-        .entrypoint(vec![])
-        .plan(plan);
+// pub async fn create_task(client: Client, image_name: &str, registry_id: &str, plan: dok::params::Plan) -> anyhow::Result<dok::TaskCreated> {
+pub async fn create_task(client: Client, container: dok::params::Container) -> anyhow::Result<dok::TaskCreated> {
+    // let container = dok::params::Container::default()
+    //     .image(image_name.to_string())
+    //     .registry(Some(registry_id.to_string()))
+    //     .command(vec![])
+    //     .entrypoint(vec![])
+    //     .plan(plan);
     let post_tasks = dok::params::PostTasks::default()
         .name("some_task".to_string())
         .containers(vec![container])
