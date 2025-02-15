@@ -1,10 +1,9 @@
-use std::{path::PathBuf, sync::{Arc, Mutex}};
+use std::sync::{Arc, Mutex};
 use std::io::Read;
 
 use futures_util::stream::StreamExt;
 
 use crate::data_model;
-use data_model::job::settings::Settings as JobSettings;
 
 const FILENAME_ENTRYPOINT: &str = "@run.sh";
 const FILENAME_DOCKER: &str = "Dockerfile";
@@ -60,17 +59,16 @@ const FILENAME_DOCKER: &str = "Dockerfile";
 // }
 
 pub async fn build_image(
-    proj_dir: &PathBuf, 
-    job_settings: &JobSettings,
-    image_name: &str, 
+    proj: &data_model::project::Project,
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
+    let image_name = proj.get_docker_image_name()?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
         job_mgr.add_log(0, format!("[docker] build image {image_name} started ..."));
     }
 
-    std::env::set_current_dir(proj_dir)?;
+    std::env::set_current_dir(proj.get_dir())?;
 
     // prepare_build_files(proj_dir, job_settings)?;
    
@@ -81,17 +79,17 @@ pub async fn build_image(
     let mut a = tar::Builder::new(tar_file);
     a.append_path(FILENAME_ENTRYPOINT)?;
     a.append_path(FILENAME_DOCKER)?;
-    for input_file in job_settings.files.inputs.iter() {
+    for input_file in proj.get_job_settings().files.inputs.iter() {
         a.append_path(input_file)?;
     }
-    for script_file in job_settings.files.scripts.iter() {
+    for script_file in proj.get_job_settings().files.scripts.iter() {
         a.append_path(script_file)?;
     }
 
     let docker = bollard::Docker::connect_with_local_defaults()?;
     let build_image_options = bollard::image::BuildImageOptions {
         dockerfile: "Dockerfile",
-        t: image_name,
+        t: &image_name,
         platform: "linux/amd64",
         ..Default::default()
     };
@@ -231,8 +229,9 @@ mod tests {
         let image_name = "gromacs:test_241211_2";
         let image_name = format!("{}/{image_name}", registry.hostname);
         let job_settings = data_model::job::Job::get_settings(&proj_dir).unwrap();
+        let proj = data_model::project::Project::new(proj_dir, job_settings);
         let job_mgr = Arc::new(Mutex::new(data_model::job::Manager::load().unwrap()));
-        build_image(&proj_dir, &job_settings, &image_name, job_mgr.clone()).await.unwrap();
+        build_image(&proj, job_mgr.clone()).await.unwrap();
         push_image(registry.username, registry.password, &image_name, job_mgr).await.unwrap();
     }
 

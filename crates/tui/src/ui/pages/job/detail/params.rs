@@ -12,11 +12,9 @@ use crate::data_model;
 pub fn params_dok(store: &data_model::Store) -> anyhow::Result<dok::params::Container> {
     use data_model::pod::Settings;
 
-    let proj_sel = store.project_sel.as_ref()
+    let (proj_sel, _proj_mgr) = store.project_sel.as_ref()
         .ok_or(anyhow::Error::msg("no selected project"))?;
-    let proj_dir = proj_sel.get_dir();
-    let proj_name = data_model::job::Job::get_project_name(proj_dir)?;
-    let image_name = format!("{proj_name}:latest").to_lowercase();
+    let image_name = proj_sel.get_docker_image_name()?;
     let registry_sel = store.registry_mgr.selected(&store.setting_mgr)
         .ok_or(anyhow::Error::msg("no registry selected"))?;
     let registry_id = registry_sel.dok_id.as_ref()

@@ -7,7 +7,7 @@ pub const HELPER: &[&str] = &[
 ];
 
 pub fn action(_states: &mut ui::states::States, store: &mut data_model::Store) -> anyhow::Result<()> {
-    let proj_sel = store.project_sel.as_mut()
+    let (proj_sel, proj_mgr) = store.project_sel.as_mut()
         .ok_or(anyhow::Error::msg("no selected project"))?;
     let proj_dir = proj_sel.get_dir().to_owned();
 
@@ -17,7 +17,7 @@ pub fn action(_states: &mut ui::states::States, store: &mut data_model::Store) -
             .arg("@pre.sh")
             .output().await.unwrap();
     });
-    proj_sel.add_pre_processing(jh);
+    proj_mgr.add_pre_processing(jh);
 
     Ok(())
 }

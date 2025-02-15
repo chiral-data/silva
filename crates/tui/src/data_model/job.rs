@@ -45,19 +45,6 @@ impl Job {
 
         Ok(job_settings)
     }
-
-    pub fn get_project_name(proj_dir: &Path) -> anyhow::Result<String> {
-        let proj_name = proj_dir.file_name()
-            .ok_or(anyhow::Error::msg("no file name for project "))?
-            .to_str()
-            .ok_or(anyhow::Error::msg("osString to str error"))?;
-        let proj_parent = proj_dir
-            .parent()
-            .map(|p| p.file_name().unwrap().to_str().unwrap_or(""))
-            .unwrap_or("");
-
-        Ok(format!("{proj_parent}_{proj_name}"))
-    }
 }
 
 

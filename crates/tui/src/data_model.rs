@@ -11,7 +11,7 @@ pub struct Store {
     pub pod_type_mgr: pod_type::Manager,
     pub pod_mgr: pod::Manager,
     pub job_mgr: Arc<Mutex<job::Manager>>,
-    pub project_sel: Option<project::Project>, 
+    pub project_sel: Option<(project::Project, project::Manager)>, 
 }
 
 impl std::default::Default for Store {
@@ -36,9 +36,9 @@ impl std::default::Default for Store {
 impl Store {
     pub fn update_project(&mut self, proj_dir: &Path) -> anyhow::Result<()> {
         let job_settings = job::Job::get_settings(proj_dir)?;
-        let files = job_settings.files.all_files();
-        let proj = project::Project::new(proj_dir.to_path_buf(), files);
-        self.project_sel = Some(proj);
+        let proj = project::Project::new(proj_dir.to_path_buf(), job_settings);
+        let proj_mgr = project::Manager::default();
+        self.project_sel = Some((proj, proj_mgr));
 
         Ok(())
     }
@@ -54,4 +54,4 @@ pub mod account;
 pub mod pod_type;
 pub mod pod;
 pub mod job;
-mod project;
+pub mod project;

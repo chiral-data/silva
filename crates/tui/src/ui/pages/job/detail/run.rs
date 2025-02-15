@@ -22,8 +22,11 @@ async fn launch_job_dok(
     params_dok: dok::params::Container, 
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
+    let dok = job_settings.dok.as_ref()
+        .ok_or(anyhow::Error::msg("no DOK settings from job settings"))?;
+
     // build & push the docker image
-    // utils::docker::build_image(&proj_dir, &job_settings, &params_dok.image_name, job_mgr.clone()).await?;
+    utils::docker::build_image(&proj_dir, &job_settings, &params_dok.image_name, job_mgr.clone()).await?;
     // utils::docker::push_image(params_dok.registry.username.clone(), params_dok.registry.password.clone(), &params_dok.image_name, job_mgr.clone()).await?;
     let job_id = 0;
 
@@ -87,7 +90,7 @@ async fn launch_job_dok(
 }
 
 pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> anyhow::Result<()> {
-    let proj_sel = store.project_sel.as_ref()
+    let (proj_sel, _) = store.project_sel.as_ref()
         .ok_or(anyhow::Error::msg("no selected project"))?;
     let proj_dir = proj_sel.get_dir().to_owned();
     let params_dok = super::params::params_dok(store)?;

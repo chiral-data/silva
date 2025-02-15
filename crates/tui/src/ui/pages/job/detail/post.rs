@@ -7,7 +7,7 @@ pub const HELPER: &[&str] = &[
 ];
 
 pub fn action(_states: &mut ui::states::States, store: &mut data_model::Store) -> anyhow::Result<()> {
-    let proj_sel = store.project_sel.as_mut()
+    let (proj_sel, proj_mgr) = store.project_sel.as_mut()
         .ok_or(anyhow::Error::msg("no selected project"))?;
     let _ = proj_sel.get_dir().join("@post.sh").exists().then_some(0)
         .ok_or(anyhow::Error::msg("script file @post.sh not exist"))?;
@@ -19,7 +19,7 @@ pub fn action(_states: &mut ui::states::States, store: &mut data_model::Store) -
             .arg("@post.sh")
             .output().await.unwrap();
     });
-    proj_sel.add_post_processing(jh);
+    proj_mgr.add_post_processing(jh);
 
     Ok(())
 }

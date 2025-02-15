@@ -32,7 +32,7 @@ pub struct States {
 pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mut data_model::Store) {
     let states_current = &states.info_states;
 
-    let project_path = if let Some(proj) = store.project_sel.as_ref() {
+    let project_path = if let Some((proj, _)) = store.project_sel.as_ref() {
         proj.get_dir().to_str().unwrap()
     } else { "None" };
     let pod_type_sel_string = if let Some(pt) = states.job_states.app_detail.pod_type_selected() {
@@ -47,11 +47,11 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mu
         Line::from(format!("[Selected Pod Type]  {pod_type_sel_string}")).green(),
         Line::from(format!("[Selected Pod]       {pod_sel_string}")).green(),
     ];
-    if let Some(proj) = store.project_sel.as_mut() {
-        if !proj.is_pre_processing_finished() {
+    if let Some((_proj, proj_mgr)) = store.project_sel.as_mut() {
+        if !proj_mgr.is_pre_processing_finished() {
             text.push(Line::from("[Pre-processing] running ...").green());
         }
-        if !proj.is_post_processing_finished() {
+        if !proj_mgr.is_post_processing_finished() {
             text.push(Line::from("[Post-processing] running ...").green());
         }
     }
