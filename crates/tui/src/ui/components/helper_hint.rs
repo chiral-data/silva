@@ -29,14 +29,3 @@ pub fn render_job_new(
 
 }
 
-const HELPER_CHAT: &[&str] = &[
-    "Interact with LLM", 
-];
-
-pub fn render_chat(
-    f: &mut Frame, area: Rect, 
-    current_style: Style
-) {
-    render(f, area, current_style, HELPER_CHAT);
-
-}

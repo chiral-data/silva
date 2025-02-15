@@ -140,7 +140,7 @@ mod tests {
             .await.unwrap();
         let registry = registry_list.results.first().unwrap();
         let container = params::Container::default()
-            .image(format!("{}/gromacs:test_241208_2", registry.hostname))
+            .image(format!("{}/llm_ollama:latest", registry.hostname))
             .registry(Some(registry.id.to_string()))
             .command(vec![])
             .entrypoint(vec![])

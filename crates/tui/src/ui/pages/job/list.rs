@@ -11,7 +11,6 @@ use crate::ui::layout::info::MessageLevel;
 pub enum Tab {
     #[default]
     New,
-    Chat
 }
 
 #[derive(Default)]
@@ -25,7 +24,6 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
 
     let action_selected = match states_current.tab_action {
         Tab::New => 0,
-        Tab::Chat => 1
     };
 
     let job_mgr  = store.job_mgr.lock().unwrap();
@@ -56,10 +54,6 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
             let states_current = &mut states.job_states.list;
             states_current.tab_action = Tab::New;
         }
-        KeyCode::Char('c') | KeyCode::Char('C') => {
-            let states_current = &mut states.job_states.list;
-            states_current.tab_action = Tab::Chat;
-        }
         KeyCode::Enter => {
             let states_current = &mut states.job_states.list;
             match states_current.tab_action {
@@ -68,7 +62,6 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
                 } else {
                     states.job_states.show_page = super::ShowPage::Detail;
                 }
-                Tab::Chat => states.job_states.show_page = super::ShowPage::Chat,
             }
         }
         _ => ()

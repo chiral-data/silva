@@ -5,67 +5,17 @@ use futures_util::stream::StreamExt;
 
 use crate::data_model;
 
-const FILENAME_ENTRYPOINT: &str = "@run.sh";
 const FILENAME_DOCKER: &str = "Dockerfile";
 
-// pub fn prepare_build_files(
-//     proj_dir: &Path,
-//     job_settings: &JobSettings
-// ) -> anyhow::Result<()> {
-//     let proj_name = data_model::job::Job::get_project_name(proj_dir)?;
-//     let dok = job_settings.dok.as_ref()
-//         .ok_or(anyhow::Error::msg("no DOK settings"))?;
-//     let base_image = &dok.base_image;
-
-//     // create entrypoint @run.sh
-//     let entrypoint_filepath = proj_dir.join(FILENAME_ENTRYPOINT);
-//     let mut entrypoint_file = std::fs::File::create(entrypoint_filepath)?;
-//     writeln!(entrypoint_file, "#!/bin/bash")?;
-//     writeln!(entrypoint_file, "#")?;
-//     writeln!(entrypoint_file)?;
-//     for script_file in job_settings.files.scripts.iter() {
-//         writeln!(entrypoint_file, "sh {}", script_file)?;
-//     }
-//     writeln!(entrypoint_file)?;
-//     for output_file in job_settings.files.outputs.iter() {
-//         writeln!(entrypoint_file, "cp {} /opt/artifact", output_file)?;
-//     }
-
-//     // create Docker file
-//     let mut docker_file = std::fs::File::create(proj_dir.join(FILENAME_DOCKER))?;
-//     writeln!(docker_file, "FROM {base_image}")?;
-//     writeln!(docker_file)?;
-//     writeln!(docker_file, "RUN mkdir -p /opt/{proj_name}")?;
-//     for input_file in job_settings.files.inputs.iter() {
-//         writeln!(docker_file, "ADD ./{input_file} /opt/{proj_name}")?;
-//     }
-//     for script_file in job_settings.files.scripts.iter() {
-//         writeln!(docker_file, "ADD ./{script_file} /opt/{proj_name}")?;
-//     }
-//     if let Some(dok) = &job_settings.dok {
-//         if let Some(extra_build_commands) = &dok.extra_build_commands {
-//             for cmd in extra_build_commands.iter() {
-//                 writeln!(docker_file, "RUN {cmd}")?; 
-//             }
-//         }
-//     }
-//     writeln!(docker_file, "ADD ./{FILENAME_ENTRYPOINT} /opt/{proj_name}")?;
-//     writeln!(docker_file)?;
-//     writeln!(docker_file, "WORKDIR /opt/{proj_name}")?;
-//     writeln!(docker_file, "ENTRYPOINT [\"/bin/bash\"]")?;
-//     writeln!(docker_file, "CMD [\"{}\"]", FILENAME_ENTRYPOINT)?;
-
-//     Ok(())
-// }
-
 pub async fn build_image(
+    registry: &data_model::registry::Registry,
     proj: &data_model::project::Project,
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
-    let image_name = proj.get_docker_image_name()?;
+    let push_image_name = proj.get_docker_image_url(registry)?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] build image {image_name} started ..."));
+        job_mgr.add_log(0, format!("[docker] build image {push_image_name} started ..."));
     }
 
     std::env::set_current_dir(proj.get_dir())?;
@@ -77,7 +27,7 @@ pub async fn build_image(
     let tar_file = tokio::fs::File::create(filename_tar)
         .await.unwrap().into_std().await;
     let mut a = tar::Builder::new(tar_file);
-    a.append_path(FILENAME_ENTRYPOINT)?;
+    // a.append_path(FILENAME_ENTRYPOINT)?;
     a.append_path(FILENAME_DOCKER)?;
     for input_file in proj.get_job_settings().files.inputs.iter() {
         a.append_path(input_file)?;
@@ -89,7 +39,7 @@ pub async fn build_image(
     let docker = bollard::Docker::connect_with_local_defaults()?;
     let build_image_options = bollard::image::BuildImageOptions {
         dockerfile: "Dockerfile",
-        t: &image_name,
+        t: &push_image_name,
         platform: "linux/amd64",
         ..Default::default()
     };
@@ -120,13 +70,11 @@ pub async fn build_image(
             Err(e) => return Err(anyhow::Error::msg(format!("[docker] build image error {e}")))
         }
     }
-    tokio::fs::remove_file(FILENAME_DOCKER).await.unwrap();
-    tokio::fs::remove_file(FILENAME_ENTRYPOINT).await.unwrap();
     tokio::fs::remove_file(filename_tar).await.unwrap();
 
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] build image {image_name} completed ..."));
+        job_mgr.add_log(0, format!("[docker] build image {push_image_name} completed ..."));
         job_mgr.clear_log_tmp(&0);
     }
     
@@ -134,15 +82,14 @@ pub async fn build_image(
 }
 
 pub async fn push_image(
-    // username: Option<String>, password: Option<String>, image_name: &str, 
     registry: &data_model::registry::Registry,
     proj: &data_model::project::Project,
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
-    let image_name = proj.get_docker_image_name()?;
+    let push_image_name = proj.get_docker_image_url(registry)?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] push image {image_name} started ..."));
+        job_mgr.add_log(0, format!("[docker] push image {push_image_name} started ..."));
     }
 
     let docker = bollard::Docker::connect_with_local_defaults().unwrap();
@@ -153,7 +100,6 @@ pub async fn push_image(
         username, password,
         ..Default::default()
     };
-    let push_image_name = format!("{}/{image_name}", registry.hostname);
     let mut image_push_stream = docker.push_image(&push_image_name, Some(push_options), Some(credentials));
     while let Some(msg) = image_push_stream.next().await {
         match msg {
@@ -177,7 +123,7 @@ pub async fn push_image(
 
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] push image {image_name} completed ..."));
+        job_mgr.add_log(0, format!("[docker] push image {push_image_name} completed ..."));
         job_mgr.clear_log_tmp(&0);
     }
     Ok(())
@@ -238,7 +184,7 @@ mod tests {
         let job_settings = data_model::job::Job::get_settings(&proj_dir).unwrap();
         let proj = data_model::project::Project::new(proj_dir, job_settings);
         let job_mgr = Arc::new(Mutex::new(data_model::job::Manager::load().unwrap()));
-        build_image(&proj, job_mgr.clone()).await.unwrap();
+        build_image(&registry, &proj, job_mgr.clone()).await.unwrap();
         push_image(&registry, &proj, job_mgr).await.unwrap();
     }
 

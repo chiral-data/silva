@@ -14,9 +14,9 @@ pub fn params_dok(store: &data_model::Store) -> anyhow::Result<dok::params::Cont
 
     let (proj_sel, _proj_mgr) = store.project_sel.as_ref()
         .ok_or(anyhow::Error::msg("no selected project"))?;
-    let image_name = proj_sel.get_docker_image_name()?;
     let registry_sel = store.registry_mgr.selected(&store.setting_mgr)
         .ok_or(anyhow::Error::msg("no registry selected"))?;
+    let image_name = proj_sel.get_docker_image_url(registry_sel)?;
     let registry_id = registry_sel.dok_id.as_ref()
         .ok_or(anyhow::Error::msg(format!("registry {} with username {} has not been added into DOK service", 
             registry_sel.hostname.as_str(),

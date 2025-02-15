@@ -22,7 +22,7 @@ async fn launch_job_dok(
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
     // build & push the docker image
-    utils::docker::build_image(&proj, job_mgr.clone()).await?;
+    utils::docker::build_image(&registry, &proj, job_mgr.clone()).await?;
     utils::docker::push_image(&registry, &proj, job_mgr.clone()).await?;
     let job_id = 0;
 

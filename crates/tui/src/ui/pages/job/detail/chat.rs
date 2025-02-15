@@ -8,15 +8,25 @@ use crossterm::event;
 
 use crate::data_model;
 use crate::ui;
-use crate::ui::components;
+
+pub const HELPER: &[&str] = &[
+    "Chat with the LLM after a LLM service launched", 
+];
 
 
 async fn ollama_generate(prompt: String, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
     use ollama_rs::generation::completion::request::GenerationRequest;
     use tokio_stream::StreamExt;
 
+    let http_uri = {
+        let job_mgr_clone = job_mgr.lock().unwrap();
+        job_mgr_clone.dok_http_uri.as_ref()
+            .ok_or(anyhow::Error::msg("http uri not available yet"))?
+            .to_string()
+    };
+
     use ollama_rs::Ollama;
-    let ollama = Ollama::new("http://localhost".to_string(), 11434);
+    let ollama = Ollama::new(http_uri, 11434);
 
     let model = "deepseek-r1:1.5b".to_string();
     let mut stream = ollama.generate_stream(GenerationRequest::new(model, prompt)).await
@@ -90,18 +100,10 @@ impl States {
     }
 }
 
-pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &mut data_model::Store) {
-    let current_style = states.get_style(true);
-    let states_current = &mut states.job_states.chat;
-
-    let action_selected = match states.job_states.list.tab_action {
-        super::list::Tab::New => 0,
-        super::list::Tab::Chat => 1
-    };
-
-    let mut job_mgr = store.job_mgr.lock().unwrap();
+fn render_service_available(f: &mut Frame, area: Rect, states: &mut ui::states::States, job_mgr: &mut data_model::job::Manager) {
+    let states_current = &mut states.job_states.detail.chat;
     if !job_mgr.chat_stream.is_empty() && !states_current.messages.is_empty() {
-        let reply: String = job_mgr.chat_stream.drain(..).collect();
+        let reply: String = std::mem::take(&mut job_mgr.chat_stream);
         let last_msg = if states_current.messages.len() % 2 == 1 {
             reply
         } else {
@@ -116,12 +118,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         Constraint::Length(area.height - 1),
         Constraint::Length(1),
     ]);
-    let top_mid_bottom = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Max(5), Constraint::Min(1)]) 
-        .split(area);
-    let (top, mid, bottom) = (top_mid_bottom[0], top_mid_bottom[1], top_mid_bottom[2]);
-    let [message_area, input_area] = vertical.areas(bottom);
+    let [message_area, input_area] = vertical.areas(area);
 
     let input = Paragraph::new(format!(">> {}", states_current.input.as_str()))
         .style(Style::default().fg(Color::Yellow));
@@ -145,14 +142,38 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         .wrap(Wrap { trim: true })
         .scroll((line_count.saturating_sub(message_area.height), 0));
 
-    components::job_list_action_bar::render(f, top, current_style, action_selected);
-    components::helper_hint::render_chat(f, mid, current_style);
     f.render_widget(messages, message_area);
+}
+
+fn render_service_unavailable(f: &mut Frame, area: Rect) {
+    let vertical = Layout::vertical([
+        Constraint::Length(area.height - 1),
+        Constraint::Length(1),
+    ]);
+    let [message_area, input_area] = vertical.areas(area);
+
+    let input = Paragraph::new("Service not available yet ...")
+        .style(Style::default().fg(Color::Red));
+    f.render_widget(input, input_area);
+    let messages = Paragraph::new("")
+        .wrap(Wrap { trim: true });
+
+    f.render_widget(messages, message_area);
+}
+
+pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &mut data_model::Store) {
+
+    let mut job_mgr = store.job_mgr.lock().unwrap();
+    if job_mgr.dok_http_uri.is_some() {
+        render_service_available(f, area, states, &mut job_mgr);
+    } else {
+        render_service_unavailable(f, area);
+    }
 }
 
 pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &mut data_model::Store) {
     use event::KeyCode;
-    let states_current = &mut states.job_states.chat;
+    let states_current = &mut states.job_states.detail.chat;
 
     match key.code {
         KeyCode::Enter => {
@@ -172,6 +193,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
         KeyCode::Backspace => states_current.delete_char(),
         KeyCode::Left => states_current.move_cursor_left(),
         KeyCode::Right => states_current.move_cursor_right(),
+        KeyCode::Esc => states.job_states.detail.tab_action = super::Tab::Files,
         _ => {}
     }
 }

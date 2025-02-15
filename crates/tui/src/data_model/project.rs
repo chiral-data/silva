@@ -39,6 +39,12 @@ impl Project {
         let proj_name = self.get_project_name()?;
         Ok(format!("{proj_name}:latest").to_lowercase())
     }
+
+    pub fn get_docker_image_url(&self, registry: &super::registry::Registry) -> anyhow::Result<String> {
+        let proj_name = self.get_project_name()?;
+        let push_image_name = format!("{}/{proj_name}:latest", registry.hostname);
+        Ok(push_image_name)
+    }
 }
 
 #[derive(Default)]
