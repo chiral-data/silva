@@ -133,7 +133,13 @@ pub async fn build_image(
     Ok(())
 }
 
-pub async fn push_image(username: Option<String>, password: Option<String>, image_name: &str, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
+pub async fn push_image(
+    // username: Option<String>, password: Option<String>, image_name: &str, 
+    registry: &data_model::registry::Registry,
+    proj: &data_model::project::Project,
+    job_mgr: Arc<Mutex<data_model::job::Manager>>
+) -> anyhow::Result<()> {
+    let image_name = proj.get_docker_image_name()?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
         job_mgr.add_log(0, format!("[docker] push image {image_name} started ..."));
@@ -141,11 +147,14 @@ pub async fn push_image(username: Option<String>, password: Option<String>, imag
 
     let docker = bollard::Docker::connect_with_local_defaults().unwrap();
     let push_options = bollard::image::PushImageOptions::<&str>::default();
+    let username = registry.username.to_owned();
+    let password = registry.password.to_owned();
     let credentials = bollard::auth::DockerCredentials { // for sakuracr.jp
         username, password,
         ..Default::default()
     };
-    let mut image_push_stream = docker.push_image(image_name, Some(push_options), Some(credentials));
+    let push_image_name = format!("{}/{image_name}", registry.hostname);
+    let mut image_push_stream = docker.push_image(&push_image_name, Some(push_options), Some(credentials));
     while let Some(msg) = image_push_stream.next().await {
         match msg {
             Ok(push_image_info) => {
@@ -226,13 +235,11 @@ mod tests {
 
         let proj_dir = examples_dir.join("gromacs");
         assert!(proj_dir.exists());
-        let image_name = "gromacs:test_241211_2";
-        let image_name = format!("{}/{image_name}", registry.hostname);
         let job_settings = data_model::job::Job::get_settings(&proj_dir).unwrap();
         let proj = data_model::project::Project::new(proj_dir, job_settings);
         let job_mgr = Arc::new(Mutex::new(data_model::job::Manager::load().unwrap()));
         build_image(&proj, job_mgr.clone()).await.unwrap();
-        push_image(registry.username, registry.password, &image_name, job_mgr).await.unwrap();
+        push_image(&registry, &proj, job_mgr).await.unwrap();
     }
 
     #[tokio::test]

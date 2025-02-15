@@ -7,7 +7,7 @@ use ratatui::widgets::*;
 
 use sacloud_rs::api::dok;
 
-use crate::data_model;
+use crate::data_model::{self, registry};
 use data_model::job::settings::Settings as JobSettings;
 use crate::ui;
 use crate::utils;
@@ -18,11 +18,12 @@ pub const HELPER: &[&str] = &[
 
 async fn launch_job_dok(
     proj: data_model::project::Project, 
+    registry: data_model::registry::Registry,
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
     // build & push the docker image
     utils::docker::build_image(&proj, job_mgr.clone()).await?;
-    // utils::docker::push_image(params_dok.registry.username.clone(), params_dok.registry.password.clone(), &params_dok.image_name, job_mgr.clone()).await?;
+    utils::docker::push_image(&registry, &proj, job_mgr.clone()).await?;
     let job_id = 0;
 
     // construct post_task params
@@ -88,8 +89,10 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
     let (proj_sel, _) = store.project_sel.as_ref()
         .ok_or(anyhow::Error::msg("no selected project"))?;
     let proj = proj_sel.to_owned();
-    let params_dok = super::params::params_dok(store)?;
     let job_mgr = store.job_mgr.clone();
+    let registry_sel = store.registry_mgr.selected(&store.setting_mgr)
+        .ok_or(anyhow::Error::msg("no registry selected"))?
+        .to_owned();
 
     if proj.get_job_settings().dok.is_some() {
         proj.get_dir().join("Dockerfile").exists().then_some(0)
@@ -98,7 +101,7 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
 
     let client = store.account_mgr.create_client(&store.setting_mgr)?.clone();
     tokio::spawn(async move {
-        match launch_job_dok(proj, job_mgr.clone()).await {
+        match launch_job_dok(proj, registry_sel, job_mgr.clone()).await {
             Ok(()) => (),
             Err(e) => {
                 let mut job_mgr = job_mgr.lock().unwrap();
