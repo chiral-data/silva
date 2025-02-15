@@ -19,6 +19,8 @@ pub const HELPER: &[&str] = &[
 async fn launch_job_dok(
     proj: data_model::project::Project, 
     registry: data_model::registry::Registry,
+    client: sacloud_rs::Client,
+    param_dok: dok::params::Container, 
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
     // build & push the docker image
@@ -26,14 +28,12 @@ async fn launch_job_dok(
     utils::docker::push_image(&registry, &proj, job_mgr.clone()).await?;
     let job_id = 0;
 
-    // construct post_task params
-
     // create the task
-    // let task_created = dok::shortcuts::create_task(client.clone(), &params_dok.image_name, registry_id, params_dok.plan).await?;
-    // {
-    //     let mut job_mgr = job_mgr.lock().unwrap();
-    //     job_mgr.add_log(job_id, format!("[sakura internet DOK] task {} created", task_created.id));
-    // }
+    let task_created = dok::shortcuts::create_task(client.clone(), param_dok).await?;
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[sakura internet DOK] task {} created", task_created.id));
+    }
 
     // // check task status
     // let task = loop {
@@ -98,10 +98,11 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
         proj.get_dir().join("Dockerfile").exists().then_some(0)
             .ok_or(anyhow::Error::msg("using DOK service requires a Dockerfile under the project folder"))?;
     }
+    let param_dok = super::params::params_dok(store)?;
 
     let client = store.account_mgr.create_client(&store.setting_mgr)?.clone();
     tokio::spawn(async move {
-        match launch_job_dok(proj, registry_sel, job_mgr.clone()).await {
+        match launch_job_dok(proj, registry_sel, client, param_dok, job_mgr.clone()).await {
             Ok(()) => (),
             Err(e) => {
                 let mut job_mgr = job_mgr.lock().unwrap();

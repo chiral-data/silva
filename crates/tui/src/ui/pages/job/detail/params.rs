@@ -31,12 +31,24 @@ pub fn params_dok(store: &data_model::Store) -> anyhow::Result<dok::params::Cont
             data_model::provider::sakura_internet::DokGpuType::H100 => dok::params::Plan::H100GB80,
         }
     };
+    let http = if let Some(dok) = proj_sel.get_job_settings().dok.as_ref() {
+        let path = if let Some(http_path) = dok.http_path.as_ref() {
+            http_path.to_string()
+        } else { "/".to_string() };
+        let port = if let Some(http_port) = dok.http_port.as_ref() {
+            *http_port
+        } else { 80 };
+        sacloud_rs::api::dok::params::Http { path, port }
+    } else {
+        sacloud_rs::api::dok::params::Http { path: "/".to_string(), port: 80 }
+    };
     let container = dok::params::Container::default()
         .image(image_name.to_string())
         .registry(Some(registry_id.to_string()))
         .command(vec![])
         .entrypoint(vec![])
-        .plan(plan);
+        .plan(plan)
+        .http(http);
 
     // let params_dok = ParametersDok { image_name: format!("{}/{image_name}", registry_sel.hostname), registry: registry_sel.to_owned(), client, plan };
 
