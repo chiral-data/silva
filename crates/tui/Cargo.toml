@@ -2,6 +2,7 @@
 name = "tui"
 version = "0.1.1"
 edition = "2021"
+repository = "https://github.com/chiral-data/silva"
 
 [dependencies]
 anyhow = "1.0"
