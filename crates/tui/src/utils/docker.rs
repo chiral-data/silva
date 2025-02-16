@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::io::Read;
 
@@ -15,7 +16,7 @@ pub async fn build_image(
     let push_image_name = proj.get_docker_image_url(registry)?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] build image {push_image_name} started ..."));
+        job_mgr.add_log(0, format!("[docker] build image {push_image_name}, started ..."));
     }
 
     std::env::set_current_dir(proj.get_dir())?;
@@ -34,6 +35,30 @@ pub async fn build_image(
     }
     for script_file in proj.get_job_settings().files.scripts.iter() {
         a.append_path(script_file)?;
+    }
+
+    // add extra dirs to docker build context
+    let job_settings = proj.get_job_settings();
+    if let Some(dok) = &job_settings.dok {
+        if let Some(docker_build_context_extra_dirs) = dok.docker_build_context_extra_dirs.as_ref() {
+            for dir_str in docker_build_context_extra_dirs.iter() {
+                let mut dir_path = PathBuf::from(dir_str);
+                if dir_path.starts_with("~") {
+                    dir_path = home::home_dir()
+                        .ok_or(anyhow::Error::msg("cannot get home dir"))?
+                        .join(dir_path.strip_prefix("~")?)
+                        .canonicalize()?;
+                };
+                let dir_name = dir_path.file_name()
+                    .ok_or(anyhow::Error::msg(format!("cannot get file_name for dir {dir_str}")))?;
+                {
+                    let mut job_mgr = job_mgr.lock().unwrap();
+                    job_mgr.add_log(0, format!("[docker] build image {push_image_name}, add {dir_path:?} to build context as {dir_name:?} ..."));
+                }
+                a.append_dir_all(dir_name, &dir_path)?;
+                a.finish()?;
+            }
+        }
     }
 
     let docker = bollard::Docker::connect_with_local_defaults()?;

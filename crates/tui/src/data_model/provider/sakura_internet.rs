@@ -11,6 +11,7 @@ pub enum DokGpuType {
 pub struct DokSettings {
     // pub base_image: String,
     // pub extra_build_commands: Option<Vec<String>>,
+    pub docker_build_context_extra_dirs: Option<Vec<String>>,
     pub http_path: Option<String>,
     pub http_port: Option<u16>,
 }

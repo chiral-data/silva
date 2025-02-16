@@ -4,9 +4,10 @@ inputs = [
 outputs = [
 ]
 scripts = [
-  "run.sh"
 ]
 
 [dok]
-base_image = "ollama/ollama"
+docker_build_context_extra_dirs = [
+  "~/.ollama"
+]
 http_port = 11434

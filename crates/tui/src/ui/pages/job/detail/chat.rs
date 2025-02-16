@@ -19,14 +19,16 @@ async fn ollama_generate(prompt: String, job_mgr: Arc<Mutex<data_model::job::Man
     use tokio_stream::StreamExt;
 
     let http_uri = {
-        let job_mgr_clone = job_mgr.lock().unwrap();
-        job_mgr_clone.dok_http_uri.as_ref()
+        let mut job_mgr = job_mgr.lock().unwrap();
+        let http_uri = job_mgr.dok_http_uri.as_ref()
             .ok_or(anyhow::Error::msg("http uri not available yet"))?
-            .to_string()
+            .to_string();
+        job_mgr.chat_stream.push_str(format!("responses from {http_uri}").as_str());
+        http_uri
     };
 
     use ollama_rs::Ollama;
-    let ollama = Ollama::new(http_uri, 11434);
+    let ollama = Ollama::new(http_uri, 443);
 
     let model = "deepseek-r1:1.5b".to_string();
     let mut stream = ollama.generate_stream(GenerationRequest::new(model, prompt)).await

@@ -44,7 +44,9 @@ async fn launch_job_dok(
             break task;
         }
         if let Some(http_uri) = task.http_uri.as_ref() {
-            job_mgr.dok_http_uri = Some(http_uri.to_string());
+            if job_mgr.dok_http_uri.is_none() {
+                job_mgr.dok_http_uri = Some(http_uri.to_string());
+            }
         }
     };
 

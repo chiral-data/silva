@@ -7,14 +7,16 @@ All notable changes will be documented in this file.
 - [] Applications setting file (pod_type::for_application)
 - [] local computer as a computation pod
 
-## [Unreleased] v0.2.2
+## [Unreleased] v0.2.2 llm via ollama
 integrate DeepSeek; binary release;
+- [] add Dockerfile for examples gromacs & whisper 
 
 ### Added
 - [x] talk to ollama server via [ollama-rs](https://github.com/pepperoni21/ollama-rs)
 - [] chat UI: [x] scrolling [] display Markdown
 
 ### Changed
+- [] Dockerfile automatical generating deprecrated
 
 
 ### Removed
