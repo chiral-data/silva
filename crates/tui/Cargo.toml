@@ -1,5 +1,5 @@
 [package]
-name = "tui"
+name = "silva-tui"
 version = "0.2.2"
 edition = "2021"
 repository = "https://github.com/chiral-data/silva"

@@ -74,7 +74,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         .map(|t| {
             let texts = t.texts();
             if t == states.job_states.detail.tab_action {
-                if t == Tab::Files { texts.0.to_string() } else { format!("[Enter] {}", texts.0) }
+                if matches!(t, Tab::Files | Tab::Chat) { texts.0.to_string() } else { format!("[Enter] {}", texts.0) }
             } else { texts.1.to_string() }
         })
         .collect();
@@ -171,5 +171,6 @@ mod files;
 // mod build; TODO
 mod pre;
 mod run;
+mod cancel;
 mod post;
 mod chat;

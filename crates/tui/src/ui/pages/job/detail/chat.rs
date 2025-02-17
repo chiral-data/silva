@@ -18,11 +18,17 @@ async fn ollama_generate(prompt: String, job_mgr: Arc<Mutex<data_model::job::Man
     use ollama_rs::generation::completion::request::GenerationRequest;
     use tokio_stream::StreamExt;
 
+    // TODO: currently only support 1 job
+    let job_id = 0;
+
     let http_uri = {
         let job_mgr = job_mgr.lock().unwrap();
-        job_mgr.dok_http_uri.as_ref()
-            .ok_or(anyhow::Error::msg("http uri not available yet"))?
-            .to_string()
+        let job = job_mgr.jobs.get(&job_id)
+            .ok_or(anyhow::Error::msg(format!("job {job_id} not found")))?;
+        match &job.infra {
+            data_model::job::Infra::None => None.ok_or(anyhow::Error::msg(format!("job {job_id} infra not ready")))?,
+            data_model::job::Infra::SakuraInternetDOK(_task_id, http_uri) => http_uri.clone().ok_or(anyhow::Error::msg("http uri not available yet"))?
+        }
         // job_mgr.chat_stream.push_str(format!("responses from {http_uri}").as_str());
         // http_uri
     };
@@ -164,10 +170,15 @@ fn render_service_unavailable(f: &mut Frame, area: Rect) {
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &mut data_model::Store) {
+    // TODO: currently only support one job
+    let job_id = 0;
 
     let mut job_mgr = store.job_mgr.lock().unwrap();
-    if job_mgr.dok_http_uri.is_some() {
-        render_service_available(f, area, states, &mut job_mgr);
+    if let Some(job) = job_mgr.jobs.get(&job_id) {
+        match &job.infra {
+            data_model::job::Infra::SakuraInternetDOK(_, _) => render_service_available(f, area, states, &mut job_mgr),
+            _ => render_service_unavailable(f, area)
+        }
     } else {
         render_service_unavailable(f, area);
     }

@@ -24,6 +24,8 @@ async fn launch_job_dok(
     // build & push the docker image
     utils::docker::build_image(&registry, &proj, job_mgr.clone()).await?;
     utils::docker::push_image(&registry, &proj, job_mgr.clone()).await?;
+
+    // TODO: currently only support one job
     let job_id = 0;
 
     // create the task
@@ -31,11 +33,14 @@ async fn launch_job_dok(
     {
         let mut job_mgr = job_mgr.lock().unwrap();
         job_mgr.add_log(job_id, format!("[sakura internet DOK] task {} created", task_created.id));
+        let mut job = data_model::job::Job::new(job_id);
+        job.infra = data_model::job::Infra::SakuraInternetDOK(task_created.id.to_string(), None);
+        let _ = job_mgr.jobs.insert(job_id, job);
     }
 
     // check task status
     let task = loop {
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(5)).await;
         let task = dok::shortcuts::get_task(client.clone(), &task_created.id).await?;
         let mut job_mgr = job_mgr.lock().unwrap();
         job_mgr.add_log_tmp(job_id, format!("[sakura internet DOK] task {} status: {}", task.id, task.status));
@@ -44,8 +49,8 @@ async fn launch_job_dok(
             break task;
         }
         if let Some(http_uri) = task.http_uri.as_ref() {
-            if job_mgr.dok_http_uri.is_none() {
-                job_mgr.dok_http_uri = Some(http_uri.to_string());
+            if let Some(job) = job_mgr.jobs.get_mut(&job_id) {
+                job.infra = data_model::job::Infra::SakuraInternetDOK(task.id.to_string(), Some(http_uri.to_string()));
             }
         }
     };
@@ -89,10 +94,16 @@ async fn launch_job_dok(
 }
 
 pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> anyhow::Result<()> {
+    // TODO: currently only support one job
+    let job_id = 0;
+    let job_mgr = store.job_mgr.lock().unwrap();
+    if job_mgr.jobs.contains_key(&job_id) {
+        return Err(anyhow::Error::msg("current job already running"));
+    }
+
     let (proj_sel, _) = store.project_sel.as_ref()
         .ok_or(anyhow::Error::msg("no selected project"))?;
     let proj = proj_sel.to_owned();
-    let job_mgr = store.job_mgr.clone();
     let registry_sel = store.registry_mgr.selected(&store.setting_mgr)
         .ok_or(anyhow::Error::msg("no registry selected"))?
         .to_owned();
@@ -103,6 +114,7 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
     }
     let param_dok = super::params::params_dok(store)?;
 
+    let job_mgr = store.job_mgr.clone();
     let client = store.account_mgr.create_client(&store.setting_mgr)?.clone();
     tokio::spawn(async move {
         match launch_job_dok(proj, registry_sel, client, param_dok, job_mgr.clone()).await {

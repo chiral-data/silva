@@ -25,19 +25,32 @@ impl std::fmt::Display for JobStatus {
 }
 
 #[derive(Debug, Deserialize)]
+pub enum Infra {
+    None,
+    // (task id, http uri)
+    SakuraInternetDOK(String, Option<String>)
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Job {
     pub id: usize,
-    status: JobStatus,
-    desc: String
+    // status: JobStatus,
+    // desc: String,
+    pub infra: Infra
 }
 
 impl std::fmt::Display for Job {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:5} {:8}   {}", self.id, self.status, self.desc)
+        // write!(f, "{:5} {:8}   {}", self.id, self.status, self.desc)
+        write!(f, "{:5} ", self.id)
     }
 }
 
 impl Job {
+    pub fn new(id: usize) -> Self {
+        Self { id, infra: Infra::None }
+    }
+
     pub fn get_settings(proj_dir: &Path) ->anyhow::Result<settings::Settings> {
         let settings_filepath = proj_dir.join("@job.toml");
         let job_settings = settings::Settings::new_from_file(&settings_filepath)
@@ -64,7 +77,6 @@ pub struct Manager {
     pub jobs: HashMap<usize, Job>,
     /// job logs: <job id, log contents>
     pub chat_stream: String,
-    pub dok_http_uri: Option<String>,
     pub logs: HashMap<usize, VecDeque<String>>,
     pub logs_tmp: HashMap<usize, String>
 }
@@ -92,8 +104,7 @@ impl Manager {
         };
 
         let chat_stream = String::new();
-        let dok_http_uri = None;
-        let s = Self { jobs, chat_stream, dok_http_uri, logs: HashMap::new(), logs_tmp: HashMap::new() };
+        let s = Self { jobs, chat_stream, logs: HashMap::new(), logs_tmp: HashMap::new() };
         Ok(s)
     }
 

@@ -1,4 +1,4 @@
-use tui::run;
+use silva_tui::run;
 
 #[tokio::main]
 async fn main() {

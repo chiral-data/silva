@@ -4,8 +4,9 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased] v0.1.1
 
 ### Added
-- dok, create registry, delete registry
-- dok, set http path & port, get http uri
+- [x] dok, create registry, delete registry
+- [x] dok, set http path & port, get http uri
+- [] dok, cancel a task
 
 ### Fixed
 
