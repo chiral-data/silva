@@ -14,6 +14,7 @@ pub enum Tab {
     // Build,
     Pre,
     Run,
+    Cancel,
     Post,
     Chat,
 }
@@ -23,9 +24,9 @@ impl Tab {
         match self {
             Self::Pod => ("Select a Pod", "[P]ods"), 
             Self::Files => ("Files", "[F]iles"), 
-            // Self::Build => ("Build Docker Image", "[B]uild"),
             Self::Pre => ("Pre-processing", "Pr[e]"),
             Self::Run => ("Run", "[R]un"),
+            Self::Cancel => ("Cancel", "C[a]ncel"),
             Self::Post => ("Post-processing", "Po[s]t"),
             Self::Chat => ("Chat with LLM", "[C]hat"),
         }
@@ -35,11 +36,11 @@ impl Tab {
         match self {
             Tab::Pod => 0,
             Tab::Files => 1,
-            // Tab::Build => 2,
             Tab::Pre => 2,
             Tab::Run => 3,
-            Tab::Post => 4,
-            Tab::Chat => 5,
+            Tab::Cancel => 4,
+            Tab::Post => 5,
+            Tab::Chat => 6,
         }
     }
 }
@@ -68,7 +69,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     let current_style = states.get_style(true);
 
     let tabs_strings: Vec<String> = [
-            Tab::Pod, Tab::Files, Tab::Pre, Tab::Run, Tab::Post, Tab::Chat
+            Tab::Pod, Tab::Files, Tab::Pre, Tab::Run, Tab::Cancel, Tab::Post, Tab::Chat
         ].into_iter()
         // .filter(|t| filter_tabs(t, states))
         .map(|t| {
@@ -90,6 +91,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         // Tab::Build => build::HELPER,
         Tab::Pre => pre::HELPER,
         Tab::Run => run::HELPER,
+        Tab::Cancel => cancel::HELPER,
         Tab::Post => post::HELPER,
         Tab::Chat => chat::HELPER,
     }.iter()
@@ -112,9 +114,9 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     match states_current.tab_action {
         Tab::Pod => (),
         Tab::Files => files::render(f, bottom, states, store),
-        // Tab::Build => (),
         Tab::Pre => (),
         Tab::Run => run::render(f, bottom, states, store),
+        Tab::Cancel => cancel::render(f, bottom, states, store),
         Tab::Post => (),
         Tab::Chat => chat::render(f, bottom, states, store),
     }
@@ -130,18 +132,18 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
         match key.code {
             KeyCode::Char('p') | KeyCode::Char('P') => states_current.tab_action = Tab::Pod,
             KeyCode::Char('f') | KeyCode::Char('F') => states_current.tab_action = Tab::Files,
-            // KeyCode::Char('b') | KeyCode::Char('B') => states_current.tab_action = Tab::Build,
             KeyCode::Char('e') | KeyCode::Char('E') => states_current.tab_action = Tab::Pre,
             KeyCode::Char('r') | KeyCode::Char('R') => states_current.tab_action = Tab::Run,
+            KeyCode::Char('a') | KeyCode::Char('A') => states_current.tab_action = Tab::Cancel,
             KeyCode::Char('s') | KeyCode::Char('S') => states_current.tab_action = Tab::Post,
             KeyCode::Char('c') | KeyCode::Char('C') => states_current.tab_action = Tab::Chat,
             KeyCode::Enter => {
                 match match states_current.tab_action {
                     Tab::Pod => pod::action(states, store),
                     Tab::Files => Ok(()),
-                    // Tab::Build => build::action(states, store),
                     Tab::Pre => pre::action(states, store),
                     Tab::Run => run::action(states, store),
+                    Tab::Cancel => cancel::action(states, store),
                     Tab::Post => post::action(states, store),
                     Tab::Chat => unreachable!()
                 } {
@@ -154,9 +156,9 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
                 match states_current.tab_action {
                     Tab::Pod => (),
                     Tab::Files => files::handle_key(key, states, store),
-                    // Tab::Build => (),
                     Tab::Pre => (),
                     Tab::Run => (),
+                    Tab::Cancel => (),
                     Tab::Post => (),
                     Tab::Chat => (),
                 }
@@ -168,7 +170,6 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
 mod params;
 mod pod;
 mod files;
-// mod build; TODO
 mod pre;
 mod run;
 mod cancel;

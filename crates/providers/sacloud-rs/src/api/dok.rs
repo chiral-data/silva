@@ -78,9 +78,7 @@ create_struct!(TaskCreated, "lowercase",
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Client;
-
-    #[tokio::test]
+    use crate::Client; #[tokio::test]
     async fn test_get_registries() {
         let client = Client::default().dok();
         let registry_list: RegistryList = client.registries().dok_end().get()

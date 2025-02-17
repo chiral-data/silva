@@ -24,7 +24,7 @@ impl std::fmt::Display for JobStatus {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub enum Infra {
     None,
     // (task id, http uri)
