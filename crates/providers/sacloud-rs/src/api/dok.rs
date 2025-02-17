@@ -19,7 +19,7 @@
 //!     - [x] POST       /tasks/
 //!     - [x] GET       /tasks/{taskId}/
 //!     - [] DELETE     /tasks/{taskId}/
-//!     - [] POST       /tasks/{taskId}/cancel/
+//!     - [x] POST       /tasks/{taskId}/cancel/
 //!     - [] GET        /tasks/{taskId}/download/{target}/
 //! Artifacts
 //!     - [] GET        /artifacts/
@@ -134,7 +134,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_post_tasks() {
+    async fn test_post_cancel_tasks() {
         let client = Client::default().dok();
         let registry_list: RegistryList = client.clone().registries().dok_end().get()
             .await.unwrap();
@@ -156,13 +156,18 @@ mod tests {
         dbg!(&task_created);
 
         loop {
-            let client = client.clone();
-            let task: Task = client.tasks().task_id(&task_created.id)
+            let task: Task = client.clone().tasks().task_id(&task_created.id)
                 .dok_end().get().await.unwrap();
+            dbg!(&task.status);
             if let Some(http_uri) = task.http_uri {
                 dbg!(http_uri);
             }
-            if task.status == "done" {
+            if task.status == "running" {
+                let _task_cancelled: Task = client.clone().dok().tasks()
+                    .task_id(&task.id).cancel().dok_end()
+                    .post().await.unwrap();
+            }
+            if task.status == "done" || task.status == "canceled" {
                 break;
             }
         }

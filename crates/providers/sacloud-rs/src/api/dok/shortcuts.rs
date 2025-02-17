@@ -21,14 +21,7 @@ pub async fn create_registry(client: Client, hostname: &str, username: &str, pas
     Ok(registry)
 }
 
-// pub async fn create_task(client: Client, image_name: &str, registry_id: &str, plan: dok::params::Plan) -> anyhow::Result<dok::TaskCreated> {
 pub async fn create_task(client: Client, container: dok::params::Container) -> anyhow::Result<dok::TaskCreated> {
-    // let container = dok::params::Container::default()
-    //     .image(image_name.to_string())
-    //     .registry(Some(registry_id.to_string()))
-    //     .command(vec![])
-    //     .entrypoint(vec![])
-    //     .plan(plan);
     let post_tasks = dok::params::PostTasks::default()
         .name("some_task".to_string())
         .containers(vec![container])
@@ -46,6 +39,12 @@ pub async fn get_task(client: Client, task_id: &str) -> anyhow::Result<dok::Task
         .tasks().task_id(task_id).dok_end().get()
         .await?;
     Ok(task)
+}
+
+pub async fn cancel_task(client: Client, task_id: &str) -> anyhow::Result<dok::Task> {
+    client.dok().tasks()
+        .task_id(task_id).cancel().dok_end()
+        .post().await
 }
 
 pub async fn get_artifact_download_url(client: Client, task: &dok::Task) -> anyhow::Result<dok::ArtifactUrl>{

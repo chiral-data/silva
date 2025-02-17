@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 - [x] dok, create registry, delete registry
 - [x] dok, set http path & port, get http uri
-- [] dok, cancel a task
+- [x] dok, cancel a task
 
 ### Fixed
 
