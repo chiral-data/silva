@@ -1,3 +1,4 @@
+use sacloud_rs::api::dok;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
@@ -14,5 +15,6 @@ pub struct DokSettings {
     pub docker_build_context_extra_dirs: Option<Vec<String>>,
     pub http_path: Option<String>,
     pub http_port: Option<u16>,
+    pub plan: Option<dok::params::Plan>
 }
 

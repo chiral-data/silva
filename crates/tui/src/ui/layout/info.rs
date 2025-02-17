@@ -35,7 +35,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mu
     let project_path = if let Some((proj, _)) = store.project_sel.as_ref() {
         proj.get_dir().to_str().unwrap()
     } else { "None" };
-    let pod_type_sel_string = if let Some(pt) = states.job_states.app_detail.pod_type_selected() {
+    let pod_type_sel_string = if let Some(pt) = store.pod_type_mgr.selected() {
        pt.name.to_string()
     } else { "None".to_string() };
     let pod_sel_string = if let Some(pod) = store.pod_mgr.selected() {

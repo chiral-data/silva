@@ -29,8 +29,13 @@ impl PodType {
 
 pub struct Manager {
     pub pod_types: HashMap<usize, PodType>,
+    pub pod_type_id_selected: Option<usize>,
     /// (app, pod type ids)
     pub for_applications: HashMap<App, Vec<usize>>
+}
+
+pub mod ids {
+    pub const DOK: usize = 1;
 }
 
 impl Manager {
@@ -42,7 +47,7 @@ impl Manager {
             is_service: false,
         };
         let pt_1 = PodType { 
-            id: 1, 
+            id: ids::DOK, 
             name: "Sakura Internet - DOK".to_string(),
             descs: vec![
                 "Providing the best GPUs for generative AI and machine learning at low prices".to_string(),
@@ -52,7 +57,7 @@ impl Manager {
         };
         let pod_types = vec![
             (0, pt_0), 
-            (1, pt_1), 
+            (ids::DOK, pt_1), 
         ].into_iter().collect();
 
         // TODO: right now only hard coding
@@ -62,7 +67,12 @@ impl Manager {
             (App::Llm, vec![1])
         ].into_iter().collect();
 
-        Manager { pod_types, for_applications }
+        Manager { pod_types, pod_type_id_selected: None, for_applications }
+    }
+
+    pub fn selected(&self) -> Option<&PodType> {
+        self.pod_type_id_selected
+            .map(|id_sel| self.pod_types.get(&id_sel))?
     }
 }
 

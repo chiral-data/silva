@@ -62,7 +62,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     f.render_stateful_widget(server_plan_list, bottom, list_state);
 }
 
-fn select_pod_type(states: &mut ui::states::States, is_up: bool) {
+fn select_pod_type(states: &mut ui::states::States, store: &mut data_model::Store, is_up: bool) {
     let states_current = &mut states.job_states.app_detail;
     let total = states_current.pod_types.len(); 
     let mut sel_idx = states_current.list_state_pod_types.selected().unwrap_or(0);
@@ -73,7 +73,7 @@ fn select_pod_type(states: &mut ui::states::States, is_up: bool) {
     }
     states_current.list_state_pod_types.select(Some(sel_idx));
     let pod_type = states_current.pod_types.get(sel_idx).unwrap();
-    states.job_states.pod_type.pod_type_sel_id = Some(pod_type.id);
+    store.pod_type_mgr.pod_type_id_selected = Some(pod_type.id);
 }
 
 pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &mut data_model::Store) {
@@ -81,8 +81,8 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
     let states_current = &mut states.job_states.app_detail;
 
     match key.code {
-        KeyCode::Up => select_pod_type(states, true),
-        KeyCode::Down => select_pod_type(states, false),
+        KeyCode::Up => select_pod_type(states, store, true),
+        KeyCode::Down => select_pod_type(states, store, false),
         KeyCode::Enter => {
             let list_state = &states_current.list_state_pod_types;
             if let Some(sel_idx) = list_state.selected() {
@@ -101,7 +101,7 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
                     .map(|sv| sv.to_owned())
                     .collect::<Vec<data_model::pod::Pod>>();
                 states.job_states.pod_type.pods = pods_of_this_type;
-                states.job_states.pod_type.pod_type_sel_id = Some(pod_type_sel.id);
+                store.pod_type_mgr.pod_type_id_selected = Some(pod_type_sel.id);
             } else {
                 states.info_states.message = ("no server plan selected".to_string(), MessageLevel::Warn)
             }

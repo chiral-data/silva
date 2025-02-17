@@ -28,6 +28,11 @@ pub struct Manager {
     pub pod_id_selected: Option<usize>,
 }
 
+pub mod ids {
+    pub const DOK_V100: usize = 1;
+    pub const DOK_H100: usize = 2;
+}
+
 impl Manager {
     pub fn new() -> Self {
         let pod_0 = Pod { 
@@ -37,21 +42,21 @@ impl Manager {
             name: "Localhost".to_string(),
         };
         let pod_1 = Pod { 
-            id: 1, 
-            type_id: 1,
+            id: ids::DOK_V100, 
+            type_id: super::pod_type::ids::DOK,
             settings: Settings::SakuraInternetService(provider::sakura_internet::DokGpuType::V100),
             name: "DOK service V100".to_string(),
         };
         let pod_2 = Pod {
-            id: 2,
-            type_id: 1,
+            id: ids::DOK_H100,
+            type_id: super::pod_type::ids::DOK,
             settings: Settings::SakuraInternetService(provider::sakura_internet::DokGpuType::H100),
             name: "DOK service H100".to_string(),
         };
         let pods = vec![
             (0, pod_0), 
-            (1, pod_1), 
-            (2, pod_2), 
+            (ids::DOK_V100, pod_1), 
+            (ids::DOK_H100, pod_2), 
         ].into_iter().collect();
 
         Manager { pods, pod_id_selected: None }

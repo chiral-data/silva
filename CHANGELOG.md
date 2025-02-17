@@ -1,6 +1,21 @@
 # Changelog
 All notable changes will be documented in this file.
 
+## v0.2.2
+
+- Fixed things
+
+## 0.1.0 - 2023-04-02
+
+### New features
+
+- Fancy thingie
+- Other cool stuff
+
+### Fixes
+
+- Beep booping is now consistent
+
 ## [Planned]
 - [] job management
 - [] SSH accessible servers as a computation pod 
@@ -21,7 +36,7 @@ integrate DeepSeek; binary release;
 
 ### Removed
 
-## [v0.2.1]
+## 0.2.1
 
 ### Added
 - [x] automatically add dok registries

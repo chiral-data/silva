@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
 /// Request for POST /registries/
 #[derive(Serialize, Default)]
@@ -14,7 +14,7 @@ impl PostRegistries {
     pub fn password(mut self, password: String) -> Self { self.password = password; self }
 }
 
-#[derive(Serialize,  Default)]
+#[derive(Debug, Serialize, Deserialize,  Default, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum Plan {
     #[default]

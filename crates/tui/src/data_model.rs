@@ -35,7 +35,21 @@ impl std::default::Default for Store {
 
 impl Store {
     pub fn update_project(&mut self, proj_dir: &Path) -> anyhow::Result<()> {
+        self.pod_type_mgr.pod_type_id_selected = None;
+        self.pod_mgr.pod_id_selected = None;
+
         let job_settings = job::Job::get_settings(proj_dir)?;
+        if let Some(dok) = job_settings.dok.as_ref() {
+            if let Some(plan) = dok.plan.as_ref() {
+                self.pod_type_mgr.pod_type_id_selected = Some(pod_type::ids::DOK);
+                match plan {
+                    sacloud_rs::api::dok::params::Plan::V100 => self.pod_mgr.pod_id_selected = Some(pod::ids::DOK_V100),
+                    sacloud_rs::api::dok::params::Plan::H100GB80 => self.pod_mgr.pod_id_selected = Some(pod::ids::DOK_H100),
+                    sacloud_rs::api::dok::params::Plan::H100GB20 => todo!()
+                }
+            }
+        }
+
         let proj = project::Project::new(proj_dir.to_path_buf(), job_settings);
         let proj_mgr = project::Manager::default();
         self.project_sel = Some((proj, proj_mgr));

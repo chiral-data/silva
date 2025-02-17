@@ -74,6 +74,7 @@ mod tests {
         extra_build_commands = ["python load_model.py"]
         http_path = "/dok"
         http_port = 11203
+        plan = "v100-32gb"
         "#;
         let s = Settings::new(toml_str).unwrap();
         assert_eq!(s.files.inputs.len(), 3);
@@ -84,6 +85,7 @@ mod tests {
         // assert_eq!(dok.extra_build_commands.unwrap().len(), 1);
         assert_eq!(dok.http_path.unwrap(), "/dok");
         assert_eq!(dok.http_port.unwrap(), 11203);
+        assert!(matches!(dok.plan.unwrap(), sacloud_rs::api::dok::params::Plan::V100));
     }
 }
 
