@@ -19,12 +19,12 @@ async fn ollama_generate(prompt: String, job_mgr: Arc<Mutex<data_model::job::Man
     use tokio_stream::StreamExt;
 
     let http_uri = {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        let http_uri = job_mgr.dok_http_uri.as_ref()
+        let job_mgr = job_mgr.lock().unwrap();
+        job_mgr.dok_http_uri.as_ref()
             .ok_or(anyhow::Error::msg("http uri not available yet"))?
-            .to_string();
-        job_mgr.chat_stream.push_str(format!("responses from {http_uri}").as_str());
-        http_uri
+            .to_string()
+        // job_mgr.chat_stream.push_str(format!("responses from {http_uri}").as_str());
+        // http_uri
     };
 
     use ollama_rs::Ollama;
