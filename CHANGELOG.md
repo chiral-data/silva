@@ -25,13 +25,15 @@ All notable changes will be documented in this file.
 ## [Unreleased] v0.2.2 llm via ollama
 integrate DeepSeek; binary release;
 - [] add Dockerfile for examples gromacs & whisper 
+- [] docker image building should not be mandatory
+- [] download templates
 
 ### Added
 - [x] talk to ollama server via [ollama-rs](https://github.com/pepperoni21/ollama-rs)
 - [] chat UI: [x] scrolling [] display Markdown
 
 ### Changed
-- [] Dockerfile automatical generating deprecrated
+- [x] Dockerfile automatical generating deprecrated
 
 
 ### Removed
