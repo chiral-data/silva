@@ -1,15 +1,8 @@
 [files]
-inputs = [
-]
-outputs = [
-]
-scripts = [
-  "entrypoint.sh"
-]
+inputs = []
+outputs = []
+scripts = []
 
 [dok]
-docker_build_context_extra_dirs = [
-  # "~/.ollama"
-]
-http_port = 11434
+docker_image = "chiral.sakuracr.jp/ollama_dok_build:latest"
 plan = "v100-32gb"

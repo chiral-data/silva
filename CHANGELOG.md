@@ -8,7 +8,6 @@ All notable changes will be documented in this file.
 ## 0.1.0 - 2023-04-02
 
 ### New features
-
 - Fancy thingie
 - Other cool stuff
 
@@ -21,22 +20,25 @@ All notable changes will be documented in this file.
 - [] SSH accessible servers as a computation pod 
 - [] Applications setting file (pod_type::for_application)
 - [] local computer as a computation pod
+- [] add Dockerfile for examples gromacs & whisper 
 
 ## [Unreleased] v0.2.2 llm via ollama
 integrate DeepSeek; binary release;
-- [] add Dockerfile for examples gromacs & whisper 
-- [] docker image building should not be mandatory
-- [] download templates
+- [] a pull-only user of chiral.sakuracr.jp for public use
+- [] an example without docker image building
+- [] automatical setup of sacloud API tokens 
+- [] downloading examples
 
 ### Added
 - [x] talk to ollama server via [ollama-rs](https://github.com/pepperoni21/ollama-rs)
-- [] chat UI: [x] scrolling [] display Markdown
+- [x] chat UI: scrolling, display Markdown
 
 ### Changed
 - [x] Dockerfile automatical generating deprecrated
 
-
 ### Removed
+
+
 
 ## 0.2.1
 
