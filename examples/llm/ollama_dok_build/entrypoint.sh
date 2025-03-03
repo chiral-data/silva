@@ -8,9 +8,9 @@ pid=$!
 # Pause for Ollama to start.
 sleep 5
 
-echo "Retrieve model ..."
-ollama pull deepseek-r1:1.5b 
-echo "Retrieve model Done!"
+# echo "Retrieve model ..."
+# ollama pull deepseek-r1:1.5b 
+# echo "Retrieve model Done!"
 
 # Wait for Ollama process to finish.
 wait $pi

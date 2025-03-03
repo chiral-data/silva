@@ -19,14 +19,21 @@ async fn launch_job_dok(
     registry: data_model::registry::Registry,
     client: sacloud_rs::Client,
     param_dok: dok::params::Container, 
-    job_mgr: Arc<Mutex<data_model::job::Manager>>
+    job_mgr: Arc<Mutex<data_model::job::Manager>>,
+    with_build: bool,
 ) -> anyhow::Result<()> {
-    // build & push the docker image
-    utils::docker::build_image(&registry, &proj, job_mgr.clone()).await?;
-    utils::docker::push_image(&registry, &proj, job_mgr.clone()).await?;
-
     // TODO: currently only support one job
     let job_id = 0;
+
+    if with_build {
+        // build & push the docker image
+        utils::docker::build_image(&registry, &proj, job_mgr.clone()).await?;
+        utils::docker::push_image(&registry, &proj, job_mgr.clone()).await?;
+    } else {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, "Use docker image directly, no image will be built and pushed.".to_string());
+        job_mgr.add_log(job_id, "All docker building parameters in @job.toml will be ignored".to_string());
+    }
 
     // create the task
     let task_created = dok::shortcuts::create_task(client.clone(), param_dok).await?;
@@ -108,16 +115,15 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
         .ok_or(anyhow::Error::msg("no registry selected"))?
         .to_owned();
 
-    if proj.get_job_settings().dok.is_some() {
+    let (with_build, param_dok) = super::params::params_dok(store)?;
+    if proj.get_job_settings().dok.is_some() && with_build {
         proj.get_dir().join("Dockerfile").exists().then_some(0)
-            .ok_or(anyhow::Error::msg("using DOK service requires a Dockerfile under the project folder"))?;
+            .ok_or(anyhow::Error::msg("using DOK service with self built docker image requires a Dockerfile under the project folder"))?;
     }
-    let param_dok = super::params::params_dok(store)?;
-
     let job_mgr = store.job_mgr.clone();
     let client = store.account_mgr.create_client(&store.setting_mgr)?.clone();
     tokio::spawn(async move {
-        match launch_job_dok(proj, registry_sel, client, param_dok, job_mgr.clone()).await {
+        match launch_job_dok(proj, registry_sel, client, param_dok, job_mgr.clone(), with_build).await {
             Ok(()) => (),
             Err(e) => {
                 let mut job_mgr = job_mgr.lock().unwrap();

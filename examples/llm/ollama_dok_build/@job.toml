@@ -9,7 +9,7 @@ scripts = [
 
 [dok]
 docker_build_context_extra_dirs = [
-  # "~/.ollama"
+  "~/.ollama"
 ]
 http_port = 11434
 plan = "v100-32gb"

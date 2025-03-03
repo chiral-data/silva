@@ -9,14 +9,14 @@ use crate::data_model;
 //     pub plan: dok::params::Plan,
 // }
 
-pub fn params_dok(store: &data_model::Store) -> anyhow::Result<dok::params::Container> {
+pub fn params_dok(store: &data_model::Store) -> anyhow::Result<(bool, dok::params::Container)> {
     use data_model::pod::Settings;
 
     let (proj_sel, _proj_mgr) = store.project_sel.as_ref()
         .ok_or(anyhow::Error::msg("no selected project"))?;
     let registry_sel = store.registry_mgr.selected(&store.setting_mgr)
         .ok_or(anyhow::Error::msg("no registry selected"))?;
-    let image_name = proj_sel.get_docker_image_url(registry_sel)?;
+    let image_name_by_dirname = proj_sel.get_docker_image_url(registry_sel)?;
     let registry_id = registry_sel.dok_id.as_ref()
         .ok_or(anyhow::Error::msg(format!("registry {} with username {} has not been added into DOK service", 
             registry_sel.hostname.as_str(),
@@ -42,6 +42,18 @@ pub fn params_dok(store: &data_model::Store) -> anyhow::Result<dok::params::Cont
     } else {
         sacloud_rs::api::dok::params::Http { path: "/".to_string(), port: 80 }
     };
+
+    let (with_build, image_name) = if let Some(dok) = proj_sel.get_job_settings().dok.as_ref() {
+        if let Some(img) = &dok.docker_image {
+            (false, img.to_string())
+        } else {
+            (true, image_name_by_dirname)
+        }
+    } else {
+        return Err(anyhow::Error::msg("DOK settings are mandatory"));
+    };
+
+
     let container = dok::params::Container::default()
         .image(image_name.to_string())
         .registry(Some(registry_id.to_string()))
@@ -50,9 +62,7 @@ pub fn params_dok(store: &data_model::Store) -> anyhow::Result<dok::params::Cont
         .plan(plan)
         .http(http);
 
-    // let params_dok = ParametersDok { image_name: format!("{}/{image_name}", registry_sel.hostname), registry: registry_sel.to_owned(), client, plan };
-
-    Ok(container)
+    Ok((with_build, container))
 }
 
 
