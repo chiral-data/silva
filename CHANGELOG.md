@@ -24,14 +24,14 @@ All notable changes will be documented in this file.
 
 ## [Unreleased] v0.2.2 llm via ollama
 integrate DeepSeek; binary release;
-- [] a pull-only user of chiral.sakuracr.jp for public use
-- [] automatical setup of sacloud API tokens 
-- [] downloading examples
+- [] setup of sacloud API tokens, silva projects home folder
+- [] downloading  source.tar.gz, extract examples folders
 
 ### Added
 - [x] talk to ollama server via [ollama-rs](https://github.com/pepperoni21/ollama-rs)
 - [x] chat UI: scrolling, display Markdown
 - [x] example "ollama_dok" without docker image building
+- [x] a pull-only user of chiral.sakuracr.jp for public use
 
 ### Changed
 - [x] Dockerfile automatical generating deprecrated
