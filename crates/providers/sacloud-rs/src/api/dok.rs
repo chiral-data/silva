@@ -58,6 +58,8 @@ create_struct!(RegistryList, "lowercase",
 
 create_struct!(Task, "lowercase",
     id: String,
+    created_at: String,
+    containers: Vec<params::Container>,
     status: String,
     http_uri: Option<String>,
     artifact: Option<Artifact>

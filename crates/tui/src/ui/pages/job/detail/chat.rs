@@ -10,7 +10,8 @@ use crate::data_model;
 use crate::ui;
 
 pub const HELPER: &[&str] = &[
-    "Chat with the LLM after a LLM service launched", 
+    "Chat with the LLM after a LLM service launched",
+    "For the 1st question, wait for a while for model loading"
 ];
 
 

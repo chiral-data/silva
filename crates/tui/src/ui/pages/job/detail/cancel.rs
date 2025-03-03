@@ -25,7 +25,8 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
         .ok_or(anyhow::Error::msg("no selected project"))?;
     let proj = proj_sel.to_owned();
 
-    if proj.get_job_settings().dok.is_some() {
+    let (with_build, _param_dok) = super::params::params_dok(store)?;
+    if proj.get_job_settings().dok.is_some() && with_build {
         proj.get_dir().join("Dockerfile").exists().then_some(0)
             .ok_or(anyhow::Error::msg("using DOK service requires a Dockerfile under the project folder"))?;
     }
@@ -34,10 +35,13 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
     let client = store.account_mgr.create_client(&store.setting_mgr)?.clone();
     tokio::spawn(async move {
         match dok::shortcuts::cancel_task(client, task_id.as_str()).await {
-            Ok(_task_cancelled) => (),
+            Ok(task_cancelled) => {
+                let mut job_mgr = job_mgr.lock().unwrap();
+                job_mgr.add_log(0, format!("task {} has been canceled", task_cancelled.id));
+            },
             Err(e) => {
                 let mut job_mgr = job_mgr.lock().unwrap();
-                job_mgr.add_log(0, format!("run job error: {e}"));
+                job_mgr.add_log(0, format!("cancel task error: {e}"));
             } 
         }
     });

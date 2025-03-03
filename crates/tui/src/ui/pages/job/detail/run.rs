@@ -60,6 +60,13 @@ async fn launch_job_dok(
                 job.infra = data_model::job::Infra::SakuraInternetDOK(task.id.to_string(), Some(http_uri.to_string()));
             }
         }
+        if let Some(container) = task.containers.first() {
+            if let Some(start_at) = &container.start_at {
+                job_mgr.add_log_tmp(job_id, format!("[sakura internet DOK] task {} started at {}", task.id, start_at));
+            } else {
+                job_mgr.add_log_tmp(job_id, format!("[sakura internet DOK] task {} not ready for use", task.id));
+            }
+        }
     };
 
     // get artifact url

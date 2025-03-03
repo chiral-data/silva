@@ -26,13 +26,13 @@ pub enum Plan {
     H100GB20
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct Http {
     pub path: String,
     pub port: u16
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct Container {
     image: String,
     registry: Option<String>,
@@ -44,7 +44,8 @@ pub struct Container {
     //  - sending an empty value {} or null will lead to error
     // environment: Option<HashMap<String, String>>,
     plan: Plan,
-    http: Option<Http>
+    http: Option<Http>,
+    pub start_at: Option<String>,
 }
 
 impl Container {
