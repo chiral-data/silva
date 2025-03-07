@@ -8,13 +8,6 @@ use crate::{envs, ui, utils};
 use crate::data_model;
 
 fn setup() {
-    // let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME).unwrap();
-    // let data_dir = xdg_dirs.get_data_home();
-    let data_dir = utils::file::get_data_dir();
-    if !data_dir.exists() {
-        std::fs::create_dir_all(data_dir).unwrap();
-    }
-
     // if project home directory is not set, use the directories under "examples"
     if env::var_os(envs::SILVA_PROJECTS_HOME).is_none() {
         let project_homes: String = utils::file::get_child_dirs(PathBuf::from(".").join("examples"))

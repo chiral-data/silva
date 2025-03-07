@@ -1,10 +1,11 @@
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 
-use crate::constants;
 
-pub fn get_data_dir() -> PathBuf {
-    app_dirs2::app_root(app_dirs2::AppDataType::UserData, &constants::APP_INFO).unwrap()
+pub fn silva_project_dir() -> directories::ProjectDirs {
+    directories::ProjectDirs::from("com", "Chiral",  "Silva")
+        .ok_or(anyhow::Error::msg(format!("error get silva project dir")))
+        .unwrap()
 }
 
 /// download the file from url to file with filepath
