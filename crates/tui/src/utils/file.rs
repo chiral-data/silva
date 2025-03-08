@@ -1,6 +1,9 @@
 use std::fs::File;
 use std::path::Path;
 
+use futures_util::StreamExt;
+use tokio::io::AsyncWriteExt;
+
 
 
 /// download the file from url to file with filepath
@@ -9,6 +12,17 @@ pub async fn download(url: &str, filepath: &Path) -> anyhow::Result<()> {
     let bytes = response.bytes().await?;
     let mut file = std::fs::File::create(filepath)?;
     std::io::copy(&mut bytes.as_ref(), &mut file)?;
+    Ok(())
+}
+
+pub async fn download_async(url: &str, filepath: &Path) -> anyhow::Result<()> {
+    let mut file = tokio::fs::File::create(filepath).await?;
+    let mut stream = reqwest::get(url).await?.bytes_stream();
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result?;
+        file.write_all(&chunk).await?;
+    }
+    file.flush().await?;
     Ok(())
 }
 
@@ -51,6 +65,15 @@ mod tests {
         download(&artifact_url.url, &filepath).await.unwrap();
         let to_folder = home::home_dir().unwrap().join("Downloads").join("1");
         unzip_tar_gz(&filepath, &to_folder).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_download_async() {
+        // let filename = "v022.tar.gz";
+        let filename = "v022.zip";
+        let url = format!("https://github.com/chiral-data/application-examples/archive/refs/tags/{filename}");
+        let filepath = home::home_dir().unwrap().join("Downloads").join(filename);
+        download_async(&url, &filepath).await.unwrap();
     }
 }
 
