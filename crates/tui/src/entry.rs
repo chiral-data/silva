@@ -1,10 +1,10 @@
-use std::{io, path::PathBuf, time::{Duration, Instant}};
+use std::{io, time::{Duration, Instant}};
 use std::env;
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
 use ratatui::prelude::*;
 
-use crate::{envs, ui, utils};
+use crate::{constants, ui, utils};
 use crate::data_model;
 
 fn setup() {
@@ -13,18 +13,9 @@ fn setup() {
         std::fs::create_dir_all(data_dir).unwrap();
     }
 
-    if env::var_os(envs::SILVA_PROJECTS_HOME).is_none() {
+    if env::var_os(constants::SILVA_PROJECTS_HOME).is_none() {
         panic!("Environment variable SILVA_PROJECTS_HOME is not set and silva cannot start")
     }
-
-    let silva_project_home_str = env::var_os(envs::SILVA_PROJECTS_HOME).unwrap();
-    let project_home_dir = PathBuf::from(silva_project_home_str);
-
-    // let project_homes: String = utils::file::get_child_dirs(PathBuf::from(".").join("examples"))
-    //     .map(|child_dir| child_dir.canonicalize().unwrap().to_str().unwrap().to_string())
-    //     .collect::<Vec<String>>()
-    //     .join(";");
-    //  env::set_var(envs::SILVA_PROJECTS_HOME, project_homes);
 }
 
 

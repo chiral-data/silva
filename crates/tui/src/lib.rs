@@ -1,5 +1,4 @@
 mod constants;
-mod envs;
 mod utils;
 
 mod data_model;
