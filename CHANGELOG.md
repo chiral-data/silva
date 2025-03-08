@@ -9,12 +9,12 @@ All notable changes will be documented in this file.
 - [] add Dockerfile for examples gromacs & whisper 
 
 ## [Unreleased] v0.2.2 llm with ollama and dok
-integrate DeepSeek; binary release;
+integrate Ollama; binary release;
 - [] setup of sacloud API tokens, 
-- [] downloading  source.tar.gz, extract examples folders
 
 ### Added
-- [] default registry files
+- [] support application-examples from chiral
+- [] default registry chiral.sakuracr.jp 
     - implemented, not tested
 - [x] talk to ollama server via [ollama-rs](https://github.com/pepperoni21/ollama-rs)
 - [x] chat UI: scrolling, display Markdown

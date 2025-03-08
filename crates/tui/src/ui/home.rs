@@ -23,6 +23,7 @@ pub fn render(f: &mut Frame, states: &mut ui::states::States, store: &mut data_m
 
     tabs::render(f, top, states);
     match states.tabs_states.tab {
+        tabs::Tab::Tutorial => tutorial::render(f, mid, states, store),
         tabs::Tab::Project => project::render(f, mid, states, store),
         tabs::Tab::Job => job::render(f, mid, states, store),
         tabs::Tab::Setting => setting::render(f, mid, states, store),
@@ -50,12 +51,14 @@ pub async fn handle_key(tick_rate: Duration, last_tick: &mut Instant, states: &m
                 //     };
                 } else if key.code == event::KeyCode::Tab {
                     states.tabs_states.tab = match states.tabs_states.tab {
+                        tabs::Tab::Tutorial => tabs::Tab::Project,
                         tabs::Tab::Project => tabs::Tab::Job,
                         tabs::Tab::Job => tabs::Tab::Setting, 
-                        tabs::Tab::Setting => tabs::Tab::Project 
+                        tabs::Tab::Setting => tabs::Tab::Tutorial 
                     };
                 } else {
                     match states.tabs_states.tab {
+                        tabs::Tab::Tutorial => todo!(),
                         tabs::Tab::Project => project::handle_key(&key, states, store),
                         tabs::Tab::Job => job::handle_key(&key, states, store),
                         tabs::Tab::Setting => setting::handle_key(&key, states, store).await 

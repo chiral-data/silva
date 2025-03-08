@@ -34,7 +34,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, _store
     }
 
     let list = List::new(states_current.proj_dirs.iter().map(|path| path.to_str().unwrap()))
-        .block(Block::bordered().title("List of Projets"))
+        .block(Block::bordered().title(" List of Projets "))
         .highlight_style(Style::new().reversed())
         .highlight_symbol(">>[Enter] ")
         .repeat_highlight_symbol(true)
