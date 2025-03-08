@@ -14,6 +14,7 @@ integrate Ollama; binary release;
 
 ### Added
 - [] support application-examples from chiral
+    - download and extract
 - [] default registry chiral.sakuracr.jp 
     - implemented, not tested
 - [x] talk to ollama server via [ollama-rs](https://github.com/pepperoni21/ollama-rs)

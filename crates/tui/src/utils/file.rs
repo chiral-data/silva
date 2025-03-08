@@ -36,7 +36,7 @@ pub fn unzip_tar_gz(filepath: &Path, to_folder: &Path) -> anyhow::Result<()> {
     for entry in ar.entries()? {
         let mut entry = entry?;
         let path = entry.path()?;
-        if path.is_dir() {
+        if entry.size() == 0 {
             std::fs::create_dir_all(to_folder.join(path))?
         } else {
             let mut file = File::create(to_folder.join(path))?;

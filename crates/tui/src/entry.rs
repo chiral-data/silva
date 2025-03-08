@@ -7,11 +7,20 @@ use ratatui::prelude::*;
 use crate::{constants, ui, utils};
 use crate::data_model;
 
-fn setup() {
+async fn setup() {
     let data_dir = utils::dirs::data_dir(); 
     if !data_dir.exists() {
-        std::fs::create_dir_all(data_dir).unwrap();
+        std::fs::create_dir_all(&data_dir).unwrap();
     }
+
+    // download examples and extract
+    // let version = env!("CARGO_PKG_VERSION");
+    let tag = "v022";
+    let filename = format!("{tag}.tar.gz");
+    let url = format!("https://github.com/chiral-data/application-examples/archive/refs/tags/{filename}");
+    let filepath = data_dir.join(filename);
+    utils::file::download_async(&url, &filepath).await.unwrap();
+    utils::file::unzip_tar_gz(&filepath, data_dir.join(tag).as_path()).unwrap();
 
     if env::var_os(constants::SILVA_PROJECTS_HOME).is_none() {
         panic!("Environment variable SILVA_PROJECTS_HOME is not set and silva cannot start")
@@ -20,7 +29,7 @@ fn setup() {
 
 
 pub async fn run() -> anyhow::Result<()> {
-    setup();
+    setup().await;
 
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture, )?;
