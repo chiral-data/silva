@@ -3,14 +3,13 @@
 //!     When selecting the Sakura Internet DOK service, a Docker registry from Sakura Internet
 //!     is recommended.
 
-use std::path::Path;
 use std::{fs, path::PathBuf};
 use std::io::Write;
 
 use sacloud_rs::api::dok;
 use serde::{Deserialize, Serialize};
 
-use crate::constants;
+use crate::{constants, utils};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Registry {
@@ -50,18 +49,18 @@ impl DataFile {
 }
 
 pub struct Manager {
-    data_dir: PathBuf,
     pub registries: Vec<Registry>,
 }
 
 impl Manager {
-    fn data_filepath(data_dir: &Path) -> anyhow::Result<PathBuf> {
+    fn data_filepath() -> anyhow::Result<PathBuf> {
+        let data_dir = utils::dirs::data_dir();
         let fp = data_dir.join(constants::FILENAME_REGISTRIES);
         Ok(fp)
     }
 
-    pub fn load(data_dir: &Path) -> anyhow::Result<Self> {
-        let filepath = Self::data_filepath(data_dir)?; 
+    pub fn load() -> anyhow::Result<Self> {
+        let filepath = Self::data_filepath()?; 
         if !filepath.exists() {
             std::fs::File::create(&filepath)?;
         }
@@ -69,19 +68,18 @@ impl Manager {
         let content = fs::read_to_string(&filepath)?;
         let df = DataFile::new(&content)?;
         let s = Self { 
-            data_dir: data_dir.to_path_buf(),
             registries: df.registries.unwrap_or_default(),
         };
 
         Ok(s)
     }
 
-    pub fn save(&self, data_dir: &Path) -> anyhow::Result<()> {
+    pub fn save(&self) -> anyhow::Result<()> {
         let df = DataFile {
             registries: Some(self.registries.clone())
         };
 
-        let filepath = Self::data_filepath(data_dir)?; 
+        let filepath = Self::data_filepath()?; 
         let mut file = std::fs::File::create(filepath)?;
         write!(file, "{}", df.to_string()?)?;
         Ok(())

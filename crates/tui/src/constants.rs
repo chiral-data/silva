@@ -1,4 +1,5 @@
 pub const APP_NAME: &str = "silva";
+pub const ORG_NAME: &str = "Chiral";
 // TODO: to remove
 // pub const APP_INFO: app_dirs2::AppInfo = app_dirs2::AppInfo{name: APP_NAME, author: "Chiral"};
 

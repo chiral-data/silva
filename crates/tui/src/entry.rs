@@ -8,14 +8,23 @@ use crate::{envs, ui, utils};
 use crate::data_model;
 
 fn setup() {
-    // if project home directory is not set, use the directories under "examples"
-    if env::var_os(envs::SILVA_PROJECTS_HOME).is_none() {
-        let project_homes: String = utils::file::get_child_dirs(PathBuf::from(".").join("examples"))
-            .map(|child_dir| child_dir.canonicalize().unwrap().to_str().unwrap().to_string())
-            .collect::<Vec<String>>()
-            .join(";");
-         env::set_var(envs::SILVA_PROJECTS_HOME, project_homes);
+    let data_dir = utils::dirs::data_dir(); 
+    if !data_dir.exists() {
+        std::fs::create_dir_all(data_dir).unwrap();
     }
+
+    if env::var_os(envs::SILVA_PROJECTS_HOME).is_none() {
+        panic!("Environment variable SILVA_PROJECTS_HOME is not set and silva cannot start")
+    }
+
+    let silva_project_home_str = env::var_os(envs::SILVA_PROJECTS_HOME).unwrap();
+    let project_home_dir = PathBuf::from(silva_project_home_str);
+
+    // let project_homes: String = utils::file::get_child_dirs(PathBuf::from(".").join("examples"))
+    //     .map(|child_dir| child_dir.canonicalize().unwrap().to_str().unwrap().to_string())
+    //     .collect::<Vec<String>>()
+    //     .join(";");
+    //  env::set_var(envs::SILVA_PROJECTS_HOME, project_homes);
 }
 
 

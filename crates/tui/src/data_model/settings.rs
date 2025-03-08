@@ -30,7 +30,7 @@ pub struct Manager {
 
 impl Manager {
     fn data_filepath() -> anyhow::Result<PathBuf> {
-        let data_dir = utils::file::get_data_dir();
+        let data_dir = utils::dirs::data_dir();
         let fp = data_dir.join(constants::FILENAME_SETTINGS);
         Ok(fp)
     }

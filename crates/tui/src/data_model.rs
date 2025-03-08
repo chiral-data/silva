@@ -2,11 +2,8 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use crate::utils;
-
 
 pub struct Store {
-    pub project_dir: directories::ProjectDirs,
     pub account_mgr: account::Manager,
     pub registry_mgr: registry::Manager,
     pub setting_mgr: settings::Manager,
@@ -19,7 +16,6 @@ pub struct Store {
 
 impl std::default::Default for Store {
     fn default() -> Self {
-        let project_dir = utils::file::silva_project_dir();
         let app_mgr = app::Manager::new();
         let registry_mgr = registry::Manager::load().unwrap();
         let setting_mgr = settings::Manager::load().unwrap();
@@ -28,14 +24,7 @@ impl std::default::Default for Store {
         let pod_mgr = pod::Manager::new();
         let job_mgr = job::Manager::load().unwrap();
 
-
-        let data_dir = project_dir.data_dir(); 
-        if !data_dir.exists() {
-            std::fs::create_dir_all(data_dir).unwrap();
-        }
-
         Self { 
-            project_dir,
             account_mgr, registry_mgr, setting_mgr,
             app_mgr, pod_type_mgr, pod_mgr,
             project_sel: None,

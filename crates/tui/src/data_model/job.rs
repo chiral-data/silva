@@ -5,7 +5,7 @@ use std::{collections::{HashMap, VecDeque}, fs, path::{Path, PathBuf}};
 
 use serde::Deserialize;
 
-use crate::constants;
+use crate::{constants, utils};
 
 #[derive(Debug, Deserialize)]
 pub enum JobStatus {
@@ -82,13 +82,14 @@ pub struct Manager {
 }
 
 impl Manager {
-    fn data_filepath(data_dir: &Path) -> anyhow::Result<PathBuf> {
+    fn data_filepath() -> anyhow::Result<PathBuf> {
+        let data_dir = utils::dirs::data_dir();
         let fp = data_dir.join(constants::FILENAME_JOBS);
         Ok(fp)
     }
 
-    pub fn load(data_dir: &Path) -> anyhow::Result<Self> {
-        let filepath = Self::data_filepath(data_dir)?; 
+    pub fn load() -> anyhow::Result<Self> {
+        let filepath = Self::data_filepath()?; 
         if !filepath.exists() {
             std::fs::File::create(&filepath)?;
         }

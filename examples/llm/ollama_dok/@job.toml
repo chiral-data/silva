@@ -1,9 +1,0 @@
-[files]
-inputs = []
-outputs = []
-scripts = []
-
-[dok]
-docker_image = "chiral.sakuracr.jp/llm_ollama_dok_build:latest"
-http_port = 11434
-plan = "v100-32gb"

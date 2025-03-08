@@ -1,10 +1,9 @@
-use std::path::Path;
 use std::{fs, path::PathBuf};
 use std::io::Write;
 
 use serde::Deserialize;
 
-use crate::constants;
+use crate::{constants, utils};
 
 #[derive(Debug, Deserialize)]
 pub struct SakuraAccount {
@@ -66,18 +65,20 @@ pub struct Manager {
 }
 
 impl Manager {
-    pub fn data_filepath(data_dir: &Path) -> anyhow::Result<PathBuf> {
+    pub fn data_filepath() -> anyhow::Result<PathBuf> {
+        let data_dir = utils::dirs::data_dir();
         let fp = data_dir.join(constants::FILENAME_ACCOUNTS);
         Ok(fp)
     }
 
-    pub fn load(data_dir: &Path) -> anyhow::Result<Self> {
-        let filepath = Self::data_filepath(data_dir)?;
+    pub fn load() -> anyhow::Result<Self> {
+        let filepath = Self::data_filepath()?;
         let accounts = if filepath.exists() {
             let content = fs::read_to_string(&filepath)?;
             let df = DataFile::new(&content)?;
             df.accounts
         } else {
+            let data_dir = utils::dirs::data_dir();
             // create a temporary file for user
             let fp = data_dir.join(format!("{}.tmp", constants::FILENAME_ACCOUNTS));
             let mut file = std::fs::File::create(fp)?;

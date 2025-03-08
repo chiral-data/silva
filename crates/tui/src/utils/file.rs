@@ -2,11 +2,6 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 
 
-pub fn silva_project_dir() -> directories::ProjectDirs {
-    directories::ProjectDirs::from("com", "Chiral",  "Silva")
-        .ok_or(anyhow::Error::msg(format!("error get silva project dir")))
-        .unwrap()
-}
 
 /// download the file from url to file with filepath
 pub async fn download(url: &str, filepath: &Path) -> anyhow::Result<()> {
