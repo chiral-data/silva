@@ -8,12 +8,14 @@ All notable changes will be documented in this file.
 - [] local computer as a computation pod
 - [] add Dockerfile for examples gromacs & whisper 
 
-## [Unreleased] v0.2.2 llm via ollama
+## [Unreleased] v0.2.2 llm with ollama and dok
 integrate DeepSeek; binary release;
-- [] setup of sacloud API tokens, silva projects home folder
+- [] setup of sacloud API tokens, 
 - [] downloading  source.tar.gz, extract examples folders
 
 ### Added
+- [] default registry files
+    - implemented, not tested
 - [x] talk to ollama server via [ollama-rs](https://github.com/pepperoni21/ollama-rs)
 - [x] chat UI: scrolling, display Markdown
 - [x] example "ollama_dok" without docker image building
@@ -21,6 +23,7 @@ integrate DeepSeek; binary release;
 
 ### Changed
 - [x] Dockerfile automatical generating deprecrated
+- [x] refactor project dirs
 
 ### Removed
 

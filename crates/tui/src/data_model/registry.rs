@@ -29,6 +29,15 @@ impl Registry {
     pub fn id(&self) -> String {
         format!("{}_{}", self.hostname, self.username.as_deref().unwrap_or(""))
     }
+
+    pub fn chiral_only_pull() -> Self {
+        Self {
+            hostname: "chiral.sakuracr.jp".to_string(),
+            username: Some("chiral".to_string()),
+            password: Some("chiral".to_string()),
+            dok_id: None
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -67,9 +76,8 @@ impl Manager {
 
         let content = fs::read_to_string(&filepath)?;
         let df = DataFile::new(&content)?;
-        let s = Self { 
-            registries: df.registries.unwrap_or_default(),
-        };
+        let registries = df.registries.unwrap_or(vec![Registry::chiral_only_pull()]);
+        let s = Self { registries };
 
         Ok(s)
     }
@@ -103,7 +111,6 @@ impl Manager {
             }
         }
         self.save()?;
-
 
         Ok(())
     }

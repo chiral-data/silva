@@ -10,9 +10,9 @@
 //!     - [] POST       /auth/agree/
 //! Registry
 //!     - [x] GET        /registries/
-//!     - [] POST       /registries/
+//!     - [x] POST       /registries/
 //!     - [] GET        /registries/{registryID}/
-//!     - [] DELETE     /registries/{registryID}/
+//!     - [x] DELETE     /registries/{registryID}/
 //!     - [] PUT        /registries/{registryID}/
 //! Task
 //!     - [x] GET       /tasks/
