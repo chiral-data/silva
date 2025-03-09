@@ -73,7 +73,7 @@ impl Manager {
 
     pub fn load() -> anyhow::Result<Self> {
         let filepath = Self::data_filepath()?;
-        let accounts = if filepath.exists() {
+        let mut accounts = if filepath.exists() {
             let content = fs::read_to_string(&filepath)?;
             let df = DataFile::new(&content)?;
             df.accounts
@@ -86,6 +86,19 @@ impl Manager {
 
             vec![]
         };
+
+        if let Some(sakura_access_token) = std::env::var_os(constants::SILVA_SAKURA_ACCESS_TOKEN) {
+            if let Some(sakura_access_token_secrete) = std::env::var_os(constants::SILVA_SAKURA_ACCESS_TOKEN_SECRET) {
+                let account = Account::Sakura(SakuraAccount { 
+                    name: "sakura".to_string(), resource_id: "unknown".to_string(),
+                    access_token: sakura_access_token.to_str().unwrap().to_string(),
+                    access_token_secret: sakura_access_token_secrete.to_str().unwrap().to_string()
+                });
+                accounts.push(account);
+            }
+        }
+
+
 
         let s = Self { accounts };
         Ok(s)

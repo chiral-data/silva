@@ -10,11 +10,10 @@ All notable changes will be documented in this file.
 
 ## [Unreleased] v0.2.2 llm with ollama and dok
 integrate Ollama; binary release;
-- [] setup of sacloud API tokens, 
 
 ### Added
-- [] support application-examples from chiral
-    - download and extract
+- [x] setup of sacloud API tokens, 
+- [x] support application-examples from chiral
 - [] default registry chiral.sakuracr.jp 
     - implemented, not tested
 - [x] talk to ollama server via [ollama-rs](https://github.com/pepperoni21/ollama-rs)
