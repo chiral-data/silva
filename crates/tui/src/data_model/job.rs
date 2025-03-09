@@ -24,39 +24,39 @@ impl std::fmt::Display for JobStatus {
     }
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub enum Infra {
+    None,
+    // (task id, http uri)
+    SakuraInternetDOK(String, Option<String>)
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Job {
     pub id: usize,
-    status: JobStatus,
-    desc: String
+    // status: JobStatus,
+    // desc: String,
+    pub infra: Infra
 }
 
 impl std::fmt::Display for Job {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:5} {:8}   {}", self.id, self.status, self.desc)
+        // write!(f, "{:5} {:8}   {}", self.id, self.status, self.desc)
+        write!(f, "{:5} ", self.id)
     }
 }
 
 impl Job {
+    pub fn new(id: usize) -> Self {
+        Self { id, infra: Infra::None }
+    }
+
     pub fn get_settings(proj_dir: &Path) ->anyhow::Result<settings::Settings> {
         let settings_filepath = proj_dir.join("@job.toml");
         let job_settings = settings::Settings::new_from_file(&settings_filepath)
             .map_err(|e| anyhow::Error::msg(format!("{e} no settings file {settings_filepath:?}")))?;
 
         Ok(job_settings)
-    }
-
-    pub fn get_project_name(proj_dir: &Path) -> anyhow::Result<String> {
-        let proj_name = proj_dir.file_name()
-            .ok_or(anyhow::Error::msg("no file name for project "))?
-            .to_str()
-            .ok_or(anyhow::Error::msg("osString to str error"))?;
-        let proj_parent = proj_dir
-            .parent()
-            .map(|p| p.file_name().unwrap().to_str().unwrap_or(""))
-            .unwrap_or("");
-
-        Ok(format!("{proj_parent}_{proj_name}"))
     }
 }
 
@@ -76,13 +76,14 @@ impl DataFile {
 pub struct Manager {
     pub jobs: HashMap<usize, Job>,
     /// job logs: <job id, log contents>
+    pub chat_stream: String,
     pub logs: HashMap<usize, VecDeque<String>>,
     pub logs_tmp: HashMap<usize, String>
 }
 
 impl Manager {
     fn data_filepath() -> anyhow::Result<PathBuf> {
-        let data_dir = utils::file::get_data_dir();
+        let data_dir = utils::dirs::data_dir();
         let fp = data_dir.join(constants::FILENAME_JOBS);
         Ok(fp)
     }
@@ -102,7 +103,8 @@ impl Manager {
             None => HashMap::new() 
         };
 
-        let s = Self { jobs, logs: HashMap::new(), logs_tmp: HashMap::new() };
+        let chat_stream = String::new();
+        let s = Self { jobs, chat_stream, logs: HashMap::new(), logs_tmp: HashMap::new() };
         Ok(s)
     }
 

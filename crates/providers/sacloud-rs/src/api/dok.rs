@@ -10,16 +10,16 @@
 //!     - [] POST       /auth/agree/
 //! Registry
 //!     - [x] GET        /registries/
-//!     - [] POST       /registries/
+//!     - [x] POST       /registries/
 //!     - [] GET        /registries/{registryID}/
-//!     - [] DELETE     /registries/{registryID}/
+//!     - [x] DELETE     /registries/{registryID}/
 //!     - [] PUT        /registries/{registryID}/
 //! Task
 //!     - [x] GET       /tasks/
-//!     - [] POST       /tasks/
+//!     - [x] POST       /tasks/
 //!     - [x] GET       /tasks/{taskId}/
 //!     - [] DELETE     /tasks/{taskId}/
-//!     - [] POST       /tasks/{taskId}/cancel/
+//!     - [x] POST       /tasks/{taskId}/cancel/
 //!     - [] GET        /tasks/{taskId}/download/{target}/
 //! Artifacts
 //!     - [] GET        /artifacts/
@@ -58,7 +58,10 @@ create_struct!(RegistryList, "lowercase",
 
 create_struct!(Task, "lowercase",
     id: String,
+    created_at: String,
+    containers: Vec<params::Container>,
     status: String,
+    http_uri: Option<String>,
     artifact: Option<Artifact>
 );
 
@@ -77,9 +80,7 @@ create_struct!(TaskCreated, "lowercase",
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Client;
-
-    #[tokio::test]
+    use crate::Client; #[tokio::test]
     async fn test_get_registries() {
         let client = Client::default().dok();
         let registry_list: RegistryList = client.registries().dok_end().get()
@@ -133,25 +134,43 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_post_tasks() {
+    async fn test_post_cancel_tasks() {
         let client = Client::default().dok();
         let registry_list: RegistryList = client.clone().registries().dok_end().get()
             .await.unwrap();
         let registry = registry_list.results.first().unwrap();
         let container = params::Container::default()
-            .image(format!("{}/gromacs:test_241208_2", registry.hostname))
+            .image(format!("{}/llm_ollama:latest", registry.hostname))
             .registry(Some(registry.id.to_string()))
             .command(vec![])
             .entrypoint(vec![])
+            .http(params::Http { path: "/".to_string(), port: 7979 })
             .plan(params::Plan::V100);
         let post_tasks = params::PostTasks::default()
             .name("some_task".to_string())
             .containers(vec![container])
             .tags(vec![]);
-        let task_created: TaskCreated = client.tasks().dok_end()
+        let task_created: TaskCreated = client.clone().tasks().dok_end()
             .set_params(&post_tasks).unwrap()
             .post().await.unwrap();
-        dbg!(task_created);
+        dbg!(&task_created);
+
+        loop {
+            let task: Task = client.clone().tasks().task_id(&task_created.id)
+                .dok_end().get().await.unwrap();
+            dbg!(&task.status);
+            if let Some(http_uri) = task.http_uri {
+                dbg!(http_uri);
+            }
+            if task.status == "running" {
+                let _task_cancelled: Task = client.clone().dok().tasks()
+                    .task_id(&task.id).cancel().dok_end()
+                    .post().await.unwrap();
+            }
+            if task.status == "done" || task.status == "canceled" {
+                break;
+            }
+        }
     }
 
     #[tokio::test]

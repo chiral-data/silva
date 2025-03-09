@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
 /// Request for POST /registries/
 #[derive(Serialize, Default)]
@@ -14,7 +14,7 @@ impl PostRegistries {
     pub fn password(mut self, password: String) -> Self { self.password = password; self }
 }
 
-#[derive(Serialize,  Default)]
+#[derive(Debug, Serialize, Deserialize,  Default, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum Plan {
     #[default]
@@ -26,7 +26,13 @@ pub enum Plan {
     H100GB20
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct Http {
+    pub path: String,
+    pub port: u16
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct Container {
     image: String,
     registry: Option<String>,
@@ -37,7 +43,9 @@ pub struct Container {
     //  - it can be ignored
     //  - sending an empty value {} or null will lead to error
     // environment: Option<HashMap<String, String>>,
-    plan: Plan
+    plan: Plan,
+    http: Option<Http>,
+    pub start_at: Option<String>,
 }
 
 impl Container {
@@ -47,6 +55,7 @@ impl Container {
     pub fn entrypoint(mut self, entrypoint: Vec<String>) -> Self { self.entrypoint = entrypoint; self }
     // pub fn environment(mut self, environment: Option<HashMap<String, String>>) -> Self { self.environment = environment; self }
     pub fn plan(mut self, plan: Plan) -> Self { self.plan = plan; self }
+    pub fn http(mut self, http: Http) -> Self { self.http = Some(http); self }
 }
 
 /// Request for POST /tasks/

@@ -7,7 +7,7 @@ use crate::ui::layout::info::MessageLevel;
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, _store: &data_model::Store) {
     let current_style = states.get_style(true);
-    ui::components::job_new_helper::render(f, area, current_style);
+    ui::components::helper_hint::render_job_new(f, area, current_style);
 }
 
 pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store: &mut data_model::Store) {

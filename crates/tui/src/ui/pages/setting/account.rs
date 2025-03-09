@@ -16,9 +16,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     let current_style = states.get_style(true);
 
     if store.account_mgr.accounts.is_empty() {
-        // let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME).unwrap();
-        // let data_dir = xdg_dirs.get_data_home();
-        let data_dir = utils::file::get_data_dir();
+        let data_dir = utils::dirs::data_dir();
         let filepath_hint = format!("Add account information into {}", data_dir.join(constants::FILENAME_ACCOUNTS).to_str().unwrap());
         let tmp_filepath_hint = data_dir.join(format!("{}.tmp", constants::FILENAME_ACCOUNTS));
         let error_hints: Vec<Line> = vec![
@@ -54,8 +52,9 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
                 } else { "  " })
             )
             .collect();
+        let title = format!(" Select Cloud Account (account file: {:?})", data_model::account::Manager::data_filepath().unwrap());
         let list = List::new(account_strings)
-            .block(Block::bordered().title(" Select Cloud Account "))
+            .block(Block::bordered().title(title))
             .style(Style::new().white())
             .highlight_style(Style::new().reversed())
             .highlight_symbol(">>[Enter] ")

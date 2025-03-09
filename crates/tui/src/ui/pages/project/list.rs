@@ -5,7 +5,6 @@ use ratatui::prelude::*;
 use ratatui::widgets::*;
 
 use crate::data_model;
-use crate::envs;
 use crate::ui;
 use crate::ui::layout::info::MessageLevel;
 use crate::utils;
@@ -13,7 +12,7 @@ use crate::utils;
 #[derive(Default)]
 pub struct States {
     list: ListState,
-    proj_dirs: Vec<PathBuf>, 
+    pub proj_dirs: Vec<PathBuf>, 
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, _store: &data_model::Store) {
@@ -23,16 +22,16 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, _store
         states_current.list.select(Some(0));
     }
 
-    let dirs_projects = envs::get_projects_home();
-    for dir in dirs_projects.iter() {
-        assert!(dir.is_dir());
+    if states_current.proj_dirs.is_empty() {
+        let dirs_projects = utils::dirs::get_project_dirs(); 
+        for dir in dirs_projects.iter() {
+            assert!(dir.is_dir());
+        }
+        states_current.proj_dirs = dirs_projects;
     }
-    states_current.proj_dirs = dirs_projects.into_iter()
-        .flat_map(utils::file::get_child_dirs)
-        .collect();
 
     let list = List::new(states_current.proj_dirs.iter().map(|path| path.to_str().unwrap()))
-        .block(Block::bordered().title("List of Projets"))
+        .block(Block::bordered().title(" List of Projets "))
         .highlight_style(Style::new().reversed())
         .highlight_symbol(">>[Enter] ")
         .repeat_highlight_symbol(true)

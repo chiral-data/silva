@@ -1,11 +1,10 @@
-use std::fs::{self, File};
-use std::path::{Path, PathBuf};
+use std::fs::File;
+use std::path::Path;
 
-use crate::constants;
+use futures_util::StreamExt;
+use tokio::io::AsyncWriteExt;
 
-pub fn get_data_dir() -> PathBuf {
-    app_dirs2::app_root(app_dirs2::AppDataType::UserData, &constants::APP_INFO).unwrap()
-}
+
 
 /// download the file from url to file with filepath
 pub async fn download(url: &str, filepath: &Path) -> anyhow::Result<()> {
@@ -16,7 +15,55 @@ pub async fn download(url: &str, filepath: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn unzip_tar_gz(filepath: &Path, to_folder: &Path) -> anyhow::Result<()> {
+pub async fn download_async(url: &str, filepath: &Path) -> anyhow::Result<()> {
+    let mut file = tokio::fs::File::create(filepath).await?;
+    let mut stream = reqwest::get(url).await?.bytes_stream();
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result?;
+        file.write_all(&chunk).await?;
+    }
+    file.flush().await?;
+    Ok(())
+}
+
+// pub async fn compress_tar(from_folder: &Path, filepath: &Path) -> anyhow::Result<()> {
+//     let tar_file = tokio::fs::File::create(filepath)
+//         .await.unwrap().into_std().await;
+//     let mut a = tar::Builder::new(tar_file);
+//     a.append_dir_all(from_folder.file_name().unwrap(), from_folder)?;
+//     a.finish()?;
+//     Ok(())
+// }
+
+// pub async fn extract_tar(filepath: &Path, to_folder: &Path) -> anyhow::Result<()> {
+//     let tar_file = tokio::fs::File::create(filepath)
+//         .await.unwrap().into_std().await;
+//     let buf = std::io::BufReader::new(tar_file);
+//     let mut a = tar::Archive::new(buf);
+//     a.unpack(to_folder)?;
+//     Ok(())
+// }
+
+pub fn copy_folder(from_folder: &Path, to_folder: &Path) -> anyhow::Result<()> {
+    if !to_folder.exists() {
+        std::fs::create_dir_all(to_folder)?;
+    }
+
+    let entries = std::fs::read_dir(from_folder)?;
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() {
+            std::fs::copy(&path, to_folder.join(path.file_name().unwrap()))?;
+        } else {
+            copy_folder(&path, to_folder.join(path.file_name().unwrap()).as_path())?
+        }
+    }
+
+    Ok(())
+}
+
+pub fn extract_tar_gz(filepath: &Path, to_folder: &Path) -> anyhow::Result<()> {
     std::fs::create_dir_all(to_folder)?;
 
     let file = File::open(filepath)?;
@@ -26,7 +73,7 @@ pub fn unzip_tar_gz(filepath: &Path, to_folder: &Path) -> anyhow::Result<()> {
     for entry in ar.entries()? {
         let mut entry = entry?;
         let path = entry.path()?;
-        if path.is_dir() {
+        if entry.size() == 0 {
             std::fs::create_dir_all(to_folder.join(path))?
         } else {
             let mut file = File::create(to_folder.join(path))?;
@@ -36,19 +83,6 @@ pub fn unzip_tar_gz(filepath: &Path, to_folder: &Path) -> anyhow::Result<()> {
 
     Ok(())
 }
-
-pub fn get_child_dirs<P: AsRef<Path>>(dir: P) -> impl Iterator<Item = PathBuf> {
-    fs::read_dir(dir).unwrap()
-        .filter_map(|entry| match entry {
-            Ok(e) => {
-                if e.path().is_dir() {
-                    e.path().to_str().map(PathBuf::from)
-                } else { None }
-            }
-            Err(_) => None
-        })
-}
-
 
 #[cfg(test)]
 mod tests {
@@ -64,10 +98,19 @@ mod tests {
         let artifact_url: sacloud_rs::api::dok::ArtifactUrl = client
             .artifacts().artifact_id(&task.artifact.unwrap().id).download().dok_end()
             .get().await.unwrap();
-        let filepath = home::home_dir().unwrap().join("Downloads").join("1.tar.gz");
+        let filepath = crate::utils::dirs::get_user_home().unwrap().join("Downloads").join("1.tar.gz");
         download(&artifact_url.url, &filepath).await.unwrap();
-        let to_folder = home::home_dir().unwrap().join("Downloads").join("1");
-        unzip_tar_gz(&filepath, &to_folder).unwrap();
+        let to_folder = crate::utils::dirs::get_user_home().unwrap().join("Downloads").join("1");
+        extract_tar_gz(&filepath, &to_folder).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_download_async() {
+        // let filename = "v022.tar.gz";
+        let filename = "v022.zip";
+        let url = format!("https://github.com/chiral-data/application-examples/archive/refs/tags/{filename}");
+        let filepath = crate::utils::dirs::get_user_home().unwrap().join("Downloads").join(filename);
+        download_async(&url, &filepath).await.unwrap();
     }
 }
 

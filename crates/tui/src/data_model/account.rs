@@ -65,27 +65,40 @@ pub struct Manager {
 }
 
 impl Manager {
-    fn data_filepath() -> anyhow::Result<PathBuf> {
-        let data_dir = utils::file::get_data_dir();
+    pub fn data_filepath() -> anyhow::Result<PathBuf> {
+        let data_dir = utils::dirs::data_dir();
         let fp = data_dir.join(constants::FILENAME_ACCOUNTS);
         Ok(fp)
     }
 
     pub fn load() -> anyhow::Result<Self> {
         let filepath = Self::data_filepath()?;
-        let accounts = if filepath.exists() {
+        let mut accounts = if filepath.exists() {
             let content = fs::read_to_string(&filepath)?;
             let df = DataFile::new(&content)?;
             df.accounts
         } else {
+            let data_dir = utils::dirs::data_dir();
             // create a temporary file for user
-            let data_dir = utils::file::get_data_dir();
             let fp = data_dir.join(format!("{}.tmp", constants::FILENAME_ACCOUNTS));
             let mut file = std::fs::File::create(fp)?;
             writeln!(&mut file, "{}", TEMPORY_CONTENT)?;
-
             vec![]
         };
+
+        if let Some(sakura_access_token) = std::env::var_os(constants::SILVA_SAKURA_ACCESS_TOKEN) {
+            if let Some(sakura_access_token_secrete) = std::env::var_os(constants::SILVA_SAKURA_ACCESS_TOKEN_SECRET) {
+                if let Some(sakura_resource_id) = std::env::var_os(constants::SILVA_SAKURA_RESOURCE_ID) {
+                    let account = Account::Sakura(SakuraAccount { 
+                        name: "from_terminal_rc".to_string(), 
+                        resource_id: sakura_resource_id.to_str().unwrap().to_string(),
+                        access_token: sakura_access_token.to_str().unwrap().to_string(),
+                        access_token_secret: sakura_access_token_secrete.to_str().unwrap().to_string()
+                    });
+                    accounts.push(account);
+                }
+            }
+        }
 
         let s = Self { accounts };
         Ok(s)
@@ -96,7 +109,6 @@ impl Manager {
             .ok_or(anyhow::Error::msg("no account selected, select an account from the Setting Page"))?;
         let account = self.accounts.iter().find(|acc| acc.id() == account_id)
             .ok_or(anyhow::Error::msg(format!("can not find account with id {account_id}")))?;
-
         Ok(account)
     }
 
@@ -105,7 +117,6 @@ impl Manager {
         let client = match account_sel {
             Account::Sakura(sa) => sacloud_rs::Client::new(sa.access_token.to_string(), Some(sa.access_token_secret.to_string()))
         };
-
         Ok(client)
     }
 }

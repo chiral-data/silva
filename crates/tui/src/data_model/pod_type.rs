@@ -5,11 +5,11 @@ use serde::Deserialize;
 use super::app::App;
 
 
-#[derive(Debug, Deserialize, Clone)]
-pub enum Kind {
-    // SakuraInternetServer(provider::sakura_internet::ServerPlan), 
-    SakuraInternetService,
-}
+// #[derive(Debug, Deserialize, Clone)]
+// pub enum Kind {
+//     // SakuraInternetServer(provider::sakura_internet::ServerPlan), 
+//     SakuraInternetService,
+// }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct PodType {
@@ -21,27 +21,33 @@ pub struct PodType {
     pub is_service: bool,
 }
 
+impl PodType {
+    pub fn is_localhost(&self) -> bool {
+        self.id == 0
+    }
+}
 
 pub struct Manager {
     pub pod_types: HashMap<usize, PodType>,
-    /// (app, vector of server plan id)
+    pub pod_type_id_selected: Option<usize>,
+    /// (app, pod type ids)
     pub for_applications: HashMap<App, Vec<usize>>
+}
+
+pub mod ids {
+    pub const DOK: usize = 1;
 }
 
 impl Manager {
     pub fn new() -> Self {
-        // let pt_0 = PodType { 
-        //     id: 0, 
-        //     provider: provider::Provider::SakuraInternet,
-        //     kind: Kind::SakuraInternetServer(provider::sakura_internet::ServerPlan { server_plan_id: "sp_gpu".to_string(), disk_plan_id: "dp_0".to_string() }),
-        //     name: "Sakura Internet - GPU server - Storage 40GB".to_string(),
-        //     descs: vec!["CPU: 4 cores", "Memory: 56GB", "GPU: NVidia Tesla V100 32GB"].into_iter().map(String::from).collect(),
-        //     is_service: false,
-        // };
+        let pt_0 = PodType { 
+            id: 0, 
+            name: "Localhost".to_string(),
+            descs: vec![],
+            is_service: false,
+        };
         let pt_1 = PodType { 
-            id: 1, 
-            // provider: provider::Provider::SakuraInternet,
-            // kind: Kind::SakuraInternetService,
+            id: ids::DOK, 
             name: "Sakura Internet - DOK".to_string(),
             descs: vec![
                 "Providing the best GPUs for generative AI and machine learning at low prices".to_string(),
@@ -49,27 +55,24 @@ impl Manager {
             ],
             is_service: true,
         };
-        // let pt_5 = PodType { 
-        //     id: 5, 
-        //     provider: provider::Provider::SakuraInternet,
-        //     kind: Kind::SakuraInternetServer(provider::sakura_internet::ServerPlan { server_plan_id: "sp_cpu".to_string(), disk_plan_id: "dp_5".to_string() }),
-        //     name: "Sakura Internet - CPU server - Storage 40GB".to_string(),
-        //     descs: vec!["CPU: 4 cores", "Memory: 4GB"].into_iter().map(String::from).collect(),
-        //     is_service: false,
-        // };
         let pod_types = vec![
-            // (0, pt_0), 
-            (1, pt_1), 
-            // (5, pt_5)
+            (0, pt_0), 
+            (ids::DOK, pt_1), 
         ].into_iter().collect();
 
         // TODO: right now only hard coding
         let for_applications = vec![
-            (App::Gromacs, vec![1]),
-            (App::OpenAIWhisper, vec![1])
+            (App::Gromacs, vec![0, 1]),
+            (App::OpenAIWhisper, vec![1]),
+            (App::Llm, vec![1])
         ].into_iter().collect();
 
-        Manager { pod_types, for_applications }
+        Manager { pod_types, pod_type_id_selected: None, for_applications }
+    }
+
+    pub fn selected(&self) -> Option<&PodType> {
+        self.pod_type_id_selected
+            .map(|id_sel| self.pod_types.get(&id_sel))?
     }
 }
 

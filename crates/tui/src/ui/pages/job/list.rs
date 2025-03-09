@@ -10,12 +10,12 @@ use crate::ui::layout::info::MessageLevel;
 #[derive(Default, PartialEq)]
 pub enum Tab {
     #[default]
-    New
+    New,
 }
 
 #[derive(Default)]
 pub struct States {
-    tab_action: Tab,
+    pub tab_action: Tab,
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &data_model::Store) {
@@ -25,18 +25,6 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     let action_selected = match states_current.tab_action {
         Tab::New => 0,
     };
-    let tabs_strings: Vec<String> = [
-            ("New", "[N]ew"),
-        ].into_iter()
-        .enumerate()
-        .map(|(i, s)| if i == action_selected {
-            format!("[Enter] {}", s.0)
-        } else { s.1.to_string() })
-        .collect();
-    let actions = Tabs::new(tabs_strings)
-        .block(Block::bordered().title(" Actions "))
-        .select(action_selected)
-        .style(current_style);
 
     let job_mgr  = store.job_mgr.lock().unwrap();
     let jobs_string: Vec<String> = job_mgr.jobs.values()
@@ -53,8 +41,8 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         .split(area);
     let (top, mid, bottom) = (top_mid_bottom[0], top_mid_bottom[1], top_mid_bottom[2]);
 
-    f.render_widget(actions, top);
-    components::job_new_helper::render(f, mid, current_style);
+    components::job_list_action_bar::render(f, top, current_style, action_selected);
+    components::helper_hint::render_job_new(f, mid, current_style);
     f.render_widget(job_list, bottom);
 }
 
@@ -67,12 +55,13 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
             states_current.tab_action = Tab::New;
         }
         KeyCode::Enter => {
-            if store.project_sel.is_none() {
-                states.info_states.message = ("no project selected".to_string(), MessageLevel::Warn);
-            } else {
-                // only "new job" action at the moment
-                // states.job_states.show_page = super::ShowPage::AppList;
-                states.job_states.show_page = super::ShowPage::Detail;
+            let states_current = &mut states.job_states.list;
+            match states_current.tab_action {
+                Tab::New => if store.project_sel.is_none() {
+                    states.info_states.message = ("no project selected".to_string(), MessageLevel::Warn);
+                } else {
+                    states.job_states.show_page = super::ShowPage::Detail;
+                }
             }
         }
         _ => ()

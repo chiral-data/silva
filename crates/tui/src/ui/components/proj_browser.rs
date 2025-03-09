@@ -60,7 +60,7 @@ pub fn handle_key(
             let total = proj_files.len(); 
             let mut sel_idx = list_state_file.selected().unwrap_or(0);
             sel_idx = (sel_idx + total - 1) % total; 
-            while proj_files.get(sel_idx).unwrap().starts_with('[')  {
+            while proj_files.get(sel_idx).unwrap().starts_with(['[', '\n'])  {
                 sel_idx = (sel_idx + total - 1) % total; 
             }
             list_state_file.select(Some(sel_idx));
@@ -69,7 +69,7 @@ pub fn handle_key(
             let total = proj_files.len(); 
             let mut sel_idx = list_state_file.selected().unwrap_or(0);
             sel_idx = (sel_idx + 1) % total;
-            while proj_files.get(sel_idx).unwrap().starts_with('[')  {
+            while proj_files.get(sel_idx).unwrap().starts_with(['[', '\n'])  {
                 sel_idx = (sel_idx + 1) % total;
             }
             list_state_file.select(Some(sel_idx));

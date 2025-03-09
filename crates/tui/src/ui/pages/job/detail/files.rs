@@ -45,7 +45,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
     //     .wrap(Wrap { trim: true });
     //
     //
-    if let Some(proj) = store.project_sel.as_ref() {
+    if let Some((proj, _)) = store.project_sel.as_ref() {
         // let left_right = Layout::default()
         //     .direction(Direction::Horizontal)
         //     .constraints([Constraint::Length(20),  Constraint::Min(1)]) 
@@ -55,7 +55,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store:
         // f.render_widget(file_contents, right)
         ui::components::proj_browser::render(
             f, area, 
-            current_style, &proj.dir, &proj.files, &mut states_current.list_state_file
+            current_style, proj.get_dir(), proj.get_files().as_ref(), &mut states_current.list_state_file
         );
     } else {
         states.info_states.message = ("no selected project".to_string(), MessageLevel::Warn);
@@ -66,10 +66,10 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
     // use event::KeyCode;
 
     let states_current = &mut states.job_states.detail;
-    if let Some(proj) = store.project_sel.as_ref() {
+    if let Some((proj, _)) = store.project_sel.as_ref() {
         ui::components::proj_browser::handle_key(
             key, 
-            &proj.dir, &proj.files, &mut states_current.list_state_file
+            proj.get_dir(), proj.get_files().as_ref(), &mut states_current.list_state_file
         );
     } else {
         states.info_states.message = ("no selected project".to_string(), MessageLevel::Warn);

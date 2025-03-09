@@ -29,13 +29,13 @@ pub struct States {
     pub message: (String , MessageLevel)
 }
 
-pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mut data_model::Store) {
+fn render_infra(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mut data_model::Store) {
     let states_current = &states.info_states;
 
-    let project_sel = if let Some(proj) = store.project_sel.as_ref() {
-        proj.dir.to_str().unwrap()
+    let project_path = if let Some((proj, _)) = store.project_sel.as_ref() {
+        proj.get_dir().to_str().unwrap()
     } else { "None" };
-    let pod_type_sel_string = if let Some(pt) = states.job_states.app_detail.pod_type_selected() {
+    let pod_type_sel_string = if let Some(pt) = store.pod_type_mgr.selected() {
        pt.name.to_string()
     } else { "None".to_string() };
     let pod_sel_string = if let Some(pod) = store.pod_mgr.selected() {
@@ -43,24 +43,16 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mu
     } else { "None".to_string() };
 
     let mut text: Vec<Line> = vec![
-        Line::from(format!("[Selected Project]   {project_sel}")).green(),
+        Line::from(format!("[Selected Project]   {project_path}")).green(),
         Line::from(format!("[Selected Pod Type]  {pod_type_sel_string}")).green(),
         Line::from(format!("[Selected Pod]       {pod_sel_string}")).green(),
     ];
-    if let Some(proj) = store.project_sel.as_mut() {
-        if let Some(jh_pre) = proj.jh_pre.as_ref() {
-            if jh_pre.is_finished() {
-                proj.jh_pre = None;
-            } else {
-                text.push(Line::from("[Pre-processing] running ...").green());
-            }
+    if let Some((_proj, proj_mgr)) = store.project_sel.as_mut() {
+        if !proj_mgr.is_pre_processing_finished() {
+            text.push(Line::from("[Pre-processing] running ...").green());
         }
-        if let Some(jh_post) = proj.jh_post.as_ref() {
-            if jh_post.is_finished() {
-                proj.jh_post = None;
-            } else {
-                text.push(Line::from("[Post-processing] running ...").green());
-            }
+        if !proj_mgr.is_post_processing_finished() {
+            text.push(Line::from("[Post-processing] running ...").green());
         }
     }
     let paragrah = Paragraph::new(text)
@@ -83,5 +75,21 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mu
         let (top, bottom) = (top_bottom[0], top_bottom[1]);
         f.render_widget(notification, top);
         f.render_widget(paragrah, bottom);
+    }
+}
+
+fn render_tutorial(f: &mut Frame, area: Rect, _states: &ui::states::States, _store: &mut data_model::Store) {
+    let hint = Paragraph::new("Press [Enter] to copy the selected tutorial project")
+        .style(Style::default())
+        .block(Block::default().title(" Hints ").borders(Borders::ALL));
+    f.render_widget(hint, area);
+}
+
+pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mut data_model::Store) {
+    use ui::layout::tabs::Tab;
+
+    match states.tabs_states.tab {
+        Tab::Tutorial => render_tutorial(f, area, states, store),
+        _ => render_infra(f, area, states, store)
     }
 }

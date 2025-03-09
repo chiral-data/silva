@@ -1,96 +1,69 @@
-use std::{path::{Path, PathBuf}, sync::{Arc, Mutex}};
-use std::io::{Read, Write};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::io::Read;
 
 use futures_util::stream::StreamExt;
 
 use crate::data_model;
-use data_model::job::settings::Settings as JobSettings;
 
-const FILENAME_ENTRYPOINT: &str = "@run.sh";
 const FILENAME_DOCKER: &str = "Dockerfile";
 
-pub fn prepare_build_files(
-    proj_dir: &Path,
-    job_settings: &JobSettings
-) -> anyhow::Result<()> {
-    let proj_name = data_model::job::Job::get_project_name(proj_dir)?;
-    let dok = job_settings.dok.as_ref()
-        .ok_or(anyhow::Error::msg("no DOK settings"))?;
-    let base_image = &dok.base_image;
-
-    // create entrypoint @run.sh
-    let entrypoint_filepath = proj_dir.join(FILENAME_ENTRYPOINT);
-    let mut entrypoint_file = std::fs::File::create(entrypoint_filepath)?;
-    writeln!(entrypoint_file, "#!/bin/bash")?;
-    writeln!(entrypoint_file, "#")?;
-    writeln!(entrypoint_file)?;
-    for script_file in job_settings.files.scripts.iter() {
-        writeln!(entrypoint_file, "sh {}", script_file)?;
-    }
-    writeln!(entrypoint_file)?;
-    for output_file in job_settings.files.outputs.iter() {
-        writeln!(entrypoint_file, "cp {} /opt/artifact", output_file)?;
-    }
-
-    // create Docker file
-    let mut docker_file = std::fs::File::create(proj_dir.join(FILENAME_DOCKER))?;
-    writeln!(docker_file, "FROM {base_image}")?;
-    writeln!(docker_file)?;
-    writeln!(docker_file, "RUN mkdir -p /opt/{proj_name}")?;
-    for input_file in job_settings.files.inputs.iter() {
-        writeln!(docker_file, "ADD ./{input_file} /opt/{proj_name}")?;
-    }
-    for script_file in job_settings.files.scripts.iter() {
-        writeln!(docker_file, "ADD ./{script_file} /opt/{proj_name}")?;
-    }
-    if let Some(dok) = &job_settings.dok {
-        if let Some(extra_build_commands) = &dok.extra_build_commands {
-            for cmd in extra_build_commands.iter() {
-                writeln!(docker_file, "RUN {cmd}")?; 
-            }
-        }
-    }
-    writeln!(docker_file, "ADD ./{FILENAME_ENTRYPOINT} /opt/{proj_name}")?;
-    writeln!(docker_file)?;
-    writeln!(docker_file, "WORKDIR /opt/{proj_name}")?;
-    writeln!(docker_file, "CMD [\"sh\", \"{}\"]", FILENAME_ENTRYPOINT)?;
-
-    Ok(())
-}
-
 pub async fn build_image(
-    proj_dir: &PathBuf, 
-    job_settings: &JobSettings,
-    image_name: &str, 
+    registry: &data_model::registry::Registry,
+    proj: &data_model::project::Project,
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
+    let push_image_name = proj.get_docker_image_url(registry)?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] build image {image_name} started ..."));
+        job_mgr.add_log(0, format!("[docker] build image {push_image_name}, started ..."));
     }
 
-    std::env::set_current_dir(proj_dir)?;
+    std::env::set_current_dir(proj.get_dir())?;
 
-    prepare_build_files(proj_dir, job_settings)?;
+    // prepare_build_files(proj_dir, job_settings)?;
    
     // create tar file for building the image
     let filename_tar = "image.tar";
     let tar_file = tokio::fs::File::create(filename_tar)
         .await.unwrap().into_std().await;
     let mut a = tar::Builder::new(tar_file);
-    a.append_path(FILENAME_ENTRYPOINT)?;
+    // a.append_path(FILENAME_ENTRYPOINT)?;
     a.append_path(FILENAME_DOCKER)?;
-    for input_file in job_settings.files.inputs.iter() {
+    for input_file in proj.get_job_settings().files.inputs.iter() {
         a.append_path(input_file)?;
     }
-    for script_file in job_settings.files.scripts.iter() {
+    for script_file in proj.get_job_settings().files.scripts.iter() {
         a.append_path(script_file)?;
+    }
+
+    // add extra dirs to docker build context
+    let job_settings = proj.get_job_settings();
+    if let Some(dok) = &job_settings.dok {
+        if let Some(docker_build_context_extra_dirs) = dok.docker_build_context_extra_dirs.as_ref() {
+            for dir_str in docker_build_context_extra_dirs.iter() {
+                let mut dir_path = PathBuf::from(dir_str);
+                if dir_path.starts_with("~") {
+                    dir_path = super::dirs::get_user_home()?
+                        .join(dir_path.strip_prefix("~")?)
+                        .canonicalize()?;
+                };
+                let dir_name = dir_path.file_name()
+                    .ok_or(anyhow::Error::msg(format!("cannot get file_name for dir {dir_str}")))?;
+                {
+                    let mut job_mgr = job_mgr.lock().unwrap();
+                    job_mgr.add_log(0, format!("[docker] build image {push_image_name}, add {dir_path:?} to build context as {dir_name:?} ..."));
+                }
+                a.append_dir_all(dir_name, &dir_path)?;
+                a.finish()?;
+            }
+        }
     }
 
     let docker = bollard::Docker::connect_with_local_defaults()?;
     let build_image_options = bollard::image::BuildImageOptions {
         dockerfile: "Dockerfile",
-        t: image_name,
+        t: &push_image_name,
         platform: "linux/amd64",
         ..Default::default()
     };
@@ -118,35 +91,40 @@ pub async fn build_image(
                     job_mgr.add_log_tmp(0, format!("[docker] non handled build_info {:?}", build_info));
                 }
             }
-            Err(e) => return Err(anyhow::Error::msg(format!("[docker] push image error {e}")))
+            Err(e) => return Err(anyhow::Error::msg(format!("[docker] build image error {e}")))
         }
     }
-    tokio::fs::remove_file(FILENAME_DOCKER).await.unwrap();
-    tokio::fs::remove_file(FILENAME_ENTRYPOINT).await.unwrap();
     tokio::fs::remove_file(filename_tar).await.unwrap();
 
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] build image {image_name}] completed ..."));
+        job_mgr.add_log(0, format!("[docker] build image {push_image_name} completed ..."));
         job_mgr.clear_log_tmp(&0);
     }
     
     Ok(())
 }
 
-pub async fn push_image(username: Option<String>, password: Option<String>, image_name: &str, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
+pub async fn push_image(
+    registry: &data_model::registry::Registry,
+    proj: &data_model::project::Project,
+    job_mgr: Arc<Mutex<data_model::job::Manager>>
+) -> anyhow::Result<()> {
+    let push_image_name = proj.get_docker_image_url(registry)?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] push image({image_name}) started ..."));
+        job_mgr.add_log(0, format!("[docker] push image {push_image_name} started ..."));
     }
 
     let docker = bollard::Docker::connect_with_local_defaults().unwrap();
     let push_options = bollard::image::PushImageOptions::<&str>::default();
+    let username = registry.username.to_owned();
+    let password = registry.password.to_owned();
     let credentials = bollard::auth::DockerCredentials { // for sakuracr.jp
         username, password,
         ..Default::default()
     };
-    let mut image_push_stream = docker.push_image(image_name, Some(push_options), Some(credentials));
+    let mut image_push_stream = docker.push_image(&push_image_name, Some(push_options), Some(credentials));
     while let Some(msg) = image_push_stream.next().await {
         match msg {
             Ok(push_image_info) => {
@@ -169,7 +147,7 @@ pub async fn push_image(username: Option<String>, password: Option<String>, imag
 
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] push image({image_name}) completed ..."));
+        job_mgr.add_log(0, format!("[docker] push image {push_image_name} completed ..."));
         job_mgr.clear_log_tmp(&0);
     }
     Ok(())
@@ -179,8 +157,23 @@ pub async fn push_image(username: Option<String>, password: Option<String>, imag
 mod tests {
     use std::path::Path;
     use std::env;
+    use std::collections::HashMap;
 
     use super::*;
+
+    fn gpu_host_config() -> bollard::models::HostConfig  {
+        bollard::models::HostConfig {
+            extra_hosts: Some(vec!["host.docker.internal:host-gateway".into()]),
+            device_requests: Some(vec![bollard::models::DeviceRequest {
+                driver: Some("".into()),
+                count: Some(-1),
+                device_ids: None,
+                capabilities: Some(vec![vec!["gpu".into()]]),
+                options: Some(HashMap::new()),
+            }]),
+            ..Default::default()
+        }
+    }
 
     const SILVA_SAKURA_DOK_CONTAINER_REGISTRY_ADDRESS: &str = "SILVA_SAKURA_DOK_CONTAINER_REGISTRY_ADDRESS";
     const SILVA_SAKURA_DOK_CONTAINER_REGISTRY_USERNAME: &str = "SILVA_SAKURA_DOK_CONTAINER_REGISTRY_USERNAME";
@@ -212,11 +205,104 @@ mod tests {
 
         let proj_dir = examples_dir.join("gromacs");
         assert!(proj_dir.exists());
-        let image_name = "gromacs:test_241211_2";
-        let image_name = format!("{}/{image_name}", registry.hostname);
         let job_settings = data_model::job::Job::get_settings(&proj_dir).unwrap();
+        let proj = data_model::project::Project::new(proj_dir, job_settings);
         let job_mgr = Arc::new(Mutex::new(data_model::job::Manager::load().unwrap()));
-        build_image(&proj_dir, &job_settings, &image_name, job_mgr.clone()).await.unwrap();
-        push_image(registry.username, registry.password, &image_name, job_mgr).await.unwrap();
+        build_image(&registry, &proj, job_mgr.clone()).await.unwrap();
+        push_image(&registry, &proj, job_mgr).await.unwrap();
     }
+
+    #[tokio::test]
+    async fn test_exec_ls() {
+        use bollard::container::{Config, RemoveContainerOptions};
+        use bollard::Docker;
+        use bollard::exec::{CreateExecOptions, StartExecResults};
+        use bollard::image::CreateImageOptions;
+        use futures_util::stream::StreamExt;
+        use futures_util::TryStreamExt;
+
+        const IMAGE: &str = "alpine:3";
+        let docker = Docker::connect_with_socket_defaults().unwrap();
+        let create_image_options = CreateImageOptions { from_image: IMAGE, ..Default::default() };
+        docker.create_image(Some(create_image_options), None, None).try_collect::<Vec<_>>().await.unwrap();
+
+        let alpine_config = Config { image: Some(IMAGE), tty: Some(true), ..Default::default() };
+        let id = docker.create_container::<&str, &str>(None, alpine_config).await.unwrap().id;
+        docker.start_container::<String>(&id, None).await.unwrap();
+
+        // non interactive
+        let create_exec_options = CreateExecOptions {
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            cmd: Some(vec!["ls", "-l", "/"]),
+            ..Default::default()
+        };
+        let exec = docker.create_exec(&id, create_exec_options).await.unwrap().id;
+        if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&exec, None).await.unwrap() {
+            while let Some(Ok(msg)) = output.next().await {
+                print!("{msg}");
+            }
+        } else {
+            unreachable!();
+        }
+
+        let remove_container_options = RemoveContainerOptions {
+            force: true,
+            ..Default::default()
+        };
+        docker.remove_container(&id, Some(remove_container_options)).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_exec_gromacs() {
+        use bollard::container;
+        use bollard::Docker;
+        use bollard::exec::{CreateExecOptions, StartExecResults};
+        use bollard::image::CreateImageOptions;
+        use futures_util::stream::StreamExt;
+        use futures_util::TryStreamExt;
+
+        const IMAGE: &str = "nvcr.io/hpc/gromacs:2023.2";
+        let docker = Docker::connect_with_socket_defaults().unwrap();
+        let create_image_options = CreateImageOptions { from_image: IMAGE, ..Default::default() };
+        docker.create_image(Some(create_image_options), None, None).try_collect::<Vec<_>>().await.unwrap();
+
+        let binds = vec![
+            format!(
+                "{}:{}",
+                "/home/qw/Downloads",
+                "/mnt/test"
+        )];
+        let mut host_config = gpu_host_config();
+        host_config.binds = Some(binds);
+        let container_config = container::Config { 
+            image: Some(IMAGE), tty: Some(true), host_config: Some(host_config), 
+            ..Default::default() 
+        };
+        let id = docker.create_container::<&str, &str>(None, container_config).await.unwrap().id;
+        docker.start_container::<String>(&id, None).await.unwrap();
+
+        // non interactive
+        let create_exec_options = CreateExecOptions {
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            cmd: Some(vec!["/usr/local/gromacs/avx2_256/bin/gmx", "--version"]),
+            ..Default::default()
+        };
+        let exec = docker.create_exec(&id, create_exec_options).await.unwrap().id;
+        if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&exec, None).await.unwrap() {
+            while let Some(Ok(msg)) = output.next().await {
+                print!("{msg}");
+            }
+        } else {
+            unreachable!();
+        }
+
+        // let remove_container_options = RemoveContainerOptions {
+        //     force: true,
+        //     ..Default::default()
+        // };
+        // docker.remove_container(&id, Some(remove_container_options)).await.unwrap();
+    }
+
 }

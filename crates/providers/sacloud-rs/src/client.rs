@@ -202,6 +202,7 @@ impl Client {
     pub fn artifacts(self) -> Self { self.extend_url("/artifacts") }
     pub fn artifact_id(self, id: &str) -> Self { self.extend_url(format!("/{id}").as_str()) } 
     pub fn auth(self) -> Self  { self.extend_url("/auth") }
+    pub fn cancel(self) -> Self { self.extend_url("/cancel") }
     pub fn config(self) -> Self { self.extend_url("/config") }
     pub fn disk(self) -> Self { self.extend_url("/disk") }
     pub fn diskid(self, id: &str) -> Self { self.extend_url(format!("/{id}").as_str()) }

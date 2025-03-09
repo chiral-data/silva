@@ -1,33 +1,39 @@
-use std::{io, path::PathBuf, process, time::{Duration, Instant}};
-use std::env;
+use std::{io, time::{Duration, Instant}};
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
 use ratatui::prelude::*;
 
-use crate::{envs, ui, utils};
+use crate::{constants, ui, utils};
 use crate::data_model;
 
-fn setup() {
-    // let xdg_dirs = xdg::BaseDirectories::with_prefix(constants::APP_NAME).unwrap();
-    // let data_dir = xdg_dirs.get_data_home();
-    let data_dir = utils::file::get_data_dir();
+async fn setup() {
+    let data_dir = utils::dirs::data_dir(); 
     if !data_dir.exists() {
-        std::fs::create_dir_all(data_dir).unwrap();
+        std::fs::create_dir_all(&data_dir).unwrap();
     }
 
-    // if project home directory is not set, use the directories under "examples"
-    if env::var_os(envs::SILVA_PROJECTS_HOME).is_none() {
-        let project_homes: String = utils::file::get_child_dirs(PathBuf::from(".").join("examples"))
-            .map(|child_dir| child_dir.canonicalize().unwrap().to_str().unwrap().to_string())
-            .collect::<Vec<String>>()
-            .join(";");
-         env::set_var(envs::SILVA_PROJECTS_HOME, project_homes);
+    // download examples and extract
+    // let version = env!("CARGO_PKG_VERSION");
+    let filename = format!("v{}.tar.gz", constants::TAG);
+    let filepath = data_dir.join(&filename);
+    if !filepath.exists() {
+        println!("download tutorial examples ...");
+        let url = format!("https://github.com/chiral-data/application-examples/archive/refs/tags/{filename}");
+        utils::file::download_async(&url, &filepath).await.unwrap();
+        utils::file::extract_tar_gz(&filepath, data_dir.join(format!("v{}", constants::TAG)).as_path()).unwrap();
+        println!("download tutorial examples ... [DONE]");
+    }
+
+    if let Ok(projects_dir) = utils::dirs::get_projects_home() {
+        if !projects_dir.exists() {
+            std::fs::create_dir_all(projects_dir).unwrap();
+        }
     }
 }
 
 
 pub async fn run() -> anyhow::Result<()> {
-    setup();
+    setup().await;
 
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture, )?;
@@ -52,8 +58,14 @@ pub async fn run() -> anyhow::Result<()> {
 
         match ui::home::handle_key(tick_rate, &mut last_tick, &mut states, &mut store).await? {
             ui::home::Signal::Quit => {
-                process::Command::new("reset").status()
-                    .unwrap_or_else(|e| panic!("failed to reset terminal with error: {e:?}"));
+                #[cfg(not(windows))]
+                {
+                    let reset_program = "reset";
+                    std::process::Command::new(reset_program)
+                        .status()
+                        .unwrap_or_else(|e| panic!("failed to reset terminal by {reset_program} with error: {e:?}"));
+                }
+                // how to reset under windows?
                 break;
             }
             ui::home::Signal::None => {}
