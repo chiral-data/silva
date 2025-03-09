@@ -26,7 +26,44 @@ pub async fn download_async(url: &str, filepath: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn unzip_tar_gz(filepath: &Path, to_folder: &Path) -> anyhow::Result<()> {
+// pub async fn compress_tar(from_folder: &Path, filepath: &Path) -> anyhow::Result<()> {
+//     let tar_file = tokio::fs::File::create(filepath)
+//         .await.unwrap().into_std().await;
+//     let mut a = tar::Builder::new(tar_file);
+//     a.append_dir_all(from_folder.file_name().unwrap(), from_folder)?;
+//     a.finish()?;
+//     Ok(())
+// }
+
+// pub async fn extract_tar(filepath: &Path, to_folder: &Path) -> anyhow::Result<()> {
+//     let tar_file = tokio::fs::File::create(filepath)
+//         .await.unwrap().into_std().await;
+//     let buf = std::io::BufReader::new(tar_file);
+//     let mut a = tar::Archive::new(buf);
+//     a.unpack(to_folder)?;
+//     Ok(())
+// }
+
+pub fn copy_folder(from_folder: &Path, to_folder: &Path) -> anyhow::Result<()> {
+    if !to_folder.exists() {
+        std::fs::create_dir_all(to_folder)?;
+    }
+
+    let entries = std::fs::read_dir(from_folder)?;
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() {
+            std::fs::copy(&path, to_folder.join(path.file_name().unwrap()))?;
+        } else {
+            copy_folder(&path, to_folder.join(path.file_name().unwrap()).as_path())?
+        }
+    }
+
+    Ok(())
+}
+
+pub fn extract_tar_gz(filepath: &Path, to_folder: &Path) -> anyhow::Result<()> {
     std::fs::create_dir_all(to_folder)?;
 
     let file = File::open(filepath)?;
@@ -64,7 +101,7 @@ mod tests {
         let filepath = home::home_dir().unwrap().join("Downloads").join("1.tar.gz");
         download(&artifact_url.url, &filepath).await.unwrap();
         let to_folder = home::home_dir().unwrap().join("Downloads").join("1");
-        unzip_tar_gz(&filepath, &to_folder).unwrap();
+        extract_tar_gz(&filepath, &to_folder).unwrap();
     }
 
     #[tokio::test]

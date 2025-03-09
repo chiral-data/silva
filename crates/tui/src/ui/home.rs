@@ -58,7 +58,7 @@ pub async fn handle_key(tick_rate: Duration, last_tick: &mut Instant, states: &m
                     };
                 } else {
                     match states.tabs_states.tab {
-                        tabs::Tab::Tutorial => tutorial::handle_key(&key, states, store),
+                        tabs::Tab::Tutorial => tutorial::handle_key(&key, states, store).await,
                         tabs::Tab::Project => project::handle_key(&key, states, store),
                         tabs::Tab::Job => job::handle_key(&key, states, store),
                         tabs::Tab::Setting => setting::handle_key(&key, states, store).await 

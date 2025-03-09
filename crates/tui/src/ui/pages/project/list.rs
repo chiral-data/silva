@@ -12,7 +12,7 @@ use crate::utils;
 #[derive(Default)]
 pub struct States {
     list: ListState,
-    proj_dirs: Vec<PathBuf>, 
+    pub proj_dirs: Vec<PathBuf>, 
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, _store: &data_model::Store) {
@@ -22,9 +22,6 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, _store
         states_current.list.select(Some(0));
     }
 
-    // states_current.proj_dirs = dirs_projects.into_iter()
-    //     .flat_map(utils::dirs::get_child_dirs)
-    //     .collect();
     if states_current.proj_dirs.is_empty() {
         let dirs_projects = utils::dirs::get_project_dirs(); 
         for dir in dirs_projects.iter() {

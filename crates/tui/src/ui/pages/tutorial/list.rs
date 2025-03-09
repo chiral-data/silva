@@ -40,7 +40,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, _store
     f.render_stateful_widget(list, area, &mut states_current.list);
 }
 
-pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, _store: &mut data_model::Store) {
+pub async fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, _store: &mut data_model::Store) {
     use event::KeyCode;
     let states_current = &mut states.tutorial_states.list;
 
@@ -62,14 +62,21 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, _store
             }
         }
         KeyCode::Enter => {
-            todo!()
-            // if let Some(sel_idx) = states_current.list.selected() {
-            //     let proj_dir = states_current.proj_dirs.get(sel_idx).unwrap().to_owned();
-            //     match store.update_project(&proj_dir) {
-            //         Ok(_) => states.project_states.tabs.tab = super::tabs::Tab::Browse,
-            //         Err(e) => states.info_states.message = (format!("cannot selecte project{}: {e}", proj_dir.to_str().unwrap()), MessageLevel::Error)
-            //     }
-            // }
+            if let Some(sel_idx) = states_current.list.selected() {
+                let tutorial_dir = states_current.tutorial_dirs.get(sel_idx).unwrap().to_owned();
+                let tutorial_name = tutorial_dir.file_name().unwrap();
+                let projects_home = utils::dirs::get_projects_home();
+                let target_dir = projects_home.join(tutorial_name);
+                if !target_dir.exists() {
+                    utils::file::copy_folder(&tutorial_dir, &target_dir).unwrap();
+                }
+
+                let dirs_projects = utils::dirs::get_project_dirs(); 
+                for dir in dirs_projects.iter() {
+                    assert!(dir.is_dir());
+                }
+                states.project_states.list.proj_dirs = dirs_projects;
+            }
         }
         _ => ()
     }

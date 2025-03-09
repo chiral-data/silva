@@ -38,11 +38,15 @@ fn add_project_dir(dir: &Path, project_dirs: &mut Vec<PathBuf>) {
         }
     }
 }
+    
+pub fn get_projects_home() -> PathBuf {
+    let projects_home_string = std::env::var_os(constants::SILVA_PROJECTS_HOME).unwrap();
+    PathBuf::from(&projects_home_string)
+}
 
 pub fn get_project_dirs() -> Vec<PathBuf> {
-    let projects_home_string = std::env::var_os(constants::SILVA_PROJECTS_HOME).unwrap();
     let mut project_dirs = Vec::<PathBuf>::new();
-    for new_dir in get_child_dirs(PathBuf::from(&projects_home_string)) {
+    for new_dir in get_child_dirs(get_projects_home()) {
         add_project_dir(&new_dir, &mut project_dirs);
     }
 

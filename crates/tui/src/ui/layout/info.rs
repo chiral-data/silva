@@ -29,7 +29,7 @@ pub struct States {
     pub message: (String , MessageLevel)
 }
 
-pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mut data_model::Store) {
+fn render_infra(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mut data_model::Store) {
     let states_current = &states.info_states;
 
     let project_path = if let Some((proj, _)) = store.project_sel.as_ref() {
@@ -75,5 +75,21 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mu
         let (top, bottom) = (top_bottom[0], top_bottom[1]);
         f.render_widget(notification, top);
         f.render_widget(paragrah, bottom);
+    }
+}
+
+fn render_tutorial(f: &mut Frame, area: Rect, _states: &ui::states::States, _store: &mut data_model::Store) {
+    let hint = Paragraph::new("Press [Enter] to copy the selected tutorial project")
+        .style(Style::default())
+        .block(Block::default().title(" Hints ").borders(Borders::ALL));
+    f.render_widget(hint, area);
+}
+
+pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mut data_model::Store) {
+    use ui::layout::tabs::Tab;
+
+    match states.tabs_states.tab {
+        Tab::Tutorial => render_tutorial(f, area, states, store),
+        _ => render_infra(f, area, states, store)
     }
 }

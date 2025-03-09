@@ -97,7 +97,7 @@ async fn launch_job_dok(
         job_mgr.add_log(job_id, format!("[sakura internet DOK] downloading output files of task {}", task_created.id));
     }
     utils::file::download(&af_url.url, &filepath).await?;
-    utils::file::unzip_tar_gz(&filepath, proj.get_dir())?;
+    utils::file::extract_tar_gz(&filepath, proj.get_dir())?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
         job_mgr.add_log(job_id, format!("[sakura internet DOK] downloaded output files of task {}", task_created.id));

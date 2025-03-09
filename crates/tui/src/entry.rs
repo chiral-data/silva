@@ -21,7 +21,7 @@ async fn setup() {
         println!("download tutorial examples ...");
         let url = format!("https://github.com/chiral-data/application-examples/archive/refs/tags/{filename}");
         utils::file::download_async(&url, &filepath).await.unwrap();
-        utils::file::unzip_tar_gz(&filepath, data_dir.join(format!("v{}", constants::TAG)).as_path()).unwrap();
+        utils::file::extract_tar_gz(&filepath, data_dir.join(format!("v{}", constants::TAG)).as_path()).unwrap();
         println!("download tutorial examples ... [DONE]");
     }
 
