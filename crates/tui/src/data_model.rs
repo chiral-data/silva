@@ -18,11 +18,17 @@ impl std::default::Default for Store {
     fn default() -> Self {
         let app_mgr = app::Manager::new();
         let registry_mgr = registry::Manager::load().unwrap();
-        let setting_mgr = settings::Manager::load().unwrap();
+        let mut setting_mgr = settings::Manager::load().unwrap();
         let account_mgr = account::Manager::load().unwrap();
         let pod_type_mgr = pod_type::Manager::new();
         let pod_mgr = pod::Manager::new();
         let job_mgr = job::Manager::load().unwrap();
+
+        if setting_mgr.registry_id_sel.is_none() {
+            let registry = registry_mgr.registries.first().unwrap(); // at least a defaut registry
+            setting_mgr.registry_id_sel = Some(registry.id().to_string());
+            setting_mgr.save().unwrap();
+        }
 
         Self { 
             account_mgr, registry_mgr, setting_mgr,
