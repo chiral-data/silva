@@ -66,7 +66,7 @@ pub async fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, 
                 let tutorial_dir = states_current.tutorial_dirs.get(sel_idx).unwrap().to_owned();
                 let tutorial_name = tutorial_dir.file_name().unwrap();
                 let projects_home = utils::dirs::get_projects_home();
-                let target_dir = projects_home.join(tutorial_name);
+                let target_dir = projects_home.unwrap().join(tutorial_name);
                 if !target_dir.exists() {
                     utils::file::copy_folder(&tutorial_dir, &target_dir).unwrap();
                 }

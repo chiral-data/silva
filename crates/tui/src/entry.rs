@@ -1,5 +1,4 @@
 use std::{io, time::{Duration, Instant}};
-use std::env;
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
 use ratatui::prelude::*;
@@ -25,8 +24,10 @@ async fn setup() {
         println!("download tutorial examples ... [DONE]");
     }
 
-    if env::var_os(constants::SILVA_PROJECTS_HOME).is_none() {
-        panic!("Environment variable SILVA_PROJECTS_HOME is not set and silva cannot start")
+    if let Ok(projects_dir) = utils::dirs::get_projects_home() {
+        if !projects_dir.exists() {
+            std::fs::create_dir_all(projects_dir).unwrap();
+        }
     }
 }
 

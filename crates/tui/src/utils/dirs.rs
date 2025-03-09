@@ -38,15 +38,24 @@ fn add_project_dir(dir: &Path, project_dirs: &mut Vec<PathBuf>) {
         }
     }
 }
+
+pub fn get_user_home() -> anyhow::Result<PathBuf> {
+    let user_dirs = directories::UserDirs::new()
+        .ok_or(anyhow::Error::msg("cannot get user home dir"))?;
+    Ok(user_dirs.home_dir().to_path_buf())
+}
     
-pub fn get_projects_home() -> PathBuf {
-    let projects_home_string = std::env::var_os(constants::SILVA_PROJECTS_HOME).unwrap();
-    PathBuf::from(&projects_home_string)
+pub fn get_projects_home() -> anyhow::Result<PathBuf> {
+    if let Some(projects_home_string) = std::env::var_os(constants::SILVA_PROJECTS_HOME) {
+        Ok(PathBuf::from(&projects_home_string))
+    } else {
+        Ok(get_user_home()?.join("my-silva-projects"))
+    }
 }
 
 pub fn get_project_dirs() -> Vec<PathBuf> {
     let mut project_dirs = Vec::<PathBuf>::new();
-    for new_dir in get_child_dirs(get_projects_home()) {
+    for new_dir in get_child_dirs(get_projects_home().unwrap()) {
         add_project_dir(&new_dir, &mut project_dirs);
     }
 

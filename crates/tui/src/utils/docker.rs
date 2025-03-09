@@ -44,8 +44,7 @@ pub async fn build_image(
             for dir_str in docker_build_context_extra_dirs.iter() {
                 let mut dir_path = PathBuf::from(dir_str);
                 if dir_path.starts_with("~") {
-                    dir_path = home::home_dir()
-                        .ok_or(anyhow::Error::msg("cannot get home dir"))?
+                    dir_path = super::dirs::get_user_home()?
                         .join(dir_path.strip_prefix("~")?)
                         .canonicalize()?;
                 };

@@ -98,9 +98,9 @@ mod tests {
         let artifact_url: sacloud_rs::api::dok::ArtifactUrl = client
             .artifacts().artifact_id(&task.artifact.unwrap().id).download().dok_end()
             .get().await.unwrap();
-        let filepath = home::home_dir().unwrap().join("Downloads").join("1.tar.gz");
+        let filepath = crate::utils::dirs::get_user_home().unwrap().join("Downloads").join("1.tar.gz");
         download(&artifact_url.url, &filepath).await.unwrap();
-        let to_folder = home::home_dir().unwrap().join("Downloads").join("1");
+        let to_folder = crate::utils::dirs::get_user_home().unwrap().join("Downloads").join("1");
         extract_tar_gz(&filepath, &to_folder).unwrap();
     }
 
@@ -109,7 +109,7 @@ mod tests {
         // let filename = "v022.tar.gz";
         let filename = "v022.zip";
         let url = format!("https://github.com/chiral-data/application-examples/archive/refs/tags/{filename}");
-        let filepath = home::home_dir().unwrap().join("Downloads").join(filename);
+        let filepath = crate::utils::dirs::get_user_home().unwrap().join("Downloads").join(filename);
         download_async(&url, &filepath).await.unwrap();
     }
 }

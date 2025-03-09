@@ -2,8 +2,6 @@
 
 ## Getting Started
 
-### Quickstart
-
 ### Installation
 
 ## Install silva 0.2.2
@@ -22,7 +20,16 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/chiral-data/silva/
 
 
 
+### Quickstart
+
+#### Environmental variables
+
+
+
+
+
+
 ## Examples
-- [Ollama](./examples/Ollama.md)
-- Gromacs
-- Whisper
+- [Ollama](./apps/Ollama.md)
+- Gromacs: TBD
+- Whisper: TBD

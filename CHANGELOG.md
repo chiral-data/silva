@@ -14,8 +14,7 @@ integrate Ollama; binary release;
 ### Added
 - [x] setup of sacloud API tokens, 
 - [x] support application-examples from chiral
-- [] default registry chiral.sakuracr.jp 
-    - implemented, not tested
+- [x] default registry chiral.sakuracr.jp 
 - [x] talk to ollama server via [ollama-rs](https://github.com/pepperoni21/ollama-rs)
 - [x] chat UI: scrolling, display Markdown
 - [x] example "ollama_dok" without docker image building
@@ -24,6 +23,7 @@ integrate Ollama; binary release;
 ### Changed
 - [x] Dockerfile automatical generating deprecrated
 - [x] refactor project dirs
+- [x] remove crate home
 
 ### Removed
 
