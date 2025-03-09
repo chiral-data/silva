@@ -24,6 +24,12 @@ impl std::default::Default for Store {
         let pod_mgr = pod::Manager::new();
         let job_mgr = job::Manager::load().unwrap();
 
+        if setting_mgr.account_id_sel.is_none() {
+            let account = account_mgr.accounts.first().unwrap();
+            setting_mgr.account_id_sel = Some(account.id().to_string());
+            setting_mgr.save().unwrap();
+        }
+
         if setting_mgr.registry_id_sel.is_none() {
             let registry = registry_mgr.registries.first().unwrap(); // at least a defaut registry
             setting_mgr.registry_id_sel = Some(registry.id().to_string());
