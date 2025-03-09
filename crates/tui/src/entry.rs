@@ -15,12 +15,15 @@ async fn setup() {
 
     // download examples and extract
     // let version = env!("CARGO_PKG_VERSION");
-    let tag = "v022";
-    let filename = format!("{tag}.tar.gz");
-    let url = format!("https://github.com/chiral-data/application-examples/archive/refs/tags/{filename}");
-    let filepath = data_dir.join(filename);
-    utils::file::download_async(&url, &filepath).await.unwrap();
-    utils::file::unzip_tar_gz(&filepath, data_dir.join(tag).as_path()).unwrap();
+    let filename = format!("v{}.tar.gz", constants::TAG);
+    let filepath = data_dir.join(&filename);
+    if !filepath.exists() {
+        println!("download tutorial examples ...");
+        let url = format!("https://github.com/chiral-data/application-examples/archive/refs/tags/{filename}");
+        utils::file::download_async(&url, &filepath).await.unwrap();
+        utils::file::unzip_tar_gz(&filepath, data_dir.join(format!("v{}", constants::TAG)).as_path()).unwrap();
+        println!("download tutorial examples ... [DONE]");
+    }
 
     if env::var_os(constants::SILVA_PROJECTS_HOME).is_none() {
         panic!("Environment variable SILVA_PROJECTS_HOME is not set and silva cannot start")

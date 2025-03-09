@@ -1,5 +1,6 @@
 pub const APP_NAME: &str = "silva";
 pub const ORG_NAME: &str = "Chiral";
+pub const TAG: &str = "022";
 
 pub const SILVA_PROJECTS_HOME: &str = "SILVA_PROJECTS_HOME";
 

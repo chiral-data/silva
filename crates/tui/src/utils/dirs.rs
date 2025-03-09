@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use crate::constants;
 
 pub fn get_child_dirs<P: AsRef<Path>>(dir: P) -> impl Iterator<Item = PathBuf> {
-    std::fs::read_dir(dir).unwrap()
+    std::fs::read_dir(&dir)
+        .map_err(|e| format!("read dir {:?} error {e}", dir.as_ref())).unwrap()
         .filter_map(|entry| match entry {
             Ok(e) => {
                 if e.path().is_dir() {
@@ -46,4 +47,14 @@ pub fn get_project_dirs() -> Vec<PathBuf> {
     }
 
     project_dirs
+}
+
+pub fn get_tutorial_dirs() -> Vec<PathBuf> {
+    let data_dir = data_dir();
+    let mut tutorial_dirs = Vec::<PathBuf>::new();
+    for new_dir in get_child_dirs(data_dir.join(format!("v{}", constants::TAG)).join(format!("application-examples-{}", constants::TAG))) {
+        add_project_dir(&new_dir, &mut tutorial_dirs);
+    }
+
+    tutorial_dirs
 }
