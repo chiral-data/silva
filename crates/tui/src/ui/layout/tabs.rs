@@ -28,7 +28,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States) {
         Tab::Setting => 3
     };
     let tabs = Tabs::new([
-            "Tutorials",
+            "Tutorial",
             "Projects",
             "Jobs",
             "Settings"
