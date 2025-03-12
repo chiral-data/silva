@@ -8,7 +8,16 @@ All notable changes will be documented in this file.
 - [] local computer as a computation pod
 - [] add Dockerfile for examples gromacs & whisper 
 
-## [Unreleased] v0.2.2 llm with ollama and dok
+
+## [Unreleased] v0.2.3 quantum expresso
+### Added
+### Changed
+### Removed
+
+
+
+
+## v0.2.2 llm with ollama and dok
 integrate Ollama; binary release;
 
 ### Added
