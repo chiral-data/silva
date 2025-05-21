@@ -43,21 +43,20 @@ pub fn params_dok(store: &data_model::Store) -> anyhow::Result<(bool, dok::param
         sacloud_rs::api::dok::params::Http { path: "/".to_string(), port: 80 }
     };
 
-    let (with_build, image_name) = if let Some(dok) = proj_sel.get_job_settings().dok.as_ref() {
-        if let Some(img) = &dok.docker_image {
-            (false, img.to_string())
-        } else {
-            (true, image_name_by_dirname)
-        }
-    } else {
-        return Err(anyhow::Error::msg("DOK settings are mandatory"));
-    };
-
+    let dok = proj_sel.get_job_settings().dok.as_ref()
+        .ok_or(anyhow::Error::msg("DOK settings are mandatory"))?;
+    let image_name = dok.docker_image.clone().unwrap_or(image_name_by_dirname);
+    let with_build = dok.docker_image.is_none();
+    let commands = dok.commands.clone().unwrap_or_default();
 
     let container = dok::params::Container::default()
         .image(image_name.to_string())
         .registry(Some(registry_id.to_string()))
-        .command(vec![])
+        .command(commands)
+        // .command(vec![
+        //     "run.sh",
+        //     "https://raw.githubusercontent.com/chiral-data/application-examples/refs/heads/v0.2.3_boltz/b/boltz/boltz_dok/job.sh",
+        // ].into_iter().map(String::from).collect())
         .entrypoint(vec![])
         .plan(plan)
         .http(http);

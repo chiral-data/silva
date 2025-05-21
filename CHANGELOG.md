@@ -9,8 +9,11 @@ All notable changes will be documented in this file.
 - [] add Dockerfile for examples gromacs & whisper 
 
 
-## [Unreleased] v0.2.3 quantum expresso
+## [Unreleased] v0.2.3 
+To integrate Quantum Expresso
+
 ### Added
+- [x] tui: add "commands" in dok parameter
 ### Changed
 ### Removed
 
