@@ -8,15 +8,16 @@ All notable changes will be documented in this file.
 - [] local computer as a computation pod
 - [] add Dockerfile for examples gromacs & whisper 
 
+## [] v0.2.4
+To integrate Quantum Expresso
 
 ## [Unreleased] v0.2.3 
-To integrate Quantum Expresso
 
 ### Added
 - [x] tui: add "commands" in dok parameter
 ### Changed
 ### Removed
-
+- [x] remove the folders: ui/infra, ui/job, ui/project, ui/settings
 
 
 
