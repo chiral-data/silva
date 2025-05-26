@@ -1,17 +1,24 @@
 # Changelog
 All notable changes will be documented in this file.
 
-## [Planned]
+## [TODO]
 - [] job management
 - [] SSH accessible servers as a computation pod 
-- [] Applications setting file (pod_type::for_application)
-- [] local computer as a computation pod
-- [] add Dockerfile for examples gromacs & whisper 
 
-## [] v0.2.4
-To integrate Quantum Expresso
 
-## [Unreleased] v0.2.3 
+
+## [Unreleased] v0.2.4
+### Added
+- [] local as infra 
+- [] integrate quantum-expresso
+- [] add "version" at the seeting page
+### Changed
+- [] fix root README.md
+### Removed
+
+
+
+## v0.2.3 
 
 ### Added
 - [x] tui: add "commands" in dok parameter
