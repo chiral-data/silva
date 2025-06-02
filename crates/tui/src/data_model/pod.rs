@@ -8,7 +8,7 @@ use super::provider;
 
 #[derive(Debug, Deserialize, Clone)]
 pub enum Settings {
-    None,
+    Local,
     // SakuraInternetServer(provider::sakura_internet::ServerSettings),
     SakuraInternetServer,
     SakuraInternetService(provider::sakura_internet::DokGpuType),
@@ -29,6 +29,7 @@ pub struct Manager {
 }
 
 pub mod ids {
+    pub const LOCAL: usize = 0;
     pub const DOK_V100: usize = 1;
     pub const DOK_H100: usize = 2;
 }
@@ -38,7 +39,7 @@ impl Manager {
         let pod_0 = Pod { 
             id: 0, 
             type_id: 0,
-            settings: Settings::None,
+            settings: Settings::Local,
             name: "Localhost".to_string(),
         };
         let pod_1 = Pod { 

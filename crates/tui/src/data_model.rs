@@ -59,6 +59,8 @@ impl Store {
                     sacloud_rs::api::dok::params::Plan::H100GB80 => self.pod_mgr.pod_id_selected = Some(pod::ids::DOK_H100),
                     sacloud_rs::api::dok::params::Plan::H100GB20 => todo!()
                 }
+            } else {
+                self.pod_mgr.pod_id_selected = Some(pod::ids::LOCAL);
             }
         }
 

@@ -14,6 +14,13 @@ pub const HELPER: &[&str] = &[
     "Launch a job", 
 ];
 
+async fn launch_job_local() -> anyhow::Result<()> {
+    let mut cmd = tokio::process::Command::new("docker");
+    let mut child = cmd.spawn()?;
+    let status = child.wait().await?;
+    todo!()
+}
+
 async fn launch_job_dok(
     proj: data_model::project::Project, 
     registry: data_model::registry::Registry,
@@ -110,9 +117,11 @@ async fn launch_job_dok(
 pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> anyhow::Result<()> {
     // TODO: currently only support one job
     let job_id = 0;
-    let job_mgr = store.job_mgr.lock().unwrap();
-    if job_mgr.jobs.contains_key(&job_id) {
-        return Err(anyhow::Error::msg("current job already running"));
+    {
+        let job_mgr = store.job_mgr.lock().unwrap();
+        if job_mgr.jobs.contains_key(&job_id) {
+            return Err(anyhow::Error::msg("current job already running"));
+        }
     }
 
     let (proj_sel, _) = store.project_sel.as_ref()
@@ -122,22 +131,37 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
         .ok_or(anyhow::Error::msg("no registry selected"))?
         .to_owned();
 
-    let (with_build, param_dok) = super::params::params_dok(store)?;
-    if proj.get_job_settings().dok.is_some() && with_build {
-        proj.get_dir().join("Dockerfile").exists().then_some(0)
-            .ok_or(anyhow::Error::msg("using DOK service with self built docker image requires a Dockerfile under the project folder"))?;
-    }
-    let job_mgr = store.job_mgr.clone();
-    let client = store.account_mgr.create_client(&store.setting_mgr)?.clone();
-    tokio::spawn(async move {
-        match launch_job_dok(proj, registry_sel, client, param_dok, job_mgr.clone(), with_build).await {
-            Ok(()) => (),
-            Err(e) => {
-                let mut job_mgr = job_mgr.lock().unwrap();
-                job_mgr.add_log(0, format!("run job error: {e}"));
-            } 
+
+    let pod_sel = store.pod_mgr.selected()
+        .ok_or(anyhow::Error::msg("no pod selected"))?;
+    use data_model::pod::Settings;
+    match &pod_sel.settings {
+        Settings::Local => {
+            let mut job_mgr = store.job_mgr.lock().unwrap();
+            job_mgr.add_log(0, "send the job to the local machine ...".to_string());
+        },
+        Settings::SakuraInternetServer => { return Err(anyhow::Error::msg("not DOK service")); },
+        Settings::SakuraInternetService(_) => {
+            let mut job_mgr = store.job_mgr.lock().unwrap();
+            job_mgr.add_log(0, "send the job Sakura Internet DOK service ...".to_string());
+            let (with_build, param_dok) = super::params::params_dok(store)?;
+            if proj.get_job_settings().dok.is_some() && with_build {
+                proj.get_dir().join("Dockerfile").exists().then_some(0)
+                    .ok_or(anyhow::Error::msg("using DOK service with self built docker image requires a Dockerfile under the project folder"))?;
+            }
+            let client = store.account_mgr.create_client(&store.setting_mgr)?.clone();
+            let job_mgr_clone = store.job_mgr.clone();
+            tokio::spawn(async move {
+                match launch_job_dok(proj, registry_sel, client, param_dok, job_mgr_clone.clone(), with_build).await {
+                    Ok(()) => (),
+                    Err(e) => {
+                        let mut job_mgr = job_mgr_clone.lock().unwrap();
+                        job_mgr.add_log(0, format!("run job error: {e}"));
+                    } 
+                }
+            });
         }
-    });
+    };
 
     Ok(())
 }
