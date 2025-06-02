@@ -13,7 +13,7 @@ All notable changes will be documented in this file.
 - [] integrate quantum-expresso
 - [] add "version" at the seeting page
 ### Changed
-- [] fix root README.md
+- [x] fix root README.md
 - [] fix ubuntu 20.04 -> 24.04: [The Ubuntu 20.04 Actions runner image will begin deprecation on 2025-02-01 and will be fully unsupported by 2025-04-15](https://github.com/actions/runner-images/issues/11101)
 ### Removed
 - [x] remove the folders: src/sakura 

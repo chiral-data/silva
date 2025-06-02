@@ -5,8 +5,9 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
 pub enum Provider {
-    SakuraInternet
+    SakuraInternet,
 }
 
 
 pub mod sakura_internet;
+pub mod local;
