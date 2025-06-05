@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use ratatui::prelude::*;
 use ratatui::widgets::*;
-
 use sacloud_rs::api::dok;
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::data_model;
 use crate::ui;
@@ -26,8 +26,6 @@ async fn launch_job_local(
     //     .ok_or(anyhow::Error::msg("no selected project"))?;
 
     let mut cmd = tokio::process::Command::new("docker");
-    cmd.stdout(std::process::Stdio::null());
-    cmd.stderr(std::process::Stdio::null());
     cmd.arg("run");
     cmd.arg("-v");
     let mount_str = format!("{}:{}", proj_dir.to_str().unwrap(), settings_local.mount_volume);
@@ -52,12 +50,36 @@ async fn launch_job_local(
         job.infra = data_model::job::Infra::Local;
         let _ = job_mgr.jobs.insert(job_id, job);
     }
+
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
     let mut child = cmd.spawn()?;
-    let status = child.wait().await?;
-    {
+
+    let stdout = child.stdout.take().expect("child did not have a handle to stdout");
+    let stderr = child.stderr.take().expect("child did not have a handle to stderr");
+    let mut reader = BufReader::new(stdout).lines();
+    let mut err_reader = BufReader::new(stderr).lines();
+
+    let job_mgr_async = job_mgr.clone();
+    let child_handle = tokio::spawn(async move {
+        let log = match child.wait().await {
+            Ok(status) => format!("[Local infra] job {} completes with status {}", job_id, status),
+            Err(e) => format!("[Local infra] child process encountered an error: {e}")
+        };
+        let mut job_mgr = job_mgr_async.lock().unwrap();
+        job_mgr.add_log(job_id, log);
+    });
+
+    while let Some(line) = reader.next_line().await? {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(job_id, format!("[Local infra] job {} completes with status {}", job_id, status));
+        job_mgr.add_log(job_id, format!("[Local infra STDOUT] {}", line));
     }
+    while let Some(line) = err_reader.next_line().await? {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[Local infra STDOUT] {}", line));
+    }
+
+    child_handle.await?;
 
     Ok(())
 }
