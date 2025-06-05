@@ -27,6 +27,7 @@ impl std::fmt::Display for JobStatus {
 #[derive(Debug, Deserialize, Clone)]
 pub enum Infra {
     None,
+    Local,
     // (task id, http uri)
     SakuraInternetDOK(String, Option<String>)
 }

@@ -16,11 +16,38 @@ pub const HELPER: &[&str] = &[
 
 async fn launch_job_local(
     job_mgr: Arc<Mutex<data_model::job::Manager>>,
+    settings_local: data_model::provider::local::Settings, 
 ) -> anyhow::Result<()> {
+    // TODO: currently only support one job
+    let job_id = 0;
+
+    // let (proj_sel, _proj_mgr) = store.project_sel.as_ref()
+    //     .ok_or(anyhow::Error::msg("no selected project"))?;
+
     let mut cmd = tokio::process::Command::new("docker");
+    cmd.arg("run");
+    cmd.arg("--rm");
+    cmd.arg("--gpus");
+    cmd.arg("all");
+    cmd.arg(&settings_local.docker_image);
+    cmd.arg("sh");
+    cmd.arg(&settings_local.script);
+
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[Local infra] launching the job {}", job_id));
+        let mut job = data_model::job::Job::new(job_id);
+        job.infra = data_model::job::Infra::Local;
+        let _ = job_mgr.jobs.insert(job_id, job);
+    }
     let mut child = cmd.spawn()?;
     let status = child.wait().await?;
-    todo!()
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[Local infra] job {} complete with status {}", job_id, status));
+    }
+
+    Ok(())
 }
 
 async fn launch_job_dok(
@@ -133,14 +160,25 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
         .ok_or(anyhow::Error::msg("no registry selected"))?
         .to_owned();
 
-
     let pod_sel = store.pod_mgr.selected()
         .ok_or(anyhow::Error::msg("no pod selected"))?;
     use data_model::pod::Settings;
     match &pod_sel.settings {
         Settings::Local => {
-            let mut job_mgr = store.job_mgr.lock().unwrap();
-            job_mgr.add_log(0, "send the job to the local machine ...".to_string());
+            let job_mgr_clone = store.job_mgr.clone();
+            let settings_local = proj_sel.get_job_settings()
+                .infra_local.as_ref()
+                .ok_or(anyhow::Error::msg("no settings for local servers"))?
+                .clone();
+            tokio::spawn(async move {
+                match launch_job_local(job_mgr_clone.clone(), settings_local).await {
+                    Ok(()) => (),
+                    Err(e) => {
+                        let mut job_mgr = job_mgr_clone.lock().unwrap();
+                        job_mgr.add_log(0, format!("run job error: {e}"));
+                    } 
+                }
+            });
         },
         Settings::SakuraInternetServer => { return Err(anyhow::Error::msg("not DOK service")); },
         Settings::SakuraInternetService(_) => {
