@@ -32,6 +32,8 @@ impl Files {
 #[derive(Debug, Default, Deserialize, Clone)]
 pub struct Settings {
     pub files: Files,
+    pub infra_local: Option<provider::local::Settings>,
+    // TODO: rename dok to infra_dok
     pub dok: Option<provider::sakura_internet::DokSettings>,
 }
 

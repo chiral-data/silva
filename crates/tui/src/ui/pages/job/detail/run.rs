@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use ratatui::prelude::*;
 use ratatui::widgets::*;
-
 use sacloud_rs::api::dok;
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::data_model;
 use crate::ui;
@@ -14,11 +14,74 @@ pub const HELPER: &[&str] = &[
     "Launch a job", 
 ];
 
-async fn launch_job_local() -> anyhow::Result<()> {
+async fn launch_job_local(
+    job_mgr: Arc<Mutex<data_model::job::Manager>>,
+    proj_dir: std::path::PathBuf,
+    settings_local: data_model::provider::local::Settings, 
+) -> anyhow::Result<()> {
+    // TODO: currently only support one job
+    let job_id = 0;
+
+    // let (proj_sel, _proj_mgr) = store.project_sel.as_ref()
+    //     .ok_or(anyhow::Error::msg("no selected project"))?;
+
     let mut cmd = tokio::process::Command::new("docker");
+    cmd.arg("run");
+    cmd.arg("-v");
+    let mount_str = format!("{}:{}", proj_dir.to_str().unwrap(), settings_local.mount_volume);
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[Local infra] mount the local folder to container folder {}", mount_str));
+    }
+    cmd.arg(mount_str);
+    cmd.arg("-w");
+    cmd.arg(&settings_local.mount_volume);
+    cmd.arg("--rm");
+    cmd.arg("--gpus");
+    cmd.arg("all");
+    cmd.arg(&settings_local.docker_image);
+    cmd.arg("/bin/sh");
+    cmd.arg(settings_local.script);
+
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[Local infra] launching the job {}", job_id));
+        let mut job = data_model::job::Job::new(job_id);
+        job.infra = data_model::job::Infra::Local;
+        let _ = job_mgr.jobs.insert(job_id, job);
+    }
+
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
     let mut child = cmd.spawn()?;
-    let status = child.wait().await?;
-    todo!()
+
+    let stdout = child.stdout.take().expect("child did not have a handle to stdout");
+    let stderr = child.stderr.take().expect("child did not have a handle to stderr");
+    let mut reader = BufReader::new(stdout).lines();
+    let mut err_reader = BufReader::new(stderr).lines();
+
+    let job_mgr_async = job_mgr.clone();
+    let child_handle = tokio::spawn(async move {
+        let log = match child.wait().await {
+            Ok(status) => format!("[Local infra] job {} completes with status {}", job_id, status),
+            Err(e) => format!("[Local infra] child process encountered an error: {e}")
+        };
+        let mut job_mgr = job_mgr_async.lock().unwrap();
+        job_mgr.add_log(job_id, log);
+    });
+
+    while let Some(line) = reader.next_line().await? {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[Local infra STDOUT] {}", line));
+    }
+    while let Some(line) = err_reader.next_line().await? {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[Local infra STDOUT] {}", line));
+    }
+
+    child_handle.await?;
+
+    Ok(())
 }
 
 async fn launch_job_dok(
@@ -131,14 +194,26 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
         .ok_or(anyhow::Error::msg("no registry selected"))?
         .to_owned();
 
-
     let pod_sel = store.pod_mgr.selected()
         .ok_or(anyhow::Error::msg("no pod selected"))?;
     use data_model::pod::Settings;
     match &pod_sel.settings {
         Settings::Local => {
-            let mut job_mgr = store.job_mgr.lock().unwrap();
-            job_mgr.add_log(0, "send the job to the local machine ...".to_string());
+            let job_mgr_clone = store.job_mgr.clone();
+            let proj_dir = proj.get_dir().to_path_buf();
+            let settings_local = proj_sel.get_job_settings()
+                .infra_local.as_ref()
+                .ok_or(anyhow::Error::msg("no settings for local servers"))?
+                .clone();
+            tokio::spawn(async move {
+                match launch_job_local(job_mgr_clone.clone(), proj_dir, settings_local).await {
+                    Ok(()) => (),
+                    Err(e) => {
+                        let mut job_mgr = job_mgr_clone.lock().unwrap();
+                        job_mgr.add_log(0, format!("run job error: {e}"));
+                    } 
+                }
+            });
         },
         Settings::SakuraInternetServer => { return Err(anyhow::Error::msg("not DOK service")); },
         Settings::SakuraInternetService(_) => {
@@ -156,7 +231,7 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
                     Ok(()) => (),
                     Err(e) => {
                         let mut job_mgr = job_mgr_clone.lock().unwrap();
-                        job_mgr.add_log(0, format!("run job error: {e}"));
+                        job_mgr.add_log(job_id, format!("[Local infra] job {} exits with error {}", job_id, e));
                     } 
                 }
             });
