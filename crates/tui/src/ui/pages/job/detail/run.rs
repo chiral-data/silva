@@ -14,7 +14,9 @@ pub const HELPER: &[&str] = &[
     "Launch a job", 
 ];
 
-async fn launch_job_local() -> anyhow::Result<()> {
+async fn launch_job_local(
+    job_mgr: Arc<Mutex<data_model::job::Manager>>,
+) -> anyhow::Result<()> {
     let mut cmd = tokio::process::Command::new("docker");
     let mut child = cmd.spawn()?;
     let status = child.wait().await?;
