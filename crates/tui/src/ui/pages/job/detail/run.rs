@@ -16,6 +16,7 @@ pub const HELPER: &[&str] = &[
 
 async fn launch_job_local(
     job_mgr: Arc<Mutex<data_model::job::Manager>>,
+    proj_dir: std::path::PathBuf,
     settings_local: data_model::provider::local::Settings, 
 ) -> anyhow::Result<()> {
     // TODO: currently only support one job
@@ -25,13 +26,24 @@ async fn launch_job_local(
     //     .ok_or(anyhow::Error::msg("no selected project"))?;
 
     let mut cmd = tokio::process::Command::new("docker");
+    cmd.stdout(std::process::Stdio::null());
+    cmd.stderr(std::process::Stdio::null());
     cmd.arg("run");
+    cmd.arg("-v");
+    let mount_str = format!("{}:{}", proj_dir.to_str().unwrap(), settings_local.mount_volume);
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[Local infra] mount the local folder to container folder {}", mount_str));
+    }
+    cmd.arg(mount_str);
+    cmd.arg("-w");
+    cmd.arg(&settings_local.mount_volume);
     cmd.arg("--rm");
     cmd.arg("--gpus");
     cmd.arg("all");
     cmd.arg(&settings_local.docker_image);
-    cmd.arg("sh");
-    cmd.arg(&settings_local.script);
+    cmd.arg("/bin/sh");
+    cmd.arg(settings_local.script);
 
     {
         let mut job_mgr = job_mgr.lock().unwrap();
@@ -44,7 +56,7 @@ async fn launch_job_local(
     let status = child.wait().await?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(job_id, format!("[Local infra] job {} complete with status {}", job_id, status));
+        job_mgr.add_log(job_id, format!("[Local infra] job {} completes with status {}", job_id, status));
     }
 
     Ok(())
@@ -166,12 +178,13 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
     match &pod_sel.settings {
         Settings::Local => {
             let job_mgr_clone = store.job_mgr.clone();
+            let proj_dir = proj.get_dir().to_path_buf();
             let settings_local = proj_sel.get_job_settings()
                 .infra_local.as_ref()
                 .ok_or(anyhow::Error::msg("no settings for local servers"))?
                 .clone();
             tokio::spawn(async move {
-                match launch_job_local(job_mgr_clone.clone(), settings_local).await {
+                match launch_job_local(job_mgr_clone.clone(), proj_dir, settings_local).await {
                     Ok(()) => (),
                     Err(e) => {
                         let mut job_mgr = job_mgr_clone.lock().unwrap();
@@ -196,7 +209,7 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
                     Ok(()) => (),
                     Err(e) => {
                         let mut job_mgr = job_mgr_clone.lock().unwrap();
-                        job_mgr.add_log(0, format!("run job error: {e}"));
+                        job_mgr.add_log(job_id, format!("[Local infra] job {} exits with error {}", job_id, e));
                     } 
                 }
             });
