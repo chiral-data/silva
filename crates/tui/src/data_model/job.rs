@@ -113,7 +113,7 @@ impl Manager {
     pub fn add_log(&mut self, job_id: usize, log: String) {
         let job_logs = self.logs.entry(job_id).or_default();
         job_logs.push_back(log);
-        if job_logs.len() > 10 {
+        if job_logs.len() > 20 {
             job_logs.pop_front();
         }
     }

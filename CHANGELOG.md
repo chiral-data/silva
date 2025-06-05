@@ -4,13 +4,13 @@ All notable changes will be documented in this file.
 ## [TODO]
 - [] job management
 - [] SSH accessible servers as a computation pod 
+- [] integrate quantum-expresso
 
 
 
 ## [Unreleased] v0.2.4
 ### Added
-- [] local as infra 
-- [] integrate quantum-expresso
+- [x] local as infra 
 - [] add "version" at the setting page
 ### Changed
 - [x] fix root README.md
