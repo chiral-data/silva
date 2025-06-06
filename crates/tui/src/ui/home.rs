@@ -27,6 +27,7 @@ pub fn render(f: &mut Frame, states: &mut ui::states::States, store: &mut data_m
         tabs::Tab::Project => project::render(f, mid, states, store),
         tabs::Tab::Job => job::render(f, mid, states, store),
         tabs::Tab::Setting => setting::render(f, mid, states, store),
+        tabs::Tab::About => about::render(f, mid, states, store),
     }
     info::render(f, bottom, states, store)
 }
@@ -54,14 +55,16 @@ pub async fn handle_key(tick_rate: Duration, last_tick: &mut Instant, states: &m
                         tabs::Tab::Tutorial => tabs::Tab::Project,
                         tabs::Tab::Project => tabs::Tab::Job,
                         tabs::Tab::Job => tabs::Tab::Setting, 
-                        tabs::Tab::Setting => tabs::Tab::Tutorial 
+                        tabs::Tab::Setting => tabs::Tab::About, 
+                        tabs::Tab::About => tabs::Tab::Tutorial 
                     };
                 } else {
                     match states.tabs_states.tab {
                         tabs::Tab::Tutorial => tutorial::handle_key(&key, states, store).await,
                         tabs::Tab::Project => project::handle_key(&key, states, store),
                         tabs::Tab::Job => job::handle_key(&key, states, store),
-                        tabs::Tab::Setting => setting::handle_key(&key, states, store).await 
+                        tabs::Tab::Setting => setting::handle_key(&key, states, store).await,
+                        tabs::Tab::About => about::handle_key(&key, states, store).await 
                     }
                 }
             }
