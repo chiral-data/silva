@@ -62,11 +62,20 @@ async fn launch_job_local(
 
     let job_mgr_async = job_mgr.clone();
     let child_handle = tokio::spawn(async move {
+        let job_mgr = job_mgr_async.clone();
+        let job_mgr = job_mgr.lock().unwrap();
+        if job_mgr.local_infra_cancel_job {
+            let log = match child.kill().await {
+                Ok(_) => format!("[Local infra] job {} cancelled successfully {}", job_id, status),
+                Err(e) => format!("[Local infra] job {} cancellation encountered an error: {e}")
+            };
+        }
+        job_mgr.add_log(job_id, log);
+
         let log = match child.wait().await {
             Ok(status) => format!("[Local infra] job {} completes with status {}", job_id, status),
             Err(e) => format!("[Local infra] child process encountered an error: {e}")
         };
-        let mut job_mgr = job_mgr_async.lock().unwrap();
         job_mgr.add_log(job_id, log);
     });
 
