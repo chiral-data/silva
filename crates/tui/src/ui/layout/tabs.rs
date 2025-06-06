@@ -9,7 +9,8 @@ pub enum Tab {
     Tutorial,
     Project,
     Job,
-    Setting
+    Setting,
+    About
 }
 
 #[derive(Default)]
@@ -25,13 +26,15 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States) {
         Tab::Tutorial => 0,
         Tab::Project => 1,
         Tab::Job => 2,
-        Tab::Setting => 3
+        Tab::Setting => 3,
+        Tab::About => 4,
     };
     let tabs = Tabs::new([
             "Tutorial",
             "Projects",
             "Jobs",
-            "Settings"
+            "Settings",
+            "About"
         ])
         .block(Block::default().title("").borders(Borders::ALL))
         .select(selected)
