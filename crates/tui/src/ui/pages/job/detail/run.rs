@@ -4,7 +4,7 @@ use std::time::Duration;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use sacloud_rs::api::dok;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use std::io::{BufRead, BufReader};
 
 use crate::data_model;
 use crate::ui;
@@ -25,7 +25,7 @@ async fn launch_job_local(
     // let (proj_sel, _proj_mgr) = store.project_sel.as_ref()
     //     .ok_or(anyhow::Error::msg("no selected project"))?;
 
-    let mut cmd = tokio::process::Command::new("docker");
+    let mut cmd = std::process::Command::new("docker");
     cmd.arg("run");
     cmd.arg("-v");
     let mount_str = format!("{}:{}", proj_dir.to_str().unwrap(), settings_local.mount_volume);
@@ -60,35 +60,38 @@ async fn launch_job_local(
     let mut reader = BufReader::new(stdout).lines();
     let mut err_reader = BufReader::new(stderr).lines();
 
-    let job_mgr_async = job_mgr.clone();
-    let child_handle = tokio::spawn(async move {
-        let job_mgr = job_mgr_async.clone();
-        let job_mgr = job_mgr.lock().unwrap();
+    loop {
+        let job_mgr_clone = job_mgr.clone();
+        let mut job_mgr = job_mgr_clone.lock().unwrap();
         if job_mgr.local_infra_cancel_job {
-            let log = match child.kill().await {
-                Ok(_) => format!("[Local infra] job {} cancelled successfully {}", job_id, status),
-                Err(e) => format!("[Local infra] job {} cancellation encountered an error: {e}")
+            let log_cancel = match child.kill() {
+                Ok(_) => format!("[Local infra] job {job_id} cancelled successfully"),
+                Err(e) => format!("[Local infra] job {job_id} cancellation encountered an error: {e}")
+            };
+            job_mgr.add_log(job_id, log_cancel);
+        } else {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    job_mgr.add_log(job_id, format!("[Local infra] job {} completes with status {}", job_id, status));
+                    break;
+                },
+                Ok(None) => (),
+                Err(e) => {
+                    job_mgr.add_log(job_id, format!("[Local infra] job {job_id} runs with error: {e}"));
+                    break;
+                }
             };
         }
-        job_mgr.add_log(job_id, log);
 
-        let log = match child.wait().await {
-            Ok(status) => format!("[Local infra] job {} completes with status {}", job_id, status),
-            Err(e) => format!("[Local infra] child process encountered an error: {e}")
-        };
-        job_mgr.add_log(job_id, log);
-    });
+        if let Some(Ok(line)) = reader.next() {
+            job_mgr.add_log(job_id, format!("[Local infra STDOUT] {}", line));
+        }
 
-    while let Some(line) = reader.next_line().await? {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(job_id, format!("[Local infra STDOUT] {}", line));
-    }
-    while let Some(line) = err_reader.next_line().await? {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(job_id, format!("[Local infra STDOUT] {}", line));
+        if let Some(Ok(line)) = err_reader.next() {
+            job_mgr.add_log(job_id, format!("[Local infra STDERR] {}", line));
+        }
     }
 
-    child_handle.await?;
 
     Ok(())
 }
