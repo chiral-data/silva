@@ -69,6 +69,8 @@ async fn launch_job_local(
                 Err(e) => format!("[Local infra] job {job_id} cancellation encountered an error: {e}")
             };
             job_mgr.add_log(job_id, log_cancel);
+            job_mgr.local_infra_cancel_job = false;
+            break;
         } else {
             match child.try_wait() {
                 Ok(Some(status)) => {
@@ -90,6 +92,8 @@ async fn launch_job_local(
         if let Some(Ok(line)) = err_reader.next() {
             job_mgr.add_log(job_id, format!("[Local infra STDERR] {}", line));
         }
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
 

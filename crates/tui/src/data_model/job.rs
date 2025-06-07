@@ -32,7 +32,7 @@ pub enum Infra {
     SakuraInternetDOK(String, Option<String>)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Job {
     pub id: usize,
     // status: JobStatus,
