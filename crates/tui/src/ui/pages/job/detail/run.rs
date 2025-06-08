@@ -37,6 +37,7 @@ async fn launch_job_local(
     cmd.arg("-w");
     cmd.arg(&settings_local.mount_volume);
     cmd.arg("--rm");
+    cmd.arg("--cpus=7");
     cmd.arg("--gpus");
     cmd.arg("all");
     cmd.arg(&settings_local.docker_image);
