@@ -6,7 +6,7 @@ use ratatui::widgets::*;
 use sacloud_rs::api::dok;
 // use std::io::{BufRead, BufReader};
 use futures_util::stream::StreamExt;
-use futures_util::TryStreamExt;
+// use futures_util::TryStreamExt;
 
 use crate::data_model;
 use crate::ui;
@@ -23,32 +23,16 @@ async fn launch_job_local(
 ) -> anyhow::Result<()> {
     // TODO: currently only support one job
     let job_id = 0;
+    let working_dir = "/workspace";
 
-    // let (proj_sel, _proj_mgr) = store.project_sel.as_ref()
-    //     .ok_or(anyhow::Error::msg("no selected project"))?;
-    
+    let volume_binds = vec![
+        format!("{}:{}", proj_dir.to_str().unwrap(), working_dir)
+    ];
     let docker = bollard::Docker::connect_with_socket_defaults().unwrap();
-    let image = bollard::query_parameters::CreateImageOptionsBuilder::default()
-        .from_image(&settings_local.docker_image)
-        .build();
-    docker.create_image(Some(image), None, None)
-        .try_collect::<Vec<_>>()
-        .await?;
-    let container_config = bollard::models::ContainerCreateBody {
-        image: Some(String::from(&settings_local.docker_image)),
-        tty: Some(true),
-        ..Default::default()
-    };
-    let container_id = docker.create_container(
-        None::<bollard::query_parameters::CreateContainerOptions>,
-        container_config 
-    ).await?.id;
-    docker.start_container(
-        &container_id,
-        None::<bollard::query_parameters::StartContainerOptions>,
-    ).await?;
+    let container_id = utils::docker::launch_container(&docker, &settings_local.docker_image, volume_binds).await?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, status: using image {}", settings_local.docker_image));
         job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, status: container {container_id} created"));
     }
 
@@ -57,11 +41,13 @@ async fn launch_job_local(
         bollard::models::ExecConfig {
             attach_stdout: Some(true),
             attach_stderr: Some(true),
-            cmd: Some(vec!["ls", "-l", "/"]
-                .into_iter()
-                .map(String::from)
-                .collect(),
+            cmd: Some(
+                vec!["sh", &settings_local.script]
+                    .into_iter()
+                    .map(String::from)
+                    .collect(),
             ),
+            working_dir: Some(working_dir.to_string()),
             ..Default::default()
         }
     ).await?
@@ -70,46 +56,14 @@ async fn launch_job_local(
         while let Some(Ok(msg)) = output.next().await {
             let mut job_mgr = job_mgr.lock().unwrap();
             job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, output: {msg}"));
+            if job_mgr.local_infra_cancel_job {
+                job_mgr.local_infra_cancel_job = false;
+                break;
+            }
         }
     } else {
         unreachable!();
     }
-
-    // let mut cmd = std::process::Command::new("docker");
-    // cmd.arg("run");
-    // cmd.arg("-v");
-    // let mount_str = format!("{}:{}", proj_dir.to_str().unwrap(), settings_local.mount_volume);
-    // {
-    //     let mut job_mgr = job_mgr.lock().unwrap();
-    //     job_mgr.add_log(job_id, format!("[Local infra] mount the local folder to container folder {}", mount_str));
-    // }
-    // cmd.arg(mount_str);
-    // cmd.arg("-w");
-    // cmd.arg(&settings_local.mount_volume);
-    // cmd.arg("--rm");
-    // cmd.arg("--cpus=7");
-    // cmd.arg("--gpus");
-    // cmd.arg("all");
-    // cmd.arg(&settings_local.docker_image);
-    // cmd.arg("/bin/sh");
-    // cmd.arg(settings_local.script);
-
-    // {
-    //     let mut job_mgr = job_mgr.lock().unwrap();
-    //     job_mgr.add_log(job_id, format!("[Local infra] launching the job {}", job_id));
-    //     let mut job = data_model::job::Job::new(job_id);
-    //     job.infra = data_model::job::Infra::Local;
-    //     let _ = job_mgr.jobs.insert(job_id, job);
-    // }
-
-    // cmd.stdout(std::process::Stdio::piped());
-    // cmd.stderr(std::process::Stdio::piped());
-    // let mut child = cmd.spawn()?;
-
-    // let stdout = child.stdout.take().expect("child did not have a handle to stdout");
-    // let stderr = child.stderr.take().expect("child did not have a handle to stderr");
-    // let mut reader = BufReader::new(stdout).lines();
-    // let mut err_reader = BufReader::new(stderr).lines();
 
     // loop {
     //     let job_mgr_clone = job_mgr.clone();
