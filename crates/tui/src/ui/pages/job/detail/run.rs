@@ -34,6 +34,9 @@ async fn launch_job_local(
         let mut job_mgr = job_mgr.lock().unwrap();
         job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, status: using image {}", settings_local.docker_image));
         job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, status: container {container_id} created"));
+        let mut job = data_model::job::Job::new(job_id);
+        job.infra = data_model::job::Infra::Local;
+        let _ = job_mgr.jobs.insert(job_id, job);
     }
 
     let exec_id = docker.create_exec(
@@ -52,55 +55,44 @@ async fn launch_job_local(
         }
     ).await?
     .id;
+
     if let bollard::exec::StartExecResults::Attached { mut output, .. } = docker.start_exec(&exec_id, None).await? {
-        while let Some(Ok(msg)) = output.next().await {
-            let mut job_mgr = job_mgr.lock().unwrap();
-            job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, output: {msg}"));
-            if job_mgr.local_infra_cancel_job {
+        loop {
+            let cancel_job = {
+                let mut job_mgr = job_mgr.lock().unwrap();
+                if job_mgr.local_infra_cancel_job {
+                    job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, container {container_id} being stopped"));
+                    true
+                } else { false }
+            };
+
+            if cancel_job {
+                let scob = bollard::query_parameters::StopContainerOptionsBuilder::default();
+                docker.stop_container(&container_id, Some(scob.signal("SIGINT").t(3).build())).await?;
+
+                let mut job_mgr = job_mgr.lock().unwrap();
+                job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, container {container_id} stopped"));
                 job_mgr.local_infra_cancel_job = false;
                 break;
+            }
+
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+            if let Some(Ok(msg)) = output.next().await {
+                let mut job_mgr = job_mgr.lock().unwrap();
+                job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, output: {msg}"));
             }
         }
     } else {
         unreachable!();
     }
 
-    // loop {
-    //     let job_mgr_clone = job_mgr.clone();
-    //     let mut job_mgr = job_mgr_clone.lock().unwrap();
-    //     if job_mgr.local_infra_cancel_job {
-    //         let log_cancel = match child.kill() {
-    //             Ok(_) => format!("[Local infra] job {job_id} cancelled successfully"),
-    //             Err(e) => format!("[Local infra] job {job_id} cancellation encountered an error: {e}")
-    //         };
-    //         job_mgr.add_log(job_id, log_cancel);
-    //         job_mgr.local_infra_cancel_job = false;
-    //         break;
-    //     } else {
-    //         match child.try_wait() {
-    //             Ok(Some(status)) => {
-    //                 job_mgr.add_log(job_id, format!("[Local infra] job {} completes with status {}", job_id, status));
-    //                 break;
-    //             },
-    //             Ok(None) => (),
-    //             Err(e) => {
-    //                 job_mgr.add_log(job_id, format!("[Local infra] job {job_id} runs with error: {e}"));
-    //                 break;
-    //             }
-    //         };
-    //     }
-
-    //     if let Some(Ok(line)) = reader.next() {
-    //         job_mgr.add_log(job_id, format!("[Local infra STDOUT] {}", line));
-    //     }
-
-    //     if let Some(Ok(line)) = err_reader.next() {
-    //         job_mgr.add_log(job_id, format!("[Local infra STDERR] {}", line));
-    //     }
-
-    //     std::thread::sleep(std::time::Duration::from_secs(1));
-    // }
-
+    let rcob = bollard::query_parameters::RemoveContainerOptionsBuilder::default();
+    docker.remove_container(&container_id, Some(rcob.force(true).build())).await.unwrap();
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, container {container_id} removed"));
+    }
 
     Ok(())
 }
