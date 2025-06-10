@@ -47,6 +47,10 @@ async fn launch_job_local(
         &container_id,
         None::<bollard::query_parameters::StartContainerOptions>,
     ).await?;
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, status: container {container_id} created"));
+    }
 
     let exec_id = docker.create_exec(
         &container_id,

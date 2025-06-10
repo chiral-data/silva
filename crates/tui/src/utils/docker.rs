@@ -13,96 +13,97 @@ pub async fn build_image(
     proj: &data_model::project::Project,
     job_mgr: Arc<Mutex<data_model::job::Manager>>
 ) -> anyhow::Result<()> {
-    let push_image_name = proj.get_docker_image_url(registry)?;
-    {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] build image {push_image_name}, started ..."));
-    }
+    todo!("rewrite according to bollard 0.19");
+   //  let push_image_name = proj.get_docker_image_url(registry)?;
+   //  {
+   //      let mut job_mgr = job_mgr.lock().unwrap();
+   //      job_mgr.add_log(0, format!("[docker] build image {push_image_name}, started ..."));
+   //  }
 
-    std::env::set_current_dir(proj.get_dir())?;
+   //  std::env::set_current_dir(proj.get_dir())?;
 
-    // prepare_build_files(proj_dir, job_settings)?;
-   
-    // create tar file for building the image
-    let filename_tar = "image.tar";
-    let tar_file = tokio::fs::File::create(filename_tar)
-        .await.unwrap().into_std().await;
-    let mut a = tar::Builder::new(tar_file);
-    // a.append_path(FILENAME_ENTRYPOINT)?;
-    a.append_path(FILENAME_DOCKER)?;
-    for input_file in proj.get_job_settings().files.inputs.iter() {
-        a.append_path(input_file)?;
-    }
-    for script_file in proj.get_job_settings().files.scripts.iter() {
-        a.append_path(script_file)?;
-    }
+   //  // prepare_build_files(proj_dir, job_settings)?;
+   // 
+   //  // create tar file for building the image
+   //  let filename_tar = "image.tar";
+   //  let tar_file = tokio::fs::File::create(filename_tar)
+   //      .await.unwrap().into_std().await;
+   //  let mut a = tar::Builder::new(tar_file);
+   //  // a.append_path(FILENAME_ENTRYPOINT)?;
+   //  a.append_path(FILENAME_DOCKER)?;
+   //  for input_file in proj.get_job_settings().files.inputs.iter() {
+   //      a.append_path(input_file)?;
+   //  }
+   //  for script_file in proj.get_job_settings().files.scripts.iter() {
+   //      a.append_path(script_file)?;
+   //  }
 
-    // add extra dirs to docker build context
-    let job_settings = proj.get_job_settings();
-    if let Some(dok) = &job_settings.dok {
-        if let Some(docker_build_context_extra_dirs) = dok.docker_build_context_extra_dirs.as_ref() {
-            for dir_str in docker_build_context_extra_dirs.iter() {
-                let mut dir_path = PathBuf::from(dir_str);
-                if dir_path.starts_with("~") {
-                    dir_path = super::dirs::get_user_home()?
-                        .join(dir_path.strip_prefix("~")?)
-                        .canonicalize()?;
-                };
-                let dir_name = dir_path.file_name()
-                    .ok_or(anyhow::Error::msg(format!("cannot get file_name for dir {dir_str}")))?;
-                {
-                    let mut job_mgr = job_mgr.lock().unwrap();
-                    job_mgr.add_log(0, format!("[docker] build image {push_image_name}, add {dir_path:?} to build context as {dir_name:?} ..."));
-                }
-                a.append_dir_all(dir_name, &dir_path)?;
-                a.finish()?;
-            }
-        }
-    }
+   //  // add extra dirs to docker build context
+   //  let job_settings = proj.get_job_settings();
+   //  if let Some(dok) = &job_settings.dok {
+   //      if let Some(docker_build_context_extra_dirs) = dok.docker_build_context_extra_dirs.as_ref() {
+   //          for dir_str in docker_build_context_extra_dirs.iter() {
+   //              let mut dir_path = PathBuf::from(dir_str);
+   //              if dir_path.starts_with("~") {
+   //                  dir_path = super::dirs::get_user_home()?
+   //                      .join(dir_path.strip_prefix("~")?)
+   //                      .canonicalize()?;
+   //              };
+   //              let dir_name = dir_path.file_name()
+   //                  .ok_or(anyhow::Error::msg(format!("cannot get file_name for dir {dir_str}")))?;
+   //              {
+   //                  let mut job_mgr = job_mgr.lock().unwrap();
+   //                  job_mgr.add_log(0, format!("[docker] build image {push_image_name}, add {dir_path:?} to build context as {dir_name:?} ..."));
+   //              }
+   //              a.append_dir_all(dir_name, &dir_path)?;
+   //              a.finish()?;
+   //          }
+   //      }
+   //  }
 
-    let docker = bollard::Docker::connect_with_local_defaults()?;
-    let build_image_options = bollard::image::BuildImageOptions {
-        dockerfile: "Dockerfile",
-        t: &push_image_name,
-        platform: "linux/amd64",
-        ..Default::default()
-    };
-    let mut file = std::fs::File::open(filename_tar)?;
-    let mut contents = Vec::new();
-    file.read_to_end(&mut contents)?;
-    let mut image_build_stream = docker.build_image(build_image_options, None, Some(contents.into()));
-    while let Some(msg) = image_build_stream.next().await {
-        match msg {
-            Ok(build_info) => {
-                let id = if let Some(id) = &build_info.id {
-                    id.to_string()
-                } else { "".to_string() };
-                if let Some(info) = build_info.stream {
-                    let mut job_mgr = job_mgr.lock().unwrap();
-                    job_mgr.add_log_tmp(0, format!("[docker] {id}: {info}"));
-                } else if let Some(status) = build_info.status {
-                    let progress = if let Some(progress) = build_info.progress {
-                        progress
-                    } else { "".to_string() };
-                    let mut job_mgr = job_mgr.lock().unwrap();
-                    job_mgr.add_log_tmp(0, format!("[docker] {id} Status: {status} {progress}"));
-                } else {
-                    let mut job_mgr = job_mgr.lock().unwrap();
-                    job_mgr.add_log_tmp(0, format!("[docker] non handled build_info {:?}", build_info));
-                }
-            }
-            Err(e) => return Err(anyhow::Error::msg(format!("[docker] build image error {e}")))
-        }
-    }
-    tokio::fs::remove_file(filename_tar).await.unwrap();
+   //  let docker = bollard::Docker::connect_with_local_defaults()?;
+   //  let build_image_options = bollard::image::BuildImageOptions {
+   //      dockerfile: "Dockerfile",
+   //      t: &push_image_name,
+   //      platform: "linux/amd64",
+   //      ..Default::default()
+   //  };
+   //  let mut file = std::fs::File::open(filename_tar)?;
+   //  let mut contents = Vec::new();
+   //  file.read_to_end(&mut contents)?;
+   //  let mut image_build_stream = docker.build_image(build_image_options, None, Some(contents.into()));
+   //  while let Some(msg) = image_build_stream.next().await {
+   //      match msg {
+   //          Ok(build_info) => {
+   //              let id = if let Some(id) = &build_info.id {
+   //                  id.to_string()
+   //              } else { "".to_string() };
+   //              if let Some(info) = build_info.stream {
+   //                  let mut job_mgr = job_mgr.lock().unwrap();
+   //                  job_mgr.add_log_tmp(0, format!("[docker] {id}: {info}"));
+   //              } else if let Some(status) = build_info.status {
+   //                  let progress = if let Some(progress) = build_info.progress {
+   //                      progress
+   //                  } else { "".to_string() };
+   //                  let mut job_mgr = job_mgr.lock().unwrap();
+   //                  job_mgr.add_log_tmp(0, format!("[docker] {id} Status: {status} {progress}"));
+   //              } else {
+   //                  let mut job_mgr = job_mgr.lock().unwrap();
+   //                  job_mgr.add_log_tmp(0, format!("[docker] non handled build_info {:?}", build_info));
+   //              }
+   //          }
+   //          Err(e) => return Err(anyhow::Error::msg(format!("[docker] build image error {e}")))
+   //      }
+   //  }
+   //  tokio::fs::remove_file(filename_tar).await.unwrap();
 
-    {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(0, format!("[docker] build image {push_image_name} completed ..."));
-        job_mgr.clear_log_tmp(&0);
-    }
-    
-    Ok(())
+   //  {
+   //      let mut job_mgr = job_mgr.lock().unwrap();
+   //      job_mgr.add_log(0, format!("[docker] build image {push_image_name} completed ..."));
+   //      job_mgr.clear_log_tmp(&0);
+   //  }
+   //  
+   //  Ok(())
 }
 
 pub async fn push_image(
@@ -214,57 +215,60 @@ mod tests {
 
     #[tokio::test]
     async fn test_exec_ls() {
-        use bollard::container::{Config, RemoveContainerOptions};
-        use bollard::Docker;
-        use bollard::exec::{CreateExecOptions, StartExecResults};
-        use bollard::image::CreateImageOptions;
-        use futures_util::stream::StreamExt;
-        use futures_util::TryStreamExt;
+        todo!("rewrite according to bollard 0.19");
+        // use bollard::container::{Config, RemoveContainerOptions};
+        // use bollard::Docker;
+        // use bollard::exec::{CreateExecOptions, StartExecResults};
+        // use bollard::image::CreateImageOptions;
+        // use futures_util::stream::StreamExt;
+        // use futures_util::TryStreamExt;
 
-        const IMAGE: &str = "alpine:3";
-        let docker = Docker::connect_with_socket_defaults().unwrap();
-        let create_image_options = CreateImageOptions { from_image: IMAGE, ..Default::default() };
-        docker.create_image(Some(create_image_options), None, None).try_collect::<Vec<_>>().await.unwrap();
+        // const IMAGE: &str = "alpine:3";
+        // let docker = Docker::connect_with_socket_defaults().unwrap();
+        // let create_image_options = CreateImageOptions { from_image: IMAGE, ..Default::default() };
+        // docker.create_image(Some(create_image_options), None, None).try_collect::<Vec<_>>().await.unwrap();
 
-        let alpine_config = Config { image: Some(IMAGE), tty: Some(true), ..Default::default() };
-        let id = docker.create_container::<&str, &str>(None, alpine_config).await.unwrap().id;
-        docker.start_container::<String>(&id, None).await.unwrap();
+        // let alpine_config = Config { image: Some(IMAGE), tty: Some(true), ..Default::default() };
+        // let id = docker.create_container::<&str, &str>(None, alpine_config).await.unwrap().id;
+        // docker.start_container::<String>(&id, None).await.unwrap();
 
-        // non interactive
-        let create_exec_options = CreateExecOptions {
-            attach_stdout: Some(true),
-            attach_stderr: Some(true),
-            cmd: Some(vec!["ls", "-l", "/"]),
-            ..Default::default()
-        };
-        let exec = docker.create_exec(&id, create_exec_options).await.unwrap().id;
-        if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&exec, None).await.unwrap() {
-            while let Some(Ok(msg)) = output.next().await {
-                print!("{msg}");
-            }
-        } else {
-            unreachable!();
-        }
+        // // non interactive
+        // let create_exec_options = CreateExecOptions {
+        //     attach_stdout: Some(true),
+        //     attach_stderr: Some(true),
+        //     cmd: Some(vec!["ls", "-l", "/"]),
+        //     ..Default::default()
+        // };
+        // let exec = docker.create_exec(&id, create_exec_options).await.unwrap().id;
+        // if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&exec, None).await.unwrap() {
+        //     while let Some(Ok(msg)) = output.next().await {
+        //         print!("{msg}");
+        //     }
+        // } else {
+        //     unreachable!();
+        // }
 
-        let remove_container_options = RemoveContainerOptions {
-            force: true,
-            ..Default::default()
-        };
-        docker.remove_container(&id, Some(remove_container_options)).await.unwrap();
+        // let remove_container_options = RemoveContainerOptions {
+        //     force: true,
+        //     ..Default::default()
+        // };
+        // docker.remove_container(&id, Some(remove_container_options)).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_exec_gromacs() {
-        use bollard::container;
         use bollard::Docker;
         use bollard::exec::{CreateExecOptions, StartExecResults};
-        use bollard::image::CreateImageOptions;
+        use bollard::query_parameters::CreateImageOptions;
         use futures_util::stream::StreamExt;
         use futures_util::TryStreamExt;
 
         const IMAGE: &str = "nvcr.io/hpc/gromacs:2023.2";
         let docker = Docker::connect_with_socket_defaults().unwrap();
-        let create_image_options = CreateImageOptions { from_image: IMAGE, ..Default::default() };
+        let create_image_options = CreateImageOptions { 
+            from_image: Some(IMAGE.to_string()), 
+            ..Default::default()
+        };
         docker.create_image(Some(create_image_options), None, None).try_collect::<Vec<_>>().await.unwrap();
 
         let binds = vec![
@@ -275,12 +279,24 @@ mod tests {
         )];
         let mut host_config = gpu_host_config();
         host_config.binds = Some(binds);
-        let container_config = container::Config { 
-            image: Some(IMAGE), tty: Some(true), host_config: Some(host_config), 
+
+        let container_create_body = bollard::models::ContainerCreateBody { 
+            image: Some(IMAGE.to_string()), 
+            tty: Some(true), 
+            host_config: Some(host_config), 
             ..Default::default() 
         };
-        let id = docker.create_container::<&str, &str>(None, container_config).await.unwrap().id;
-        docker.start_container::<String>(&id, None).await.unwrap();
+        let id = docker.create_container(
+            None::<bollard::query_parameters::CreateContainerOptions>,
+            container_create_body
+        ).await.unwrap().id;
+        println!("container {id} created");
+
+        docker.start_container(
+            &id,
+            None::<bollard::query_parameters::StartContainerOptions>
+        ).await.unwrap();
+        println!("container {id} started");
 
         // non interactive
         let create_exec_options = CreateExecOptions {
@@ -292,17 +308,15 @@ mod tests {
         let exec = docker.create_exec(&id, create_exec_options).await.unwrap().id;
         if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&exec, None).await.unwrap() {
             while let Some(Ok(msg)) = output.next().await {
-                print!("{msg}");
+                println!("{msg}");
             }
         } else {
             unreachable!();
         }
 
-        // let remove_container_options = RemoveContainerOptions {
-        //     force: true,
-        //     ..Default::default()
-        // };
-        // docker.remove_container(&id, Some(remove_container_options)).await.unwrap();
+        let rcob = bollard::query_parameters::RemoveContainerOptionsBuilder::default();
+        docker.remove_container(&id, Some(rcob.force(true).build())).await.unwrap();
+        println!("container {id} removed");
     }
 
 }
