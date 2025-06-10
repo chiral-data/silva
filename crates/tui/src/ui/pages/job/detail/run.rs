@@ -4,7 +4,9 @@ use std::time::Duration;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use sacloud_rs::api::dok;
-use std::io::{BufRead, BufReader};
+// use std::io::{BufRead, BufReader};
+use futures_util::stream::StreamExt;
+use futures_util::TryStreamExt;
 
 use crate::data_model;
 use crate::ui;
@@ -24,78 +26,122 @@ async fn launch_job_local(
 
     // let (proj_sel, _proj_mgr) = store.project_sel.as_ref()
     //     .ok_or(anyhow::Error::msg("no selected project"))?;
+    
+    let docker = bollard::Docker::connect_with_socket_defaults().unwrap();
+    let image = bollard::query_parameters::CreateImageOptionsBuilder::default()
+        .from_image(&settings_local.docker_image)
+        .build();
+    docker.create_image(Some(image), None, None)
+        .try_collect::<Vec<_>>()
+        .await?;
+    let container_config = bollard::models::ContainerCreateBody {
+        image: Some(String::from(&settings_local.docker_image)),
+        tty: Some(true),
+        ..Default::default()
+    };
+    let container_id = docker.create_container(
+        None::<bollard::query_parameters::CreateContainerOptions>,
+        container_config 
+    ).await?.id;
+    docker.start_container(
+        &container_id,
+        None::<bollard::query_parameters::StartContainerOptions>,
+    ).await?;
 
-    let mut cmd = std::process::Command::new("docker");
-    cmd.arg("run");
-    cmd.arg("-v");
-    let mount_str = format!("{}:{}", proj_dir.to_str().unwrap(), settings_local.mount_volume);
-    {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(job_id, format!("[Local infra] mount the local folder to container folder {}", mount_str));
-    }
-    cmd.arg(mount_str);
-    cmd.arg("-w");
-    cmd.arg(&settings_local.mount_volume);
-    cmd.arg("--rm");
-    cmd.arg("--cpus=7");
-    cmd.arg("--gpus");
-    cmd.arg("all");
-    cmd.arg(&settings_local.docker_image);
-    cmd.arg("/bin/sh");
-    cmd.arg(settings_local.script);
-
-    {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(job_id, format!("[Local infra] launching the job {}", job_id));
-        let mut job = data_model::job::Job::new(job_id);
-        job.infra = data_model::job::Infra::Local;
-        let _ = job_mgr.jobs.insert(job_id, job);
-    }
-
-    cmd.stdout(std::process::Stdio::piped());
-    cmd.stderr(std::process::Stdio::piped());
-    let mut child = cmd.spawn()?;
-
-    let stdout = child.stdout.take().expect("child did not have a handle to stdout");
-    let stderr = child.stderr.take().expect("child did not have a handle to stderr");
-    let mut reader = BufReader::new(stdout).lines();
-    let mut err_reader = BufReader::new(stderr).lines();
-
-    loop {
-        let job_mgr_clone = job_mgr.clone();
-        let mut job_mgr = job_mgr_clone.lock().unwrap();
-        if job_mgr.local_infra_cancel_job {
-            let log_cancel = match child.kill() {
-                Ok(_) => format!("[Local infra] job {job_id} cancelled successfully"),
-                Err(e) => format!("[Local infra] job {job_id} cancellation encountered an error: {e}")
-            };
-            job_mgr.add_log(job_id, log_cancel);
-            job_mgr.local_infra_cancel_job = false;
-            break;
-        } else {
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    job_mgr.add_log(job_id, format!("[Local infra] job {} completes with status {}", job_id, status));
-                    break;
-                },
-                Ok(None) => (),
-                Err(e) => {
-                    job_mgr.add_log(job_id, format!("[Local infra] job {job_id} runs with error: {e}"));
-                    break;
-                }
-            };
+    let exec_id = docker.create_exec(
+        &container_id,
+        bollard::models::ExecConfig {
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            cmd: Some(vec!["ls", "-l", "/"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+            ),
+            ..Default::default()
         }
-
-        if let Some(Ok(line)) = reader.next() {
-            job_mgr.add_log(job_id, format!("[Local infra STDOUT] {}", line));
+    ).await?
+    .id;
+    if let bollard::exec::StartExecResults::Attached { mut output, .. } = docker.start_exec(&exec_id, None).await? {
+        while let Some(Ok(msg)) = output.next().await {
+            let mut job_mgr = job_mgr.lock().unwrap();
+            job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, output: {msg}"));
         }
-
-        if let Some(Ok(line)) = err_reader.next() {
-            job_mgr.add_log(job_id, format!("[Local infra STDERR] {}", line));
-        }
-
-        std::thread::sleep(std::time::Duration::from_secs(1));
+    } else {
+        unreachable!();
     }
+
+    // let mut cmd = std::process::Command::new("docker");
+    // cmd.arg("run");
+    // cmd.arg("-v");
+    // let mount_str = format!("{}:{}", proj_dir.to_str().unwrap(), settings_local.mount_volume);
+    // {
+    //     let mut job_mgr = job_mgr.lock().unwrap();
+    //     job_mgr.add_log(job_id, format!("[Local infra] mount the local folder to container folder {}", mount_str));
+    // }
+    // cmd.arg(mount_str);
+    // cmd.arg("-w");
+    // cmd.arg(&settings_local.mount_volume);
+    // cmd.arg("--rm");
+    // cmd.arg("--cpus=7");
+    // cmd.arg("--gpus");
+    // cmd.arg("all");
+    // cmd.arg(&settings_local.docker_image);
+    // cmd.arg("/bin/sh");
+    // cmd.arg(settings_local.script);
+
+    // {
+    //     let mut job_mgr = job_mgr.lock().unwrap();
+    //     job_mgr.add_log(job_id, format!("[Local infra] launching the job {}", job_id));
+    //     let mut job = data_model::job::Job::new(job_id);
+    //     job.infra = data_model::job::Infra::Local;
+    //     let _ = job_mgr.jobs.insert(job_id, job);
+    // }
+
+    // cmd.stdout(std::process::Stdio::piped());
+    // cmd.stderr(std::process::Stdio::piped());
+    // let mut child = cmd.spawn()?;
+
+    // let stdout = child.stdout.take().expect("child did not have a handle to stdout");
+    // let stderr = child.stderr.take().expect("child did not have a handle to stderr");
+    // let mut reader = BufReader::new(stdout).lines();
+    // let mut err_reader = BufReader::new(stderr).lines();
+
+    // loop {
+    //     let job_mgr_clone = job_mgr.clone();
+    //     let mut job_mgr = job_mgr_clone.lock().unwrap();
+    //     if job_mgr.local_infra_cancel_job {
+    //         let log_cancel = match child.kill() {
+    //             Ok(_) => format!("[Local infra] job {job_id} cancelled successfully"),
+    //             Err(e) => format!("[Local infra] job {job_id} cancellation encountered an error: {e}")
+    //         };
+    //         job_mgr.add_log(job_id, log_cancel);
+    //         job_mgr.local_infra_cancel_job = false;
+    //         break;
+    //     } else {
+    //         match child.try_wait() {
+    //             Ok(Some(status)) => {
+    //                 job_mgr.add_log(job_id, format!("[Local infra] job {} completes with status {}", job_id, status));
+    //                 break;
+    //             },
+    //             Ok(None) => (),
+    //             Err(e) => {
+    //                 job_mgr.add_log(job_id, format!("[Local infra] job {job_id} runs with error: {e}"));
+    //                 break;
+    //             }
+    //         };
+    //     }
+
+    //     if let Some(Ok(line)) = reader.next() {
+    //         job_mgr.add_log(job_id, format!("[Local infra STDOUT] {}", line));
+    //     }
+
+    //     if let Some(Ok(line)) = err_reader.next() {
+    //         job_mgr.add_log(job_id, format!("[Local infra STDERR] {}", line));
+    //     }
+
+    //     std::thread::sleep(std::time::Duration::from_secs(1));
+    // }
 
 
     Ok(())
