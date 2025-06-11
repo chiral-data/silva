@@ -204,12 +204,12 @@ mod tests {
         let registry_list: RegistryList = client.clone().registries().dok_end().get()
             .await.unwrap();
         let registry = registry_list.results.first().unwrap();
-        let container = params::Container::default()
-            .image(format!("{}/llm_ollama:latest", registry.hostname))
+        let container = params::Container::new()
+            .image(format!("{}/gromacs_dok_nvidia:latest", registry.hostname))
             .registry(Some(registry.id.to_string()))
+            .entrypoint(vec!["/bin/printenv".to_string()])
             .command(vec![])
-            .entrypoint(vec![])
-            .http(params::Http { path: "/".to_string(), port: 7979 })
+            // .environment(vec![("CHIRAL_SILVA_VERSION".to_string(), "v0.2.4".to_string())].into_iter().collect())
             .plan(params::Plan::V100);
         let post_tasks = params::PostTasks::default()
             .name("some_task".to_string())
@@ -218,6 +218,7 @@ mod tests {
         let task_created: TaskCreated = client.clone().tasks().dok_end()
             .set_params(&post_tasks).unwrap()
             .post().await.unwrap();
+        assert!(!task_created.id.is_empty());
     }
 }
 
