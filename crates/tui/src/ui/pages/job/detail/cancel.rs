@@ -14,6 +14,9 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
     // TODO: currently only support one job
     let job_id = 0;
 
+    let mut cancel_job_id = store.cancel_job_id.lock().unwrap();
+    cancel_job_id.replace(job_id);
+
     // let job_mgr_clone = store.job_mgr.clone();
     // let job_mgr = job_mgr_clone.lock().unwrap();
     // let job_infra = job_mgr.jobs.get(&job_id)

@@ -18,6 +18,7 @@ pub const HELPER: &[&str] = &[
 
 async fn launch_job_local(
     job_mgr: Arc<Mutex<data_model::job::Manager>>,
+    job_id_to_cancel: Arc<Mutex<usize>>,
     proj_dir: std::path::PathBuf,
     settings_local: data_model::provider::local::Settings, 
 ) -> anyhow::Result<()> {
@@ -59,11 +60,16 @@ async fn launch_job_local(
     if let bollard::exec::StartExecResults::Attached { mut output, .. } = docker.start_exec(&exec_id, None).await? {
         loop {
             let cancel_job = {
-                let mut job_mgr = job_mgr.lock().unwrap();
-                if job_mgr.local_infra_cancel_job {
-                    job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, container {container_id} being stopped"));
-                    true
-                } else { false }
+                // let mut job_mgr = job_mgr.lock().unwrap();
+                // if job_mgr.local_infra_cancel_job {
+                //     job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, container {container_id} being stopped"));
+                //     true
+                // } else { false }
+                if let Some(id_cancel) = job_id_to_cancel.lock().unwrap().as_ref() {
+                    id_cancel == job_id
+                } else {
+                    false
+                }
             };
 
             if cancel_job {
