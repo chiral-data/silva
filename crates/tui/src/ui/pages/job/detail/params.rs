@@ -1,5 +1,5 @@
+use std::collections::HashMap;
 use sacloud_rs::api::dok;
-
 use crate::data_model;
 
 // pub struct ParametersDok {
@@ -48,18 +48,22 @@ pub fn params_dok(store: &data_model::Store) -> anyhow::Result<(bool, dok::param
     let image_name = dok.docker_image.clone().unwrap_or(image_name_by_dirname);
     let with_build = dok.docker_image.is_none();
     let commands = dok.commands.clone().unwrap_or_default();
+    let entrypoint = dok.entrypoint.clone().unwrap_or_default();
 
-    let container = dok::params::Container::default()
+    let mut container = dok::params::Container::new()
         .image(image_name.to_string())
         .registry(Some(registry_id.to_string()))
         .command(commands)
-        // .command(vec![
-        //     "run.sh",
-        //     "https://raw.githubusercontent.com/chiral-data/application-examples/refs/heads/v0.2.3_boltz/b/boltz/boltz_dok/job.sh",
-        // ].into_iter().map(String::from).collect())
-        .entrypoint(vec![])
+        .entrypoint(entrypoint)
         .plan(plan)
         .http(http);
+
+    if let Some(envs) = dok.envs.as_ref() {
+        let environment: HashMap<String, String> = envs.iter()
+            .map(|name| (name.to_string(), std::env::var(name).unwrap()))
+            .collect();
+        container = container.environment(environment);
+    }
 
     Ok((with_build, container))
 }
