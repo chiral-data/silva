@@ -5,10 +5,12 @@ All notable changes will be documented in this file.
 - [] job management
 - [] SSH accessible servers as a computation pod 
 - [] integrate quantum-expresso
+- [] fix ubuntu 20.04 -> 24.04: [The Ubuntu 20.04 Actions runner image will begin deprecation on 2025-02-01 and will be fully unsupported by 2025-04-15](https://github.com/actions/runner-images/issues/11101)
+    - files modified, not sure it works or not
 
 
 
-## [Unreleased] v0.2.4
+## [2025-06-12] v0.2.4
 ### Added
 - [x] local as infra 
     - [x] start a job
@@ -16,8 +18,6 @@ All notable changes will be documented in this file.
 - [x] add "version" at the setting page
 ### Changed
 - [x] fix root README.md
-- [] fix ubuntu 20.04 -> 24.04: [The Ubuntu 20.04 Actions runner image will begin deprecation on 2025-02-01 and will be fully unsupported by 2025-04-15](https://github.com/actions/runner-images/issues/11101)
-    - files modified, not sure it works or not
 ### Removed
 - [x] remove the folders: src/sakura 
 
