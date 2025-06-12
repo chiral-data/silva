@@ -14,50 +14,45 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
     // TODO: currently only support one job
     let job_id = 0;
 
-    let mut cancel_job_id = store.cancel_job_id.lock().unwrap();
-    cancel_job_id.replace(job_id);
+    let job_mgr_clone = store.job_mgr.clone();
+    let job_mgr = job_mgr_clone.lock().unwrap();
+    let job_infra = job_mgr.jobs.get(&job_id)
+        .ok_or(anyhow::Error::msg(format!("cannot find job {job_id}")))?
+        .infra.to_owned();
+    let (proj_sel, _) = store.project_sel.as_ref()
+        .ok_or(anyhow::Error::msg("no selected project"))?;
+    let proj = proj_sel.to_owned();
 
-    // let job_mgr_clone = store.job_mgr.clone();
-    // let job_mgr = job_mgr_clone.lock().unwrap();
-    // let job_infra = job_mgr.jobs.get(&job_id)
-    //     .ok_or(anyhow::Error::msg(format!("cannot find job {job_id}")))?
-    //     .infra.to_owned();
-    // let (proj_sel, _) = store.project_sel.as_ref()
-    //     .ok_or(anyhow::Error::msg("no selected project"))?;
-    // let proj = proj_sel.to_owned();
+    match job_infra {
+        data_model::job::Infra::None => unreachable!(),
+        data_model::job::Infra::Local => {
+            let mut cancel_job_id = store.cancel_job_id.lock().unwrap();
+            cancel_job_id.replace(job_id);
+        },
+        data_model::job::Infra::SakuraInternetDOK(task_id, _) => {
+            let (with_build, _param_dok) = super::params::params_dok(store)?;
+            if proj.get_job_settings().dok.is_some() && with_build {
+                // TODO: this requirement has to be deprecated
+                proj.get_dir().join("Dockerfile").exists().then_some(0)
+                    .ok_or(anyhow::Error::msg("using DOK service requires a Dockerfile under the project folder"))?;
+            }
 
-    // match job_infra {
-    //     data_model::job::Infra::None => unreachable!(),
-    //     data_model::job::Infra::Local => {
-    //         let job_mgr = store.job_mgr.clone();
-    //         let mut job_mgr = job_mgr.lock().unwrap();
-    //         job_mgr.local_infra_cancel_job = true;
-    //         job_mgr.add_log(job_id, format!("job {job_id} is being canceled"));
-    //     },
-    //     data_model::job::Infra::SakuraInternetDOK(task_id, _) => {
-    //         let (with_build, _param_dok) = super::params::params_dok(store)?;
-    //         if proj.get_job_settings().dok.is_some() && with_build {
-    //             // TODO: this requirement has to be deprecated
-    //             proj.get_dir().join("Dockerfile").exists().then_some(0)
-    //                 .ok_or(anyhow::Error::msg("using DOK service requires a Dockerfile under the project folder"))?;
-    //         }
-
-    //         let job_mgr = store.job_mgr.clone();
-    //         let client = store.account_mgr.create_client(&store.setting_mgr)?.clone();
-    //         tokio::spawn(async move {
-    //             match dok::shortcuts::cancel_task(client, task_id.as_str()).await {
-    //                 Ok(task_cancelled) => {
-    //                     let mut job_mgr = job_mgr.lock().unwrap();
-    //                     job_mgr.add_log(0, format!("task {} has been canceled", task_cancelled.id));
-    //                 },
-    //                 Err(e) => {
-    //                     let mut job_mgr = job_mgr.lock().unwrap();
-    //                     job_mgr.add_log(0, format!("cancel task error: {e}"));
-    //                 } 
-    //             }
-    //         });
-    //     }
-    // }
+            let job_mgr = store.job_mgr.clone();
+            let client = store.account_mgr.create_client(&store.setting_mgr)?.clone();
+            tokio::spawn(async move {
+                match dok::shortcuts::cancel_task(client, task_id.as_str()).await {
+                    Ok(task_cancelled) => {
+                        let mut job_mgr = job_mgr.lock().unwrap();
+                        job_mgr.add_log(0, format!("task {} has been canceled", task_cancelled.id));
+                    },
+                    Err(e) => {
+                        let mut job_mgr = job_mgr.lock().unwrap();
+                        job_mgr.add_log(0, format!("cancel task error: {e}"));
+                    } 
+                }
+            });
+        }
+    }
 
     Ok(())
 }
