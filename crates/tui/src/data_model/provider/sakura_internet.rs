@@ -15,6 +15,10 @@ pub struct DokSettings {
     pub http_path: Option<String>,
     pub http_port: Option<u16>,
     pub plan: Option<dok::params::Plan>,
-    pub commands: Option<Vec<String>>
+    pub commands: Option<Vec<String>>,
+    pub entrypoint: Option<Vec<String>>,
+    /// environmental variables
+    /// only env names need to be provided, ``
+    pub envs: Option<Vec<String>>,
 }
 

@@ -197,6 +197,29 @@ mod tests {
         dbg!(&artifact_url);
         assert!(artifact_url.url.contains(id));
     }
+
+    #[tokio::test]
+    async fn test_create_task_with_env_varialbes() {
+        let client = Client::default().dok();
+        let registry_list: RegistryList = client.clone().registries().dok_end().get()
+            .await.unwrap();
+        let registry = registry_list.results.first().unwrap();
+        let container = params::Container::new()
+            .image(format!("{}/gromacs_dok_nvidia:latest", registry.hostname))
+            .registry(Some(registry.id.to_string()))
+            .entrypoint(vec!["/bin/printenv".to_string()])
+            .command(vec![])
+            // .environment(vec![("CHIRAL_SILVA_VERSION".to_string(), "v0.2.4".to_string())].into_iter().collect())
+            .plan(params::Plan::V100);
+        let post_tasks = params::PostTasks::default()
+            .name("some_task".to_string())
+            .containers(vec![container])
+            .tags(vec![]);
+        let task_created: TaskCreated = client.clone().tasks().dok_end()
+            .set_params(&post_tasks).unwrap()
+            .post().await.unwrap();
+        assert!(!task_created.id.is_empty());
+    }
 }
 
 pub mod params;
