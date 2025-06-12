@@ -4,7 +4,9 @@ use std::time::Duration;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use sacloud_rs::api::dok;
-use tokio::io::{AsyncBufReadExt, BufReader};
+// use std::io::{BufRead, BufReader};
+use futures_util::stream::StreamExt;
+// use futures_util::TryStreamExt;
 
 use crate::data_model;
 use crate::ui;
@@ -16,70 +18,83 @@ pub const HELPER: &[&str] = &[
 
 async fn launch_job_local(
     job_mgr: Arc<Mutex<data_model::job::Manager>>,
+    job_id_to_cancel: Arc<Mutex<Option<usize>>>,
     proj_dir: std::path::PathBuf,
     settings_local: data_model::provider::local::Settings, 
 ) -> anyhow::Result<()> {
     // TODO: currently only support one job
     let job_id = 0;
+    let working_dir = "/workspace";
 
-    // let (proj_sel, _proj_mgr) = store.project_sel.as_ref()
-    //     .ok_or(anyhow::Error::msg("no selected project"))?;
-
-    let mut cmd = tokio::process::Command::new("docker");
-    cmd.arg("run");
-    cmd.arg("-v");
-    let mount_str = format!("{}:{}", proj_dir.to_str().unwrap(), settings_local.mount_volume);
+    let volume_binds = vec![
+        format!("{}:{}", proj_dir.to_str().unwrap(), working_dir)
+    ];
+    let docker = bollard::Docker::connect_with_socket_defaults().unwrap();
+    let container_id = utils::docker::launch_container(&docker, &settings_local.docker_image, volume_binds).await?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(job_id, format!("[Local infra] mount the local folder to container folder {}", mount_str));
-    }
-    cmd.arg(mount_str);
-    cmd.arg("-w");
-    cmd.arg(&settings_local.mount_volume);
-    cmd.arg("--rm");
-    cmd.arg("--gpus");
-    cmd.arg("all");
-    cmd.arg(&settings_local.docker_image);
-    cmd.arg("/bin/sh");
-    cmd.arg(settings_local.script);
-
-    {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(job_id, format!("[Local infra] launching the job {}", job_id));
+        job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, status: using image {}", settings_local.docker_image));
+        job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, status: container {container_id} created"));
         let mut job = data_model::job::Job::new(job_id);
         job.infra = data_model::job::Infra::Local;
         let _ = job_mgr.jobs.insert(job_id, job);
     }
 
-    cmd.stdout(std::process::Stdio::piped());
-    cmd.stderr(std::process::Stdio::piped());
-    let mut child = cmd.spawn()?;
+    let exec_id = docker.create_exec(
+        &container_id,
+        bollard::models::ExecConfig {
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            cmd: Some(
+                vec!["sh", &settings_local.script]
+                    .into_iter()
+                    .map(String::from)
+                    .collect(),
+            ),
+            working_dir: Some(working_dir.to_string()),
+            ..Default::default()
+        }
+    ).await?
+    .id;
 
-    let stdout = child.stdout.take().expect("child did not have a handle to stdout");
-    let stderr = child.stderr.take().expect("child did not have a handle to stderr");
-    let mut reader = BufReader::new(stdout).lines();
-    let mut err_reader = BufReader::new(stderr).lines();
+    if let bollard::exec::StartExecResults::Attached { mut output, .. } = docker.start_exec(&exec_id, None).await? {
+        loop {
+            let cancel_job = {
+                let job_id_to_cancel = job_id_to_cancel.lock().unwrap();
+                if let Some(id_cancel) = *job_id_to_cancel {
+                    id_cancel == job_id
+                } else {
+                    false
+                }
+            };
 
-    let job_mgr_async = job_mgr.clone();
-    let child_handle = tokio::spawn(async move {
-        let log = match child.wait().await {
-            Ok(status) => format!("[Local infra] job {} completes with status {}", job_id, status),
-            Err(e) => format!("[Local infra] child process encountered an error: {e}")
-        };
-        let mut job_mgr = job_mgr_async.lock().unwrap();
-        job_mgr.add_log(job_id, log);
-    });
+            if cancel_job {
+                let scob = bollard::query_parameters::StopContainerOptionsBuilder::default();
+                docker.stop_container(&container_id, Some(scob.signal("SIGINT").t(3).build())).await?;
 
-    while let Some(line) = reader.next_line().await? {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(job_id, format!("[Local infra STDOUT] {}", line));
+                let mut job_mgr = job_mgr.lock().unwrap();
+                job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, container {container_id} stopped"));
+                job_mgr.local_infra_cancel_job = false;
+                break;
+            }
+
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+            if let Some(Ok(msg)) = output.next().await {
+                let mut job_mgr = job_mgr.lock().unwrap();
+                job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, output: {msg}"));
+            }
+        }
+    } else {
+        unreachable!();
     }
-    while let Some(line) = err_reader.next_line().await? {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(job_id, format!("[Local infra STDOUT] {}", line));
-    }
 
-    child_handle.await?;
+    let rcob = bollard::query_parameters::RemoveContainerOptionsBuilder::default();
+    docker.remove_container(&container_id, Some(rcob.force(true).build())).await.unwrap();
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, container {container_id} removed"));
+    }
 
     Ok(())
 }
@@ -200,13 +215,14 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
     match &pod_sel.settings {
         Settings::Local => {
             let job_mgr_clone = store.job_mgr.clone();
+            let job_id_to_cancel = store.cancel_job_id.clone();
             let proj_dir = proj.get_dir().to_path_buf();
             let settings_local = proj_sel.get_job_settings()
                 .infra_local.as_ref()
                 .ok_or(anyhow::Error::msg("no settings for local servers"))?
                 .clone();
             tokio::spawn(async move {
-                match launch_job_local(job_mgr_clone.clone(), proj_dir, settings_local).await {
+                match launch_job_local(job_mgr_clone.clone(), job_id_to_cancel, proj_dir, settings_local).await {
                     Ok(()) => (),
                     Err(e) => {
                         let mut job_mgr = job_mgr_clone.lock().unwrap();

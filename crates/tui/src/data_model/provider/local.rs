@@ -4,7 +4,6 @@ use serde::Deserialize;
 #[derive(Debug, Default, Deserialize, Clone)]
 pub struct Settings {
     pub docker_image: String,
-    pub mount_volume: String,
     pub script: String
 }
 

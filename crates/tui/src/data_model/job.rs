@@ -32,7 +32,7 @@ pub enum Infra {
     SakuraInternetDOK(String, Option<String>)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Job {
     pub id: usize,
     // status: JobStatus,
@@ -79,7 +79,8 @@ pub struct Manager {
     /// job logs: <job id, log contents>
     pub chat_stream: String,
     pub logs: HashMap<usize, VecDeque<String>>,
-    pub logs_tmp: HashMap<usize, String>
+    pub logs_tmp: HashMap<usize, String>,
+    pub local_infra_cancel_job: bool,
 }
 
 impl Manager {
@@ -105,7 +106,11 @@ impl Manager {
         };
 
         let chat_stream = String::new();
-        let s = Self { jobs, chat_stream, logs: HashMap::new(), logs_tmp: HashMap::new() };
+        let s = Self { 
+            jobs, chat_stream, 
+            logs: HashMap::new(), logs_tmp: HashMap::new(),
+            local_infra_cancel_job: false 
+        };
         Ok(s)
     }
 
