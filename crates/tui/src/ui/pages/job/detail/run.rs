@@ -18,7 +18,7 @@ pub const HELPER: &[&str] = &[
 
 async fn launch_job_local(
     job_mgr: Arc<Mutex<data_model::job::Manager>>,
-    job_id_to_cancel: Arc<Mutex<usize>>,
+    job_id_to_cancel: Arc<Mutex<Option<usize>>>,
     proj_dir: std::path::PathBuf,
     settings_local: data_model::provider::local::Settings, 
 ) -> anyhow::Result<()> {
@@ -65,7 +65,8 @@ async fn launch_job_local(
                 //     job_mgr.add_log(job_id, format!("[Local infra] exec job {job_id}, container {container_id} being stopped"));
                 //     true
                 // } else { false }
-                if let Some(id_cancel) = job_id_to_cancel.lock().unwrap().as_ref() {
+                let job_id_to_cancel = job_id_to_cancel.lock().unwrap();
+                if let Some(id_cancel) = *job_id_to_cancel {
                     id_cancel == job_id
                 } else {
                     false
@@ -219,13 +220,14 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
     match &pod_sel.settings {
         Settings::Local => {
             let job_mgr_clone = store.job_mgr.clone();
+            let job_id_to_cancel = store.cancel_job_id.clone();
             let proj_dir = proj.get_dir().to_path_buf();
             let settings_local = proj_sel.get_job_settings()
                 .infra_local.as_ref()
                 .ok_or(anyhow::Error::msg("no settings for local servers"))?
                 .clone();
             tokio::spawn(async move {
-                match launch_job_local(job_mgr_clone.clone(), proj_dir, settings_local).await {
+                match launch_job_local(job_mgr_clone.clone(), job_id_to_cancel, proj_dir, settings_local).await {
                     Ok(()) => (),
                     Err(e) => {
                         let mut job_mgr = job_mgr_clone.lock().unwrap();
