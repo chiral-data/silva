@@ -12,7 +12,7 @@ All notable changes will be documented in this file.
 ### Added
 - [x] local as infra 
     - [x] start a job
-    - [] cancel a job
+    - [x] cancel a job
 - [x] add "version" at the setting page
 ### Changed
 - [x] fix root README.md
