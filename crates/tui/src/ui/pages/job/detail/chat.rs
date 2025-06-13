@@ -28,6 +28,7 @@ async fn ollama_generate(prompt: String, job_mgr: Arc<Mutex<data_model::job::Man
             .ok_or(anyhow::Error::msg(format!("job {job_id} not found")))?;
         match &job.infra {
             data_model::job::Infra::None => None.ok_or(anyhow::Error::msg(format!("job {job_id} infra not ready")))?,
+            data_model::job::Infra::Local => None.ok_or(anyhow::Error::msg(format!("job {job_id} for local infra not ready")))?,
             data_model::job::Infra::SakuraInternetDOK(_task_id, http_uri) => http_uri.clone().ok_or(anyhow::Error::msg("http uri not available yet"))?
         }
         // job_mgr.chat_stream.push_str(format!("responses from {http_uri}").as_str());

@@ -12,6 +12,7 @@ pub struct Store {
     pub pod_mgr: pod::Manager,
     pub job_mgr: Arc<Mutex<job::Manager>>,
     pub project_sel: Option<(project::Project, project::Manager)>, 
+    pub cancel_job_id: Arc<Mutex<Option<usize>>>,
 }
 
 impl std::default::Default for Store {
@@ -41,6 +42,7 @@ impl std::default::Default for Store {
             app_mgr, pod_type_mgr, pod_mgr,
             project_sel: None,
             job_mgr: Arc::new(Mutex::new(job_mgr)), 
+            cancel_job_id: Arc::new(Mutex::new(None))
         }
     }
 }
@@ -59,6 +61,8 @@ impl Store {
                     sacloud_rs::api::dok::params::Plan::H100GB80 => self.pod_mgr.pod_id_selected = Some(pod::ids::DOK_H100),
                     sacloud_rs::api::dok::params::Plan::H100GB20 => todo!()
                 }
+            } else {
+                self.pod_mgr.pod_id_selected = Some(pod::ids::LOCAL);
             }
         }
 

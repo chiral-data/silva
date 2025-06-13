@@ -27,11 +27,12 @@ impl std::fmt::Display for JobStatus {
 #[derive(Debug, Deserialize, Clone)]
 pub enum Infra {
     None,
+    Local,
     // (task id, http uri)
     SakuraInternetDOK(String, Option<String>)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Job {
     pub id: usize,
     // status: JobStatus,
@@ -78,7 +79,8 @@ pub struct Manager {
     /// job logs: <job id, log contents>
     pub chat_stream: String,
     pub logs: HashMap<usize, VecDeque<String>>,
-    pub logs_tmp: HashMap<usize, String>
+    pub logs_tmp: HashMap<usize, String>,
+    pub local_infra_cancel_job: bool,
 }
 
 impl Manager {
@@ -104,7 +106,11 @@ impl Manager {
         };
 
         let chat_stream = String::new();
-        let s = Self { jobs, chat_stream, logs: HashMap::new(), logs_tmp: HashMap::new() };
+        let s = Self { 
+            jobs, chat_stream, 
+            logs: HashMap::new(), logs_tmp: HashMap::new(),
+            local_infra_cancel_job: false 
+        };
         Ok(s)
     }
 
@@ -112,7 +118,7 @@ impl Manager {
     pub fn add_log(&mut self, job_id: usize, log: String) {
         let job_logs = self.logs.entry(job_id).or_default();
         job_logs.push_back(log);
-        if job_logs.len() > 10 {
+        if job_logs.len() > 20 {
             job_logs.pop_front();
         }
     }

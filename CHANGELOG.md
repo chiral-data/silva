@@ -1,17 +1,29 @@
 # Changelog
 All notable changes will be documented in this file.
 
-## [Planned]
+## [TODO]
 - [] job management
 - [] SSH accessible servers as a computation pod 
-- [] Applications setting file (pod_type::for_application)
-- [] local computer as a computation pod
-- [] add Dockerfile for examples gromacs & whisper 
+- [] integrate quantum-expresso
+- [] fix ubuntu 20.04 -> 24.04: [The Ubuntu 20.04 Actions runner image will begin deprecation on 2025-02-01 and will be fully unsupported by 2025-04-15](https://github.com/actions/runner-images/issues/11101)
+    - files modified, not sure it works or not
 
-## [] v0.2.4
-To integrate Quantum Expresso
 
-## [Unreleased] v0.2.3 
+
+## [2025-06-12] v0.2.4
+### Added
+- [x] local as infra 
+    - [x] start a job
+    - [x] cancel a job
+- [x] add "version" at the setting page
+### Changed
+- [x] fix root README.md
+### Removed
+- [x] remove the folders: src/sakura 
+
+
+
+## v0.2.3 
 
 ### Added
 - [x] tui: add "commands" in dok parameter

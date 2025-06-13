@@ -8,18 +8,17 @@ pub struct States {
 }
 
 pub fn render(f: &mut ratatui::prelude::Frame, area: ratatui::prelude::Rect, states: &mut crate::ui::states::States, store: &crate::data_model::Store) {
-    let top_bottom = Layout::default()
+    let parts = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(1)]) 
+        .constraints([Constraint::Length(3), Constraint::Length(3), Constraint::Min(1)]) 
         .split(area);
-    let (top, bottom) = (top_bottom[0], top_bottom[1]);
+    let (top, bottom) = (parts[0], parts[1]);
 
     let states_current = &states.setting_states;
     tabs::render(f, top, states);
     match states_current.tabs.tab {
         tabs::Tab::Account => account::render(f, bottom, states, store),
         tabs::Tab::Registry => docker_registry::render(f, bottom, states, store)
-
     } 
 }
 
