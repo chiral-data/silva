@@ -3,11 +3,11 @@
 ## Release
 
 ### Toolchain for realease (currently BROKEN!!!)
-[cargo-dist](https://github.com/axodotdev/cargo-dist) is used for release.
-The configuration file is dist-workspace.toml.
+The release process relies on [cargo-dist](https://github.com/axodotdev/cargo-dist), configured via `dist-workspace.toml`.
 
-The update of the original repo is suspending and [the depreccate of ubuntu 20.04 from github action](https://github.com/actions/runner-images/issues/11101) broken the release workflow.
-There exists [this fork](https://github.com/astral-sh/cargo-dist) keeping the development, a new solution based on this fork has to be investigated.
+Unfortunately, the original cargo-dist repository is not actively maintained. This, combined with GitHub Actions [deprecating Ubuntu 20.04](https://github.com/actions/runner-images/issues/11101), has broken the release workflow.
+
+[A fork](https://github.com/astral-sh/cargo-dist) of the original repository is being maintained. A new solution based on this updated fork is being investigated. 
 
 
 ### How to create a release
