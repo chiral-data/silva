@@ -47,6 +47,7 @@ impl FtpClient {
         self.root_dir = None;
     }
 
+
 }
 
 impl Drop for FtpClient {
