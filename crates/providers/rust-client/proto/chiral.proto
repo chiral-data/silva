@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package chiral;
+
+service Chiral {
+    rpc UserCommunicate(RequestUserCommunicate) returns (ReplyUserCommunicate) {}
+    rpc SayHello (HelloRequest) returns (HelloReply) {}
+}
+
+message RequestUserCommunicate {
+  string serialized_request = 1;
+} 
+
+message ReplyUserCommunicate {
+    bool success = 1;
+    string error = 2;
+    string serialized_reply = 3;
+}
+
+message HelloRequest {
+  string name = 1;
+}
+
+message HelloReply {
+  string message = 1;
+}

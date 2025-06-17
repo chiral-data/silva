@@ -1,0 +1,14 @@
+[package]
+name = "rust-client"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tonic = { version = "0.11", features = ["tls"] }
+prost = "0.12"
+ftp = "3.0.1"
+tokio = { version = "1", features = ["full"] }
+dotenvy = "0.15"
+
+[build-dependencies]
+tonic-build = "0.11"
