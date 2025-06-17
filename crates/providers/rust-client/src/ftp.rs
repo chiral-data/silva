@@ -1,4 +1,7 @@
 use ftp::FtpStream;
+use std::fs::File;
+use std::io::Write;
+
 
 #[derive(Debug, PartialEq)]
 enum PathType {
@@ -45,6 +48,33 @@ impl FtpClient {
             let _ = ftp.quit(); // ignore error
         }
         self.root_dir = None;
+    }
+
+    pub fn is_connected(&self) -> bool {
+    self.ftp.is_some()
+    }
+
+    pub fn download_file(&mut self, remote_path: &str, local_path: &str) -> Result<(), ftp::FtpError> {
+        let ftp_stream = match &mut self.ftp {
+            Some(ftp) => ftp,
+            None => {
+                return Err(ftp::FtpError::ConnectionError(
+                    std::io::Error::new(std::io::ErrorKind::NotConnected, "Not connected to FTP server"),
+                ))
+            }
+        };
+
+        let data = ftp_stream.simple_retr(remote_path)?;
+
+        let mut file = File::create(local_path).map_err(|e| {
+            ftp::FtpError::ConnectionError(e)
+        })?;
+
+        file.write_all(&data.into_inner()).map_err(|e| {
+            ftp::FtpError::ConnectionError(e)
+        })?;
+
+        Ok(())
     }
 
 
