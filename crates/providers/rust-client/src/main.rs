@@ -16,11 +16,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     */
 
     let mut client = FtpClient::new(
-        "127.0.0.1",     // FTP server address
-        21,              // FTP port
-        "ftpuser",       // FTP username
-        "your_password", // FTP password
-        "Aariv_Walia",              // No subfolder (root of ftpuser's home)
+        "Server address",     // FTP server address
+        PORT_NO,              // FTP port
+        "Username",       // FTP username
+        "Password", // FTP password
+        "Folder name for user",              // No subfolder (root of ftpuser's home)
     );
 
     client.connect()?;
