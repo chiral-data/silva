@@ -1,6 +1,6 @@
 use ftp::FtpStream;
 use std::fs::File;
-use std::io::Write;
+use std::io::{Write,Read};
 
 
 #[derive(Debug, PartialEq)]
@@ -37,11 +37,19 @@ impl FtpClient {
         let address = format!("{}:{}", self.ftp_addr, self.ftp_port);
         let mut ftp_stream = FtpStream::connect(address)?;
         ftp_stream.login(&self.user_email, &self.token_api)?;
+        
+        // Try to change into the user's subdirectory
         ftp_stream.cwd(&self.user_id)?;
-        self.root_dir = Some(ftp_stream.pwd()?);
+        
+        // Confirm we're in the correct directory
+        let current_dir = ftp_stream.pwd()?;
+        println!("Connected and changed to directory: {}", current_dir);
+
+        self.root_dir = Some(current_dir);
         self.ftp = Some(ftp_stream);
         Ok(())
     }
+
 
     pub fn disconnect(&mut self) {
         if let Some(mut ftp) = self.ftp.take() {
@@ -73,6 +81,22 @@ impl FtpClient {
         file.write_all(&data.into_inner()).map_err(|e| {
             ftp::FtpError::ConnectionError(e)
         })?;
+
+        Ok(())
+    }
+
+    pub fn upload_file(&mut self, local_path: &str, remote_path: &str) -> Result<(), ftp::FtpError> {
+        let ftp_stream = match &mut self.ftp {
+            Some(ftp) => ftp,
+            None => {
+                return Err(ftp::FtpError::ConnectionError(
+                    std::io::Error::new(std::io::ErrorKind::NotConnected, "Not connected to FTP server"),
+                ))
+            }
+        };
+
+        let mut file = File::open(local_path).map_err(ftp::FtpError::ConnectionError)?;
+        ftp_stream.put(remote_path, &mut file)?;
 
         Ok(())
     }

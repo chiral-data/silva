@@ -24,8 +24,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     client.connect()?;
-    client.download_file("test.txt", "downloaded_test.txt")?;
-    client.disconnect();
+    match client.upload_file("src/test_upload.txt", "uploaded_test.txt") {
+        Ok(_) => println!(" File uploaded successfully."),
+        Err(e) => eprintln!(" Upload failed: {:?}", e),
+    }    client.disconnect();
 
     Ok(())
 }
