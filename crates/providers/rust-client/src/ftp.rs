@@ -102,6 +102,77 @@ impl FtpClient {
     }
 
 
+    pub fn make_directory(&mut self, dir_name: &str) -> Result<(), ftp::FtpError> {
+        let ftp_stream = match &mut self.ftp {
+            Some(ftp) => ftp,
+            None => {
+                return Err(ftp::FtpError::ConnectionError(
+                    std::io::Error::new(std::io::ErrorKind::NotConnected, "Not connected to FTP server"),
+                ))
+            }
+        };
+
+        ftp_stream.mkdir(dir_name)?;
+        println!("Created directory: {}", dir_name);
+
+        Ok(())
+    }
+
+
+    pub fn change_directory(&mut self, dir: &str) -> Result<(), ftp::FtpError> {
+        let ftp_stream = match &mut self.ftp {
+            Some(ftp) => ftp,
+            None => {
+                return Err(ftp::FtpError::ConnectionError(
+                    std::io::Error::new(std::io::ErrorKind::NotConnected, "Not connected to FTP server"),
+                ))
+            }
+        };  
+        ftp_stream.cwd(dir)?;
+        let current_dir = ftp_stream.pwd()?;
+        self.root_dir = Some(current_dir.clone());
+
+        println!("Changed directory to: {}", current_dir);
+
+        Ok(())
+    }
+
+    pub fn remove_directory_recursive(&mut self, dir_path: &str) -> Result<(), ftp::FtpError> {
+        let mut ftp_stream = self.ftp.take().ok_or_else(|| {
+            ftp::FtpError::ConnectionError(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "Not connected to FTP server",
+            ))
+        })?;
+
+        ftp_stream.cwd(dir_path)?;
+
+        let entries = ftp_stream.nlst(None)?;
+
+        for entry in entries {
+            if ftp_stream.cwd(&entry).is_ok() {
+                ftp_stream.cdup()?; 
+                let subdir_path = format!("{}/{}", dir_path, entry);
+                
+                self.ftp = Some(ftp_stream);
+                self.remove_directory_recursive(&subdir_path)?;
+                ftp_stream = self.ftp.take().unwrap(); 
+            } else {
+                let file_path = format!("{}/{}", dir_path, entry);
+                ftp_stream.rm(&file_path)?;
+            }
+        }
+
+        ftp_stream.cdup()?;
+        ftp_stream.rmdir(dir_path)?;
+
+        println!("Removed directory recursively: {}", dir_path);
+
+        self.ftp = Some(ftp_stream);
+
+        Ok(())
+    }
+
 }
 
 impl Drop for FtpClient {
