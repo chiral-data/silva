@@ -9,7 +9,16 @@ enum PathType {
     File,
     Directory,
 }
+#[derive(Debug)]
+pub enum FtpError {
+    ConnectionError(std::io::Error),
+    LoginError,
+    DirectoryError(String),
+    FileError(String),
+    // Add more variants if needed
+}
 
+#[derive(Debug)]
 pub struct FtpClient {
     ftp_addr: String,
     ftp_port: u16,
