@@ -4,6 +4,7 @@ use dotenvy::dotenv;
 use std::env;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /*
     dotenv()?; 
 
     let addr = env::var("FTP_HOST")?;
@@ -11,11 +12,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let email = env::var("TEST_EMAIL")?;
     let token = env::var("TEST_TOKEN_AUTH")?;
     let user_id = env::var("TEST_ID")?;
-
     let mut client = FtpClient::new(&addr, port, &email, &token, &user_id);
+    */
+
+    let mut client = FtpClient::new(
+        "Server address",     // FTP server address
+        PORT_NO,              // FTP port
+        "Username",       // FTP username
+        "Password", // FTP password
+        "Folder name for user",              // No subfolder (root of ftpuser's home)
+    );
 
     client.connect()?;
-    client.disconnect();
+    match client.upload_file("src/test_upload.txt", "uploaded_test.txt") {
+        Ok(_) => println!(" File uploaded successfully."),
+        Err(e) => eprintln!(" Upload failed: {:?}", e),
+    }    client.disconnect();
 
     Ok(())
 }
