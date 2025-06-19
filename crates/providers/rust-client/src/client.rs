@@ -30,7 +30,7 @@ impl Client {
     }
 
     pub async fn connect_with_auth(endpoint: &str, email: String, token: String) -> Result<Self, Box<dyn std::error::Error>> {
-        let inner = ChiralClient::connect(endpoint.to_string()).await?;
+        let inner = create_client(endpoint).await?;
         Ok(Self {
             email,
             token,
