@@ -15,7 +15,6 @@ pub enum FtpError {
     LoginError,
     DirectoryError(String),
     FileError(String),
-    // Add more variants if needed
 }
 
 #[derive(Debug)]

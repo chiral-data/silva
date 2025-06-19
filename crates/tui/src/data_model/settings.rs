@@ -9,6 +9,9 @@ use crate::{constants, utils};
 struct DataFile {
     account_id_sel: Option<String>,
     registry_id_sel: Option<String>,
+
+    #[serde(default)]
+    rust_client: Option<super::provider::rust_client::RustClientSettings>,
 }
 
 impl DataFile {
@@ -26,6 +29,7 @@ impl DataFile {
 pub struct Manager {
     pub account_id_sel: Option<String>,
     pub registry_id_sel: Option<String>,
+    pub rust_client: Option<super::provider::rust_client::RustClientSettings>,
 }
 
 impl Manager {
@@ -45,7 +49,8 @@ impl Manager {
         let df = DataFile::new(&content)?;
         let s = Self {
             account_id_sel: df.account_id_sel,
-            registry_id_sel: df.registry_id_sel
+            registry_id_sel: df.registry_id_sel,
+            rust_client: df.rust_client,
         };
 
         Ok(s)
@@ -54,7 +59,8 @@ impl Manager {
     pub fn save(&self) -> anyhow::Result<()> {
         let df = DataFile {
             account_id_sel: self.account_id_sel.clone(),
-            registry_id_sel: self.registry_id_sel.clone()
+            registry_id_sel: self.registry_id_sel.clone(),
+            rust_client: self.rust_client.clone(),
         };
 
         let filepath = Self::data_filepath()?; 

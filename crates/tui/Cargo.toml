@@ -25,6 +25,7 @@ ollama-rs = { version = "0.2.4", features = ["stream"] }
 tui-markdown = "0.3"
 sacloud-rs = { path = "../providers/sacloud-rs" }
 rust-client = { path = "../providers/rust-client" }
+dotenvy = "0.15"
 
 [[bin]]
 name = "silva"

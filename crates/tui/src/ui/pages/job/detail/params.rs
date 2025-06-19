@@ -30,7 +30,10 @@ pub fn params_dok(store: &data_model::Store) -> anyhow::Result<(bool, dok::param
             data_model::provider::sakura_internet::DokGpuType::V100 => dok::params::Plan::V100,
             data_model::provider::sakura_internet::DokGpuType::H100 => dok::params::Plan::H100GB80,
         }
-    };
+        Settings::RustClient => {return Err(anyhow::Error::msg("RustClient is not supported in this context"));}    
+    };       
+
+    
     let http = if let Some(dok) = proj_sel.get_job_settings().dok.as_ref() {
         let path = if let Some(http_path) = dok.http_path.as_ref() {
             http_path.to_string()

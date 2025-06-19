@@ -2,6 +2,9 @@ mod ftp;
 use ftp::FtpClient;
 use dotenvy::dotenv;
 use std::env;
+pub mod proto; 
+pub use crate::proto::chiral;
+
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     /*

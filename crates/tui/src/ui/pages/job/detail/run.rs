@@ -252,6 +252,9 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
                 }
             });
         }
+        Settings::RustClient => {
+            return Err(anyhow::Error::msg("RustClient is not supported in this context"));
+        }
     };
 
     Ok(())

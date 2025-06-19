@@ -3,7 +3,7 @@ use crate::api::token;
 use crate::api::jobs;
 use crate::api::projects;
 use crate::api::client::chiral::chiral_client::ChiralClient;
-use crate::ftp::{FtpClient, FtpError}; // Import both FtpClient and FtpError from ftp module
+use crate::ftp::{FtpClient, FtpError};
 use tonic::transport::Channel;
 use serde_json::Value;
 
