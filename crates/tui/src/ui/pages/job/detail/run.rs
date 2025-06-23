@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use std::sync::atomic::{AtomicBool,Ordering};
 
 use ratatui::prelude::*;
 use ratatui::widgets::*;
@@ -11,6 +12,7 @@ use futures_util::stream::StreamExt;
 use crate::data_model;
 use crate::ui;
 use crate::utils;
+
 
 pub const HELPER: &[&str] = &[
     "Launch a job", 
@@ -192,6 +194,7 @@ async fn launch_job_dok(
     Ok(())
 }
 
+
 pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> anyhow::Result<()> {
     // TODO: currently only support one job
     let job_id = 0;
@@ -253,7 +256,9 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
             });
         }
         Settings::RustClient => {
-            return Err(anyhow::Error::msg("RustClient is not supported in this context"));
+            let mut job_mgr = store.job_mgr.lock().unwrap();
+            
+            return Err(anyhow::Error::msg("not DOK service"));
         }
     };
 

@@ -24,8 +24,9 @@ reqwest = { version = "0.12", features = ["json"] }
 ollama-rs = { version = "0.2.4", features = ["stream"] }
 tui-markdown = "0.3"
 sacloud-rs = { path = "../providers/sacloud-rs" }
-rust-client = { path = "../providers/rust-client" }
 dotenvy = "0.15"
+tonic = "0.10"
+chiral-client = "0.1.0"
 
 [[bin]]
 name = "silva"

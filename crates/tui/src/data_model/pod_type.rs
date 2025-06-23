@@ -58,7 +58,7 @@ impl Manager {
         };
         let pt_2 = PodType { 
             id: ids::RUST_CLIENT,
-            name: "RustClient Node".to_string(),
+            name: "RustClient".to_string(),
             descs: vec![
                 "Experimental".to_string(),
                 "Experimental".to_string()

@@ -1,166 +1,137 @@
-use crate::api::credits;
-use crate::api::token;
-use crate::api::jobs;
-use crate::api::projects;
-use crate::api::client::chiral::chiral_client::ChiralClient;
-use crate::ftp::{FtpClient, FtpError};
-use tonic::transport::Channel;
-use serde_json::Value;
-
-
+use chiral_client;
+use std::env;
 
 #[derive(Debug)]
-pub struct Client {
-    pub email: String,
-    pub token: String,
-    pub endpoint: String,
-    pub inner: ChiralClient<Channel>,
-    pub ftp_client: Option<FtpClient>,
+pub struct RustClient {
+    pub url: String,
+    pub user_email: String,
+    pub user_id: String,
+    pub token_auth: String,
+    pub token_api: String,
+    pub ftp_addr: String,
+    pub ftp_port: u16,
+    
 }
 
-impl Client {
-    pub fn new(email: String, token: String, endpoint: String, inner: ChiralClient<Channel>) -> Self {
-        Self { 
-            email, 
-            token, 
-            endpoint, 
-            inner,
-            ftp_client: None,
-        }
-    }
-
-    pub async fn connect_with_auth(endpoint: &str, email: String, token: String) -> Result<Self, Box<dyn std::error::Error>> {
-        let inner = create_client(endpoint).await?;
+impl RustClient {
+    pub async fn new(
+        url: String,
+        user_email: String,
+        user_id: String,
+        token_auth: String,
+        token_api: String,
+        ftp_addr: String,
+        ftp_port: u16,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        // Create client during construction
+        
         Ok(Self {
-            email,
-            token,
-            endpoint: endpoint.to_string(),
-            inner,
-            ftp_client: None,
+            url,
+            user_email,
+            user_id,
+            token_auth,
+            token_api,
+            ftp_addr,
+            ftp_port,
         })
     }
 
-    pub async fn get_credit_points(&mut self) -> Result<Value, Box<dyn std::error::Error>> {
-        credits::get_credit_points(&mut self.inner, &self.email, &self.token).await
+    // Constructor that creates instance from environment variables
+    pub async fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
+        let url = env::var("URL")?;
+        let user_email = env::var("USER_EMAIL")?;
+        let user_id = env::var("USER_ID")?;
+        let token_auth = env::var("TOKEN_AUTH")?;
+        let token_api = env::var("TOKEN_API")?;
+        let ftp_addr = env::var("FTP_ADDR")?;
+        let ftp_port = env::var("FTP_PORT")?.parse::<u16>()?;
+        
+        Self::new(
+            url,
+            user_email,
+            user_id,
+            token_auth,
+            token_api,
+            ftp_addr,
+            ftp_port,
+        ).await
     }
 
-    pub async fn submit_job(&mut self,command_string: &str,project_name: &str,input_files: &[&str],output_files: &[&str],) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        jobs::submit_job(&mut self.inner,&self.email,&self.token,command_string,project_name,input_files,output_files,).await
+    pub async fn get_credits(&mut self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut client = chiral_client::create_client(&self.url).await?;
+        chiral_client::get_credit_points(&mut client, &self.user_email, &self.token_auth).await
     }
 
-    pub async fn submit_test_job(&mut self,job_type_name: &str,index: u32,) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        jobs::submit_test_job(&mut self.inner, &self.email, &self.token, job_type_name, index).await
+    pub async fn submit_job(&mut self, command_string: &str, project_name: &str, input_files: &[&str], output_files: &[&str]) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut client = chiral_client::create_client(&self.url).await?;        
+        chiral_client::submit_job(
+            &mut client,
+            &self.user_email, 
+            &self.token_auth, 
+            command_string, 
+            project_name, 
+            input_files, 
+            output_files
+        ).await
     }
 
-    pub async fn get_jobs(&mut self,offset: u32,count_per_page: u32,) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        jobs::get_jobs(&mut self.inner, &self.email, &self.token, offset, count_per_page).await
+    pub async fn submit_test_job(&mut self,job_type_name:&str,index:u32) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut client = chiral_client::create_client(&self.url).await?;
+        chiral_client::submit_test_job(&mut client, &self.user_email, &self.token_auth,job_type_name,index).await
     }
 
     pub async fn get_job(&mut self, job_id: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        jobs::get_job(&mut self.inner, &self.email, &self.token, job_id).await
+        let mut client = chiral_client::create_client(&self.url).await?;
+        chiral_client::get_job(&mut client, &self.user_email, &self.token_auth, job_id).await
     }
 
-    // Project API methods
-    pub async fn list_of_projects(&mut self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        projects::list_of_projects(&mut self.inner, &self.email, &self.token).await
+    pub async fn get_jobs(&mut self, offset: u32, count_per_page: u32) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut client = chiral_client::create_client(&self.url).await?;
+
+        chiral_client::get_jobs(&mut client, &self.user_email, &self.token_auth, offset,count_per_page).await
     }
 
-    pub async fn list_of_example_projects(&mut self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        projects::list_of_example_projects(&mut self.inner, &self.email, &self.token).await
+    pub async fn list_projects(&mut self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut client = chiral_client::create_client(&self.url).await?;
+
+        chiral_client::list_of_projects(&mut client, &self.user_email, &self.token_auth).await
     }
 
-    pub async fn list_of_project_files(&mut self, project_name: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        projects::list_of_project_files(&mut self.inner, &self.email, &self.token, project_name).await
+    pub async fn list_example_projects(&mut self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut client = chiral_client::create_client(&self.url).await?;
+        chiral_client::list_of_example_projects(&mut client,&self.user_email,&self.token_auth).await
+    }
+
+    pub async fn get_project_files(&mut self,project_name: &str,file_name:&str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut client = chiral_client::create_client(&self.url).await?;
+        chiral_client::get_project_files(&mut client, &self.user_email, &self.token_auth,project_name,file_name).await
+    }
+
+    pub async fn list_project_files(&mut self, project_id: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut client = chiral_client::create_client(&self.url).await?;
+        chiral_client::list_of_project_files(&mut client, &self.user_email, &self.token_auth, project_id).await
     }
 
     pub async fn import_example_project(&mut self, project_name: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        projects::import_example_project(&mut self.inner, &self.email, &self.token, project_name).await
+        let mut client = chiral_client::create_client(&self.url).await?;
+        chiral_client::import_example_project(&mut client, &self.user_email, &self.token_auth, project_name).await
     }
 
-    pub async fn get_project_file(&mut self,project_name: &str,file_name: &str,) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        projects::get_project_files(&mut self.inner, &self.email, &self.token, project_name, file_name).await
+    pub async fn get_api_token(&mut self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut client = chiral_client::create_client(&self.url).await?;
+        chiral_client::get_token_api(&mut client, &self.user_email, &self.token_auth).await
     }
 
-    // Token API methods
-    pub async fn get_token_api(&mut self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        token::get_token_api(&mut self.inner, &self.email, &self.token).await
+    pub async fn refresh_api_token(&mut self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut client = chiral_client::create_client(&self.url).await?;
+        chiral_client::refresh_token_api(&mut client,&self.user_email ,&self.token_api).await
     }
 
-    pub async fn refresh_token_api(&mut self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        token::refresh_token_api(&mut self.inner, &self.email, &self.token).await
-    }
 
-    // FTP methods
-    pub fn initialize_ftp(&mut self, ftp_addr: &str, ftp_port: u16, user_id: &str) {
-        let ftp_client = FtpClient::new(ftp_addr, ftp_port, &self.email, &self.token, user_id);
-        self.ftp_client = Some(ftp_client);
-    }
-
-    pub fn connect_ftp(&mut self) -> Result<(), ftp::FtpError> {
-        match &mut self.ftp_client {
-            Some(ftp) => ftp.connect(),
-            None => Err(ftp::FtpError::ConnectionError(
-                std::io::Error::new(std::io::ErrorKind::NotFound, "FTP client not initialized. Call initialize_ftp() first.")
-            ))
-        }
-    }
-
-    pub fn disconnect_ftp(&mut self) {
-        if let Some(ftp) = &mut self.ftp_client {
-            ftp.disconnect();
-        }
-    }
-
-    pub fn is_ftp_connected(&self) -> bool {
-        self.ftp_client.as_ref().map_or(false, |ftp| ftp.is_connected())
-    }
-
-    pub fn download_file(&mut self, remote_path: &str, local_path: &str) -> Result<(), ftp::FtpError> {
-        match &mut self.ftp_client {
-            Some(ftp) => ftp.download_file(remote_path, local_path),
-            None => Err(ftp::FtpError::ConnectionError(
-                std::io::Error::new(std::io::ErrorKind::NotFound, "FTP client not initialized. Call initialize_ftp() first.")
-            ))
-        }
-    }
-
-    pub fn upload_file(&mut self, local_path: &str, remote_path: &str) -> Result<(), ftp::FtpError> {
-        match &mut self.ftp_client {
-            Some(ftp) => ftp.upload_file(local_path, remote_path),
-            None => Err(ftp::FtpError::ConnectionError(
-                std::io::Error::new(std::io::ErrorKind::NotFound, "FTP client not initialized. Call initialize_ftp() first.")
-            ))
-        }
-    }
-
-    pub fn make_directory(&mut self, dir_name: &str) -> Result<(), ftp::FtpError> {
-        match &mut self.ftp_client {
-            Some(ftp) => ftp.make_directory(dir_name),
-            None => Err(ftp::FtpError::ConnectionError(
-                std::io::Error::new(std::io::ErrorKind::NotFound, "FTP client not initialized. Call initialize_ftp() first.")
-            ))
-        }
-    }
-
-    pub fn change_directory(&mut self, dir: &str) -> Result<(), ftp::FtpError> {
-        match &mut self.ftp_client {
-            Some(ftp) => ftp.change_directory(dir),
-            None => Err(ftp::FtpError::ConnectionError(
-                std::io::Error::new(std::io::ErrorKind::NotFound, "FTP client not initialized. Call initialize_ftp() first.")
-            ))
-        }
-    }
-
-    pub fn remove_directory_recursive(&mut self, dir_path: &str) -> Result<(), ftp::FtpError> {
-        match &mut self.ftp_client {
-            Some(ftp) => ftp.remove_directory_recursive(dir_path),
-            None => Err(ftp::FtpError::ConnectionError(
-                std::io::Error::new(std::io::ErrorKind::NotFound, "FTP client not initialized. Call initialize_ftp() first.")
-            ))
-        }
-    }
-
-    pub fn get_ftp_client(&mut self) -> Option<&mut FtpClient> {
-        self.ftp_client.as_mut()
+    // Test the connection
+    pub async fn test_connection(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.get_credits().await?;
+        println!("Connection test successful!");
+        Ok(())
     }
 }
