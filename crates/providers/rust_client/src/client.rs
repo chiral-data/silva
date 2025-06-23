@@ -1,7 +1,7 @@
 use chiral_client;
 use std::env;
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct RustClient {
     pub url: String,
     pub user_email: String,

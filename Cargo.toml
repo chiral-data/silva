@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 
-members = [ "crates/providers/rust-client",
+members = [ "crates/providers/rust_client",
   "crates/providers/sacloud-rs",
   "crates/tui",
 ]
