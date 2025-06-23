@@ -199,26 +199,14 @@ async fn launch_job_dok(
 
 async fn launch_job_rust_client(
     proj: data_model::project::Project, 
-    registry: data_model::registry::Registry,
     mut rust_client: rust_client::RustClient,
-    param_dok: dok::params::Container, 
     job_mgr: Arc<Mutex<data_model::job::Manager>>,
-    with_build: bool,
 ) -> anyhow::Result<()> {
     // TODO: currently only support one job
     let job_id_str = "0";
     let job_id = 0;
 
-    if with_build {
-        // build & push the docker image
-        utils::docker::build_image(&registry, &proj, job_mgr.clone()).await?;
-        utils::docker::push_image(&registry, &proj, job_mgr.clone()).await?;
-    } else {
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log(job_id, "Use docker image directly, no image will be built and pushed.".to_string());
-        job_mgr.add_log(job_id, "All docker building parameters in @job.toml will be ignored".to_string());
-    }
-
+   
     /*
     let task_created = rust_client.create_job(rust_client.clone()).await?;
     {
