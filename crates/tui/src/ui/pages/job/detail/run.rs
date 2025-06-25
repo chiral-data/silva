@@ -1,16 +1,14 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use std::sync::atomic::{AtomicBool,Ordering};
-use chiral_client::{self, submit_job};
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use sacloud_rs::api::dok;
-use rust_client;
+use rust_client::{self, RustClient};
 // use std::io::{BufRead, BufReader};
 use futures_util::stream::StreamExt;
-use tonic::client;
 // use futures_util::TryStreamExt;
-
+use anyhow::{Result, anyhow};
+use std::error::Error;
 use crate::data_model;
 use crate::ui;
 use crate::utils;
@@ -198,66 +196,84 @@ async fn launch_job_dok(
 
 
 async fn launch_job_rust_client(
-    proj: data_model::project::Project, 
+    proj: data_model::project::Project,
     mut rust_client: rust_client::RustClient,
     job_mgr: Arc<Mutex<data_model::job::Manager>>,
-) -> anyhow::Result<()> {
-    // TODO: currently only support one job
-    let job_id_str = "0";
+) -> Result<()> {
     let job_id = 0;
 
-   
-    /*
-    let task_created = rust_client.create_job(rust_client.clone()).await?;
-    {
-    let mut job_mgr = job_mgr.lock().unwrap();
-    job_mgr.add_log(job_id, format!("[sakura internet DOK] task {} created", task_created.id));
-    let mut job = data_model::job::Job::new(job_id);
-    job.infra = data_model::job::Infra::SakuraInternetDOK(task_created.id.to_string(), None);
-    let _ = job_mgr.jobs.insert(job_id, job);
-    }
-    */
-    
+    let project_name = proj.get_project_name()?;
 
-    let task_id =0;
-    let task_id_str = "0";
-    let task_status = "Incomplete";
-    // check task status
-    let input_files =["input.sh"];
-    let output_files = ["run.sh"];
-    let task = loop {
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, "Starting RustClient job submission...".to_string());
+
+        let mut job = data_model::job::Job::new(job_id);
+        job.infra = data_model::job::Infra::RustClient(
+            format!("pending-{}", job_id),
+            rust_client.url.clone(),
+        );
+        job_mgr.jobs.insert(job_id, job);
+    }
+
+    let input_files = ["input.sh"];
+    let output_files = ["output.txt"];
+
+    let job_result = rust_client.submit_job("./input.sh", &project_name, &input_files[..], &output_files[..]).await.map_err(|e| anyhow::Error::msg(format!("submit_job failed: {}", e)))?;
+    
+    let task_id = job_result.get("id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("No task ID returned from RustClient"))?;
+
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, "Job submitted, monitoring status...".to_string());
+    }
+
+    let task_json = loop {
         tokio::time::sleep(Duration::from_secs(5)).await;
 
-        let task_json = match rust_client.get_job(task_id_str).await {
+        let task_json = match rust_client.get_job(task_id).await {
             Ok(value) => value,
-            Err(e) => {
-                // optional: log the error
-                continue; // or break, or return Err(e)
-            }
+            Err(e) => return Err(anyhow!("RustClient error: {}", e)),
         };
-        let mut job_mgr = job_mgr.lock().unwrap();
-        job_mgr.add_log_tmp(job_id, format!(
-            "[sakura internet DOK] task {} status: {}",
-            task_id,
-            task_json["status"]
-        ));
 
-        let task_status = task_json["status"].as_str().unwrap_or_default();
-        if task_status == "done" {
-            let project_name = proj.get_project_name()?; 
-            rust_client.submit_job("./run.sh", &project_name, &input_files[..], &output_files[..]).await;
-            break task_json;
+        {
+            let mut job_mgr = job_mgr.lock().unwrap();
+            let status = task_json.get("status").and_then(|s| s.as_str()).unwrap_or("unknown");
+            job_mgr.add_log_tmp(job_id, format!("RustClient task status: {}", status));
+        }
+
+        let task_status = task_json.get("status").and_then(|s| s.as_str()).unwrap_or_default();
+        match task_status {
+            "done" => break task_json,
+            "failed" | "error" => return Err(anyhow!("Job failed with status: {}", task_status)),
+            _ => continue,
         }
     };
 
+    for &file_name in &output_files {
+        {
+            let mut job_mgr = job_mgr.lock().unwrap();
+            job_mgr.add_log(job_id, format!("Downloading file: {}", file_name));
+        }
 
-    // download outputs  
-    let file_name = output_files[0];
-    let project_name = proj.get_project_name()?;
-    let result = rust_client.get_project_files(&project_name, file_name).await;    
+        rust_client.get_project_files(&project_name, file_name).await
+            .map_err(|e| anyhow!("Failed to download {}: {}", file_name, e))?;
+
+        {
+            let mut job_mgr = job_mgr.lock().unwrap();
+            job_mgr.add_log(job_id, format!("Successfully downloaded: {}", file_name));
+        }
+    }
+
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, "RustClient job completed successfully".to_string());
+    }
+
     Ok(())
 }
-
 
 pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> anyhow::Result<()> {
     // TODO: currently only support one job
@@ -320,8 +336,33 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
             });
         }
         Settings::RustClient => {
-            return Err(anyhow::Error::msg("not DOK service"));
+            let mut job_mgr = store.job_mgr.lock().unwrap();
+            job_mgr.add_log(0, "send the job to Rust Client service ...".to_string());
+            
+            if proj.get_job_settings().dok.is_some() {
+                return Err(anyhow::Error::msg("not DOK service"));
+            }
+
+            let job_mgr_clone = store.job_mgr.clone();
+            let proj_clone = proj.clone();
+
+            tokio::spawn(async move {
+                let rust_client = match RustClient::from_env().await {
+                    Ok(client) => client,
+                    Err(e) => {
+                        let mut job_mgr = job_mgr_clone.lock().unwrap();
+                        job_mgr.add_log(0, format!("Failed to create RustClient: {}", e));
+                        return;
+                    }
+                };
+
+                if let Err(e) = launch_job_rust_client(proj_clone, rust_client, job_mgr_clone.clone()).await {
+                    let mut job_mgr = job_mgr_clone.lock().unwrap();
+                    job_mgr.add_log(0, format!("RustClient job failed: {}", e));
+                }
+            });
         }
+
     };
 
     Ok(())

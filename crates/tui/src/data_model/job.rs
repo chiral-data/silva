@@ -30,7 +30,9 @@ pub enum Infra {
     Local,
     // (task id, http uri)
     SakuraInternetDOK(String, Option<String>),
-    RustClient
+    //(task id, url)
+    RustClient(String,String)
+
 }
 
 #[derive(Debug, Deserialize, Clone)]

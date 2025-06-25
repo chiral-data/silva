@@ -1,5 +1,7 @@
 use chiral_client;
 use std::env;
+use anyhow::Result;
+use std::error::Error;
 
 #[derive(Debug,Clone)]
 pub struct RustClient {
@@ -14,7 +16,7 @@ pub struct RustClient {
 }
 
 impl RustClient {
-    pub async fn new(
+    pub fn new(
         url: String,
         user_email: String,
         user_id: String,
@@ -22,10 +24,9 @@ impl RustClient {
         token_api: String,
         ftp_addr: String,
         ftp_port: u16,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        // Create client during construction
+    ) -> Self {
         
-        Ok(Self {
+        Self {
             url,
             user_email,
             user_id,
@@ -33,11 +34,13 @@ impl RustClient {
             token_api,
             ftp_addr,
             ftp_port,
-        })
+        }
     }
 
     // Constructor that creates instance from environment variables
-    pub async fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
+
+
+    pub async fn from_env() -> Result<Self, Box<dyn Error + Send + Sync>> {
         let url = env::var("URL")?;
         let user_email = env::var("USER_EMAIL")?;
         let user_id = env::var("USER_ID")?;
@@ -45,8 +48,8 @@ impl RustClient {
         let token_api = env::var("TOKEN_API")?;
         let ftp_addr = env::var("FTP_ADDR")?;
         let ftp_port = env::var("FTP_PORT")?.parse::<u16>()?;
-        
-        Self::new(
+
+        Ok(Self::new(
             url,
             user_email,
             user_id,
@@ -54,8 +57,10 @@ impl RustClient {
             token_api,
             ftp_addr,
             ftp_port,
-        ).await
+        ))
     }
+
+
 
     pub async fn get_credits(&mut self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         let mut client = chiral_client::create_client(&self.url).await?;
