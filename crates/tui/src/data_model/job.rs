@@ -35,8 +35,6 @@ pub enum Infra {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Job {
     pub id: usize,
-    // status: JobStatus,
-    // desc: String,
     pub infra: Infra
 }
 
@@ -52,13 +50,32 @@ impl Job {
         Self { id, infra: Infra::None }
     }
 
-    pub fn get_settings(proj_dir: &Path) ->anyhow::Result<settings::Settings> {
+    pub fn get_settings(proj_dir: &Path) -> anyhow::Result<settings::Settings> {
         let settings_filepath = proj_dir.join("@job.toml");
         let job_settings = settings::Settings::new_from_file(&settings_filepath)
             .map_err(|e| anyhow::Error::msg(format!("{e} no settings file {settings_filepath:?}")))?;
 
         Ok(job_settings)
     }
+
+    pub fn get_settings_vec(proj_dir: &Path) -> anyhow::Result<Vec<settings::Settings>> {
+        todo!();
+    }
+}
+
+#[cfg(test)]
+fn test_job_settings() {
+    let temp_dir = std::env::temp_dir();
+
+    // test case 1: one file @job.toml under the project folder
+    dbg!("test case 1");
+    let job_sv_1 =Job::get_settings_vec(&temp_dir).unwrap();
+    assert!(job_sv_1.len() == 1);
+
+    // test case 2: 3 files @job_1.toml, @job_2.toml, @job_3.toml under the project folder
+    dbg!("test case 2");
+    let job_sv_2 =Job::get_settings_vec(&temp_dir).unwrap();
+    assert!(job_sv_2.len() == 1);
 }
 
 
@@ -143,17 +160,20 @@ mod tests {
         let toml_str = r#"
             [[jobs]]
             id = 1 
-            status = "Created"
-            desc = "some job 1"
+            infra = "Local"
 
             [[jobs]]
             id = 2
-            status = "Completed"
-            desc = "some job 2"
+            infra = "Local"
         "#;
         
         let df = DataFile::new(toml_str).unwrap();
         assert_eq!(df.jobs.unwrap().len(), 2);
+    }
+
+    #[test]
+    fn run_test_job_settings() {
+        test_job_settings();
     }
 }
 
