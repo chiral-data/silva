@@ -50,15 +50,16 @@ impl Job {
         Self { id, infra: Infra::None }
     }
 
-    pub fn get_settings(proj_dir: &Path) -> anyhow::Result<settings::Settings> {
-        let settings_filepath = proj_dir.join("@job.toml");
-        let content = std::fs::read_to_string(&settings_filepath)
-            .map_err(|e| anyhow::Error::msg(format!("{e}: no settings file {settings_filepath:?}")))?;
-        let job_settings = settings::Settings::new(&content)
-            .map_err(|e| anyhow::Error::msg(format!("{e}: incorrect settings in {settings_filepath:?}")))?;
+    // TODO: to deprecate
+    // pub fn get_settings(proj_dir: &Path) -> anyhow::Result<settings::Settings> {
+    //     let settings_filepath = proj_dir.join("@job.toml");
+    //     let content = std::fs::read_to_string(&settings_filepath)
+    //         .map_err(|e| anyhow::Error::msg(format!("{e}: no settings file {settings_filepath:?}")))?;
+    //     let job_settings = settings::Settings::new(&content)
+    //         .map_err(|e| anyhow::Error::msg(format!("{e}: incorrect settings in {settings_filepath:?}")))?;
 
-        Ok(job_settings)
-    }
+    //     Ok(job_settings)
+    // }
 
     pub fn get_settings_vec(proj_dir: &Path) -> anyhow::Result<Vec<settings::Settings>> {
         let single_filepath = proj_dir.join("@job.toml");

@@ -214,29 +214,34 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
     use data_model::pod::Settings;
     match &pod_sel.settings {
         Settings::Local => {
-            let job_mgr_clone = store.job_mgr.clone();
-            let job_id_to_cancel = store.cancel_job_id.clone();
-            let proj_dir = proj.get_dir().to_path_buf();
-            let settings_local = proj_sel.get_job_settings()
-                .infra_local.as_ref()
-                .ok_or(anyhow::Error::msg("no settings for local servers"))?
-                .clone();
-            tokio::spawn(async move {
-                match launch_job_local(job_mgr_clone.clone(), job_id_to_cancel, proj_dir, settings_local).await {
-                    Ok(()) => (),
-                    Err(e) => {
-                        let mut job_mgr = job_mgr_clone.lock().unwrap();
-                        job_mgr.add_log(0, format!("run job error: {e}"));
-                    } 
-                }
-            });
+            let settings_local_vec = proj_sel.get_job_settings_vec();
+
+            for settings_local in settings_local_vec.iter() {
+                let sl = settings_local
+                    .infra_local.as_ref()
+                    .ok_or(anyhow::Error::msg("no settings for local servers"))?
+                    .clone();
+                let job_mgr_clone = store.job_mgr.clone();
+                let job_id_to_cancel = store.cancel_job_id.clone();
+                let proj_dir = proj.get_dir().to_path_buf();
+
+                tokio::spawn(async move {
+                    match launch_job_local(job_mgr_clone.clone(), job_id_to_cancel, proj_dir, sl).await {
+                        Ok(()) => (),
+                        Err(e) => {
+                            let mut job_mgr = job_mgr_clone.lock().unwrap();
+                            job_mgr.add_log(0, format!("run job error: {e}"));
+                        } 
+                    }
+                });
+            }
         },
         Settings::SakuraInternetServer => { return Err(anyhow::Error::msg("not DOK service")); },
         Settings::SakuraInternetService(_) => {
             let mut job_mgr = store.job_mgr.lock().unwrap();
             job_mgr.add_log(0, "send the job Sakura Internet DOK service ...".to_string());
             let (with_build, param_dok) = super::params::params_dok(store)?;
-            if proj.get_job_settings().dok.is_some() && with_build {
+            if proj.get_job_settings_vec().first().unwrap().dok.is_some() && with_build {
                 proj.get_dir().join("Dockerfile").exists().then_some(0)
                     .ok_or(anyhow::Error::msg("using DOK service with self built docker image requires a Dockerfile under the project folder"))?;
             }

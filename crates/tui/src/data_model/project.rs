@@ -3,24 +3,24 @@ use std::path::{Path, PathBuf};
 #[derive(Clone)]
 pub struct Project {
     dir: PathBuf,
-    job_settings: super::job::settings::Settings
+    job_settings_vec: Vec<super::job::settings::Settings>
 }
 
 impl Project {
-    pub fn new(dir: PathBuf, job_settings: super::job::settings::Settings) -> Self {
-        Self { dir, job_settings }
+    pub fn new(dir: PathBuf, job_settings_vec: Vec<super::job::settings::Settings>) -> Self {
+        Self { dir, job_settings_vec }
     }
 
     pub fn get_dir(&self) -> &Path {
         self.dir.as_path()
     }
 
-    pub fn get_job_settings(&self) -> &super::job::settings::Settings {
-        &self.job_settings
+    pub fn get_job_settings_vec(&self) -> &Vec<super::job::settings::Settings> {
+        &self.job_settings_vec
     }
 
     pub fn get_files(&self) -> Vec<String> {
-        self.job_settings.files.all_files()
+        self.job_settings_vec.first().unwrap().files.all_files()
     }
 
     pub fn get_project_name(&self) -> anyhow::Result<String> {
