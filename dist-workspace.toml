@@ -17,4 +17,7 @@ install-path = "CARGO_HOME"
 install-updater = false
 
 [dist.github-custom-runners]
-default = "ubuntu-22.04"
+default = "ubuntu-24.04"
+
+[workspace.metadata.dist]
+ci.runner = "ubuntu-24.04"

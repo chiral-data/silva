@@ -11,5 +11,4 @@
   inherits = "release"
   lto = "thin"
 
-[workspace.metadata.dist]
-ci.runner = "ubuntu-24.04"
+
