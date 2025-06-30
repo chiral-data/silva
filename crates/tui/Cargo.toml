@@ -4,6 +4,12 @@ version = "0.2.4"
 edition = "2021"
 repository = "https://github.com/chiral-data/silva"
 
+[package.metadata.wix]
+upgrade-guid = "2B4A6BBF-B608-45E6-AC9F-5DE8C85CFFFE"
+path-guid = "DCBD6967-FD73-4897-B98E-27F719AEDAE2"
+license = false
+eula = false
+
 [dependencies]
 anyhow = "1.0"
 crossterm = "0.28"
