@@ -99,22 +99,20 @@ pub async fn run_single_job(
 }
 
 pub async fn run_jobs(
-    settings_local_vec: &[data_model::job::settings::Settings],
-    store: &data_model::Store,
-    proj: data_model::project::Project,
+    job_mgr: Arc<Mutex<data_model::job::Manager>>,
+    job_id_to_cancel: Arc<Mutex<Option<usize>>>,
+    proj_dir: std::path::PathBuf,
+    settings_local_vec: &Vec<data_model::job::settings::Settings>,
 ) -> anyhow::Result<()> {
     let settings_vec = settings_local_vec.to_owned();
-    let job_mgr_clone = store.job_mgr.clone();
-    let job_id_to_cancel = store.cancel_job_id.clone();
-    let proj_dir = proj.get_dir().to_path_buf();
 
     tokio::spawn(async move {
         for settings_local in settings_vec.into_iter() {
             if let Some(sl) = settings_local.infra_local {
-                match run_single_job(job_mgr_clone.clone(), job_id_to_cancel.clone(), proj_dir.clone(), sl).await {
+                match run_single_job(job_mgr.clone(), job_id_to_cancel.clone(), proj_dir.clone(), sl).await {
                     Ok(()) => (),
                     Err(e) => {
-                        let mut job_mgr = job_mgr_clone.lock().unwrap();
+                        let mut job_mgr = job_mgr.lock().unwrap();
                         job_mgr.add_log(0, format!("run job error: {e}"));
                     } 
                 }
@@ -135,7 +133,7 @@ mod tests {
         let job_id_to_cancel = Arc::new(Mutex::new(None));
 
         let temp_dir = std::env::temp_dir();
-        let proj_dir = temp_dir.join("silva_test_infra_local_run_single_job");
+        let proj_dir = temp_dir.join("silva@test_infra_local@run_single_job");
         std::fs::create_dir_all(&proj_dir).unwrap();
         std::fs::write(proj_dir.join("run.sh"), "cat 1 > 1.txt").unwrap();
 
@@ -150,5 +148,55 @@ mod tests {
         assert!(proj_dir.join("1.txt").exists());
 
         std::fs::remove_dir_all(&proj_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_run_jobs() {
+        let job_mgr = Arc::new(Mutex::new(data_model::job::Manager::new()));
+        let job_id_to_cancel = Arc::new(Mutex::new(None));
+
+        let temp_dir = std::env::temp_dir();
+        let proj_dir = temp_dir.join("silva@test_infra_local@run_jobs");
+        std::fs::create_dir_all(&proj_dir).unwrap();
+        std::fs::write(proj_dir.join("run_1.sh"), "cat 1 > 1.txt").unwrap();
+        std::fs::write(proj_dir.join("run_2.sh"), "cat 2 > 2.txt").unwrap();
+
+        let toml_str_1 = r#"
+        [files]
+        inputs = [
+        ]
+        outputs = [
+        ]
+        scripts = [
+        ]
+
+        [infra_local]
+        docker_image = "ubuntu:latest"
+        script = "run_1.sh"
+        "#;
+
+        let toml_str_2 = r#"
+        [files]
+        inputs = [
+        ]
+        outputs = [
+        ]
+        scripts = [
+        ]
+
+        [infra_local]
+        docker_image = "ubuntu:latest"
+        script = "run_2.sh"
+        "#;
+
+        let settings_vec = vec![toml_str_1, toml_str_2].into_iter()
+            .map(|c| data_model::job::settings::Settings::new(c).unwrap())
+            .collect();
+
+        assert!(!proj_dir.join("1.txt").exists());
+        assert!(!proj_dir.join("2.txt").exists());
+        run_jobs(job_mgr, job_id_to_cancel, proj_dir.clone(), &settings_vec).await.unwrap();
+        assert!(proj_dir.join("1.txt").exists());
+        assert!(proj_dir.join("2.txt").exists());
     }
 }
