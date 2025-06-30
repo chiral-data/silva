@@ -98,6 +98,33 @@ pub async fn run_single_job(
     Ok(())
 }
 
+pub async fn run_jobs(
+    settings_local_vec: &[data_model::job::settings::Settings],
+    store: &data_model::Store,
+    proj: data_model::project::Project,
+) -> anyhow::Result<()> {
+    let settings_vec = settings_local_vec.to_owned();
+    let job_mgr_clone = store.job_mgr.clone();
+    let job_id_to_cancel = store.cancel_job_id.clone();
+    let proj_dir = proj.get_dir().to_path_buf();
+
+    tokio::spawn(async move {
+        for settings_local in settings_vec.into_iter() {
+            if let Some(sl) = settings_local.infra_local {
+                match run_single_job(job_mgr_clone.clone(), job_id_to_cancel.clone(), proj_dir.clone(), sl).await {
+                    Ok(()) => (),
+                    Err(e) => {
+                        let mut job_mgr = job_mgr_clone.lock().unwrap();
+                        job_mgr.add_log(0, format!("run job error: {e}"));
+                    } 
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
