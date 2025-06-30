@@ -6,7 +6,7 @@ use sacloud_rs::api::dok;
 use rust_client::{self, RustClient};
 // use std::io::{BufRead, BufReader};
 use futures_util::stream::StreamExt;
-// use futures_util::TryStreamExt;
+    // use futures_util::TryStreamExt;
 use anyhow::{Result, anyhow};
 use std::error::Error;
 use crate::data_model;
