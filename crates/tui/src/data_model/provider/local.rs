@@ -137,7 +137,7 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         let proj_dir = temp_dir.join("silva_test_infra_local_run_single_job");
         std::fs::create_dir_all(&proj_dir).unwrap();
-        std::fs::write(proj_dir.join("run.sh"), "ls -lh").unwrap();
+        std::fs::write(proj_dir.join("run.sh"), "cat 1 > 1.txt").unwrap();
 
         let settings_local = Settings {
             docker_image: "ubuntu:latest".to_string(),
@@ -145,7 +145,9 @@ mod tests {
             use_gpu_op: Some(false) 
         };
 
+        assert!(!proj_dir.join("1.txt").exists());
         run_single_job(job_mgr, job_id_to_cancel, proj_dir.clone(), settings_local).await.unwrap();
+        assert!(proj_dir.join("1.txt").exists());
 
         std::fs::remove_dir_all(&proj_dir).unwrap();
     }

@@ -178,16 +178,17 @@ pub async fn launch_container(
     };
     docker.create_image(Some(create_image_options), None, None).try_collect::<Vec<_>>().await.unwrap();
 
-    let host_config = if use_gpu {
-        let mut host_config = gpu_host_config();
-        host_config.binds = Some(volume_binds);
-        Some(host_config)
-    } else { None };
+    let mut host_config = if use_gpu {
+        gpu_host_config()
+    } else { 
+        bollard::models::HostConfig::default()
+    };
+    host_config.binds = Some(volume_binds);
 
     let container_create_body = bollard::models::ContainerCreateBody { 
         image: Some(image_name.to_string()), 
         tty: Some(true), 
-        host_config,
+        host_config: Some(host_config),
         ..Default::default() 
     };
     let container_id = docker.create_container(
