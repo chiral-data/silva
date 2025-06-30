@@ -169,6 +169,16 @@ pub struct Manager {
 }
 
 impl Manager {
+    pub fn new() -> Self {
+        Self {
+            jobs: HashMap::new(),
+            chat_stream: String::new(),
+            logs: HashMap::new(),
+            logs_tmp: HashMap::new(),
+            local_infra_cancel_job: false
+        }
+    }
+
     fn data_filepath() -> anyhow::Result<PathBuf> {
         let data_dir = utils::dirs::data_dir();
         let fp = data_dir.join(constants::FILENAME_JOBS);

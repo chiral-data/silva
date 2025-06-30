@@ -170,6 +170,7 @@ pub async fn launch_container(
     docker: &bollard::Docker,
     image_name: &str,
     volume_binds: Vec<String>,
+    use_gpu: bool,
 ) -> anyhow::Result<String> {
     let create_image_options = bollard::query_parameters::CreateImageOptions { 
         from_image: Some(image_name.to_string()), 
@@ -177,13 +178,16 @@ pub async fn launch_container(
     };
     docker.create_image(Some(create_image_options), None, None).try_collect::<Vec<_>>().await.unwrap();
 
-    let mut host_config = gpu_host_config();
-    host_config.binds = Some(volume_binds);
+    let host_config = if use_gpu {
+        let mut host_config = gpu_host_config();
+        host_config.binds = Some(volume_binds);
+        Some(host_config)
+    } else { None };
 
     let container_create_body = bollard::models::ContainerCreateBody { 
         image: Some(image_name.to_string()), 
         tty: Some(true), 
-        host_config: Some(host_config), 
+        host_config,
         ..Default::default() 
     };
     let container_id = docker.create_container(
@@ -296,7 +300,7 @@ mod tests {
                 "/mnt/test"
         )];
         let docker = Docker::connect_with_socket_defaults().unwrap();
-        let container_id = launch_container(&docker, IMAGE, binds).await.unwrap();
+        let container_id = launch_container(&docker, IMAGE, binds, true).await.unwrap();
         println!("container {container_id} created");
 
         // non interactive
