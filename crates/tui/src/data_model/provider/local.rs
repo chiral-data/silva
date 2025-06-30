@@ -9,7 +9,7 @@ use crate::utils;
 pub struct Settings {
     pub docker_image: String,
     pub script: String,
-    pub use_gpu_op: Option<bool>,
+    pub use_gpu: Option<bool>,
 }
 
 pub async fn run_single_job(
@@ -26,7 +26,7 @@ pub async fn run_single_job(
         format!("{}:{}", proj_dir.to_str().unwrap(), working_dir)
     ];
     let docker = bollard::Docker::connect_with_socket_defaults().unwrap();
-    let not_use_gpu = settings_local.use_gpu_op.is_some() && !settings_local.use_gpu_op.unwrap();
+    let not_use_gpu = settings_local.use_gpu.is_some() && !settings_local.use_gpu.unwrap();
     let container_id = utils::docker::launch_container(&docker, &settings_local.docker_image, volume_binds, !not_use_gpu).await?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
@@ -102,25 +102,19 @@ pub async fn run_jobs(
     job_mgr: Arc<Mutex<data_model::job::Manager>>,
     job_id_to_cancel: Arc<Mutex<Option<usize>>>,
     proj_dir: std::path::PathBuf,
-    settings_local_vec: &Vec<data_model::job::settings::Settings>,
-) -> anyhow::Result<()> {
-    let settings_vec = settings_local_vec.to_owned();
-
-    tokio::spawn(async move {
-        for settings_local in settings_vec.into_iter() {
-            if let Some(sl) = settings_local.infra_local {
-                match run_single_job(job_mgr.clone(), job_id_to_cancel.clone(), proj_dir.clone(), sl).await {
-                    Ok(()) => (),
-                    Err(e) => {
-                        let mut job_mgr = job_mgr.lock().unwrap();
-                        job_mgr.add_log(0, format!("run job error: {e}"));
-                    } 
-                }
+    settings_vec: Vec<data_model::job::settings::Settings>,
+) {
+    for settings_local in settings_vec.into_iter() {
+        if let Some(sl) = settings_local.infra_local {
+            match run_single_job(job_mgr.clone(), job_id_to_cancel.clone(), proj_dir.clone(), sl).await {
+                Ok(()) => (),
+                Err(e) => {
+                    let mut job_mgr = job_mgr.lock().unwrap();
+                    job_mgr.add_log(0, format!("run job error: {e}"));
+                } 
             }
         }
-    });
-
-    Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -140,7 +134,7 @@ mod tests {
         let settings_local = Settings {
             docker_image: "ubuntu:latest".to_string(),
             script: "run.sh".to_string(),
-            use_gpu_op: Some(false) 
+            use_gpu: Some(false) 
         };
 
         assert!(!proj_dir.join("1.txt").exists());
@@ -173,6 +167,7 @@ mod tests {
         [infra_local]
         docker_image = "ubuntu:latest"
         script = "run_1.sh"
+        use_gpu = false
         "#;
 
         let toml_str_2 = r#"
@@ -187,6 +182,7 @@ mod tests {
         [infra_local]
         docker_image = "ubuntu:latest"
         script = "run_2.sh"
+        use_gpu = false
         "#;
 
         let settings_vec = vec![toml_str_1, toml_str_2].into_iter()
@@ -195,8 +191,10 @@ mod tests {
 
         assert!(!proj_dir.join("1.txt").exists());
         assert!(!proj_dir.join("2.txt").exists());
-        run_jobs(job_mgr, job_id_to_cancel, proj_dir.clone(), &settings_vec).await.unwrap();
+        run_jobs(job_mgr, job_id_to_cancel, proj_dir.clone(), settings_vec).await;
         assert!(proj_dir.join("1.txt").exists());
         assert!(proj_dir.join("2.txt").exists());
+
+        std::fs::remove_dir_all(&proj_dir).unwrap();
     }
 }

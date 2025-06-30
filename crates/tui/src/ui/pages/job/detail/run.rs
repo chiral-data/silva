@@ -1,13 +1,8 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 use sacloud_rs::api::dok;
-// use std::io::{BufRead, BufReader};
-use futures_util::stream::StreamExt;
-// use futures_util::TryStreamExt;
-
 use crate::data_model;
 use crate::ui;
 use crate::utils;
@@ -15,15 +10,6 @@ use crate::utils;
 pub const HELPER: &[&str] = &[
     "Launch a job", 
 ];
-
-async fn launch_job_local(
-    job_mgr: Arc<Mutex<data_model::job::Manager>>,
-    job_id_to_cancel: Arc<Mutex<Option<usize>>>,
-    proj_dir: std::path::PathBuf,
-    settings_local: data_model::provider::local::Settings, 
-) -> anyhow::Result<()> {
-    todo!("deprecate");
-}
 
 async fn launch_job_dok(
     proj: data_model::project::Project, 
@@ -140,8 +126,13 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
     use data_model::pod::Settings;
     match &pod_sel.settings {
         Settings::Local => {
-            let settings_local_vec = proj_sel.get_job_settings_vec();
-            todo!()
+            let settings_vec = proj_sel.get_job_settings_vec().to_owned();
+            let job_mgr = store.job_mgr.clone();
+            let job_id_to_cancel = store.cancel_job_id.clone();
+            let proj_dir = proj.get_dir().to_path_buf();
+            tokio::spawn(async move {
+                data_model::provider::local::run_jobs(job_mgr, job_id_to_cancel, proj_dir, settings_vec).await;
+            });
         },
         Settings::SakuraInternetServer => { return Err(anyhow::Error::msg("not DOK service")); },
         Settings::SakuraInternetService(_) => {
