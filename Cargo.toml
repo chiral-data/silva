@@ -1,14 +1,15 @@
-    [workspace]
-    resolver = "2"
+[workspace]
+resolver = "2"
 
-    members = [ "crates/providers/rust_client",
-      "crates/providers/sacloud-rs",
-      "crates/tui",
-    ]
+members = [ "crates/providers/rust_client",
+    "crates/providers/sacloud-rs",
+    "crates/tui",
+]
 
-    # The profile that 'dist' will build with
-    [profile.dist]
-    inherits = "release"
-    lto = "thin"
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
 
 
