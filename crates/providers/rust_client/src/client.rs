@@ -37,10 +37,9 @@ impl RustClient {
         }
     }
 
-    // Constructor that creates instance from environment variables
-
 
     pub async fn from_env() -> Result<Self, Box<dyn Error + Send + Sync>> {
+        dotenvy::from_filename(".env").ok();
         let url = env::var("URL")?;
         let user_email = env::var("USER_EMAIL")?;
         let user_id = env::var("USER_ID")?;

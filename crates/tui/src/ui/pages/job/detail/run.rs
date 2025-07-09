@@ -12,6 +12,8 @@ use std::error::Error;
 use crate::data_model;
 use crate::ui;
 use crate::utils;
+use serde_json::Value;
+
 
 
 pub const HELPER: &[&str] = &[
@@ -202,8 +204,9 @@ async fn launch_job_rust_client(
 ) -> Result<()> {
     let job_id = 0;
 
-    let project_name = proj.get_project_name()?;
+ 
 
+    let project_name = proj.get_project_name()?;
     {
         let mut job_mgr = job_mgr.lock().unwrap();
         job_mgr.add_log(job_id, "Starting RustClient job submission...".to_string());
@@ -216,39 +219,97 @@ async fn launch_job_rust_client(
         job_mgr.jobs.insert(job_id, job);
     }
 
-    let input_files = ["input.sh"];
-    let output_files = ["output.txt"];
+    let input_files = [ "ions.mdp","md.mdp","mdout.mdp","minim.mdp","npt.mdp","nvt.mdp",];
+    let _job_script = "job.sh";
+    let output_files = ["topol.tpr","traj.trr","ener.edr","confout.gro","md.log"];
 
-    let job_result = rust_client.submit_job("./input.sh", &project_name, &input_files[..], &output_files[..]).await.map_err(|e| anyhow::Error::msg(format!("submit_job failed: {}", e)))?;
-    
-    let task_id = job_result.get("id")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow!("No task ID returned from RustClient"))?;
+    let job_result = rust_client.submit_job("./job.sh", &project_name, &input_files[..], &output_files[..]).await.map_err(|e| anyhow::Error::msg(format!("submit_job failed: {}", e)))?;
+    {
+        let mut job_mgr = job_mgr.lock().unwrap();
+        job_mgr.add_log(job_id, format!("Reply JSON (raw): {:?}", job_result));
+        job_mgr.add_log(job_id, format!("Reply JSON (type): {}", job_result.get("SubmitJob").map(|v| v.to_string()).unwrap_or("None".to_string())));
+    }
+
+    let task_id = match job_result {
+        Value::Object(ref map) => map.get("SubmitJob").and_then(|v| v.as_str()),
+        Value::String(ref s) => Some(s.as_str()),
+        _ => None,
+    }.ok_or_else(|| anyhow!("No task ID returned from RustClient"))?;
+
 
     {
         let mut job_mgr = job_mgr.lock().unwrap();
         job_mgr.add_log(job_id, "Job submitted, monitoring status...".to_string());
     }
 
-    let task_json = loop {
+    let _task_json = loop {
+        // Wait before polling again
+        let msg = "[RustClient] Sleeping 5s before next status check...";
+        job_mgr.lock().unwrap().add_log_tmp(job_id, msg.to_string());
+        println!("{}", msg);
+
         tokio::time::sleep(Duration::from_secs(5)).await;
 
+        // Fetch the latest task status
+        let msg = format!("[RustClient] Sending GET status request for task_id: {}", task_id);
+        job_mgr.lock().unwrap().add_log_tmp(job_id, msg.clone());
+
         let task_json = match rust_client.get_job(task_id).await {
-            Ok(value) => value,
-            Err(e) => return Err(anyhow!("RustClient error: {}", e)),
+            Ok(value) => {
+                let msg = format!("[RustClient] GET status reply: {:?}", value);
+                job_mgr.lock().unwrap().add_log_tmp(job_id, msg.clone());
+                println!("{}", msg);
+                value
+            },
+            Err(e) => {
+                let msg = format!("[RustClient] ERROR while fetching status: {}", e);
+                job_mgr.lock().unwrap().add_log_tmp(job_id, msg.clone());
+                println!("{}", msg);
+                return Err(anyhow!("RustClient error: {}", e));
+            },
         };
 
         {
             let mut job_mgr = job_mgr.lock().unwrap();
+
+            // Log the raw JSON too for extra visibility
+            let msg = format!("[RustClient] Raw task_json: {:?}", task_json);
+            job_mgr.add_log_tmp(job_id, msg.clone());
+            println!("{}", msg);
+
+            // Extract and log status field
             let status = task_json.get("status").and_then(|s| s.as_str()).unwrap_or("unknown");
-            job_mgr.add_log_tmp(job_id, format!("RustClient task status: {}", status));
+            let msg = format!("[RustClient] task_id {} status: {}", task_id, status);
+            job_mgr.add_log_tmp(job_id, msg.clone());
+            println!("{}", msg);
         }
 
+        // Decide what to do with status
         let task_status = task_json.get("status").and_then(|s| s.as_str()).unwrap_or_default();
+
         match task_status {
-            "done" => break task_json,
-            "failed" | "error" => return Err(anyhow!("Job failed with status: {}", task_status)),
-            _ => continue,
+            "done" => {
+                let msg = format!("[RustClient] Task {} is done. Exiting loop.", task_id);
+                job_mgr.lock().unwrap().add_log_tmp(job_id, msg.clone());
+                println!("{}", msg);
+
+                job_mgr.lock().unwrap().clear_log_tmp(&job_id);
+                break task_json;
+            }
+            "failed" | "error" => {
+                let msg = format!("[RustClient] Task {} failed with status: {}", task_id, task_status);
+                job_mgr.lock().unwrap().add_log_tmp(job_id, msg.clone());
+                println!("{}", msg);
+
+                return Err(anyhow!("Job failed with status: {}", task_status));
+            }
+            _ => {
+                let msg = format!("[RustClient] Task {} still running. Looping again...", task_id);
+                job_mgr.lock().unwrap().add_log_tmp(job_id, msg.clone());
+                println!("{}", msg);
+
+                continue;
+            }
         }
     };
 
@@ -339,9 +400,6 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
             let mut job_mgr = store.job_mgr.lock().unwrap();
             job_mgr.add_log(0, "send the job to Rust Client service ...".to_string());
             
-            if proj.get_job_settings().dok.is_some() {
-                return Err(anyhow::Error::msg("not DOK service"));
-            }
 
             let job_mgr_clone = store.job_mgr.clone();
             let proj_clone = proj.clone();
