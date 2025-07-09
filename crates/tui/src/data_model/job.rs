@@ -29,7 +29,10 @@ pub enum Infra {
     None,
     Local,
     // (task id, http uri)
-    SakuraInternetDOK(String, Option<String>)
+    SakuraInternetDOK(String, Option<String>),
+    //(task id, url)
+    RustClient(String,String)
+
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -81,6 +84,7 @@ pub struct Manager {
     pub logs: HashMap<usize, VecDeque<String>>,
     pub logs_tmp: HashMap<usize, String>,
     pub local_infra_cancel_job: bool,
+    pub rust_client_cancel_job: bool,
 }
 
 impl Manager {
@@ -109,7 +113,8 @@ impl Manager {
         let s = Self { 
             jobs, chat_stream, 
             logs: HashMap::new(), logs_tmp: HashMap::new(),
-            local_infra_cancel_job: false 
+            local_infra_cancel_job: false,
+            rust_client_cancel_job: false,
         };
         Ok(s)
     }

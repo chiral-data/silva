@@ -34,6 +34,7 @@ pub async fn create_task(client: Client, container: dok::params::Container) -> a
     Ok(task_created)
 }
 
+
 pub async fn get_task(client: Client, task_id: &str) -> anyhow::Result<dok::Task> {
     let task: dok::Task = client.dok()
         .tasks().task_id(task_id).dok_end().get()

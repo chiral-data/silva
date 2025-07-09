@@ -36,6 +36,7 @@ pub struct Manager {
 
 pub mod ids {
     pub const DOK: usize = 1;
+    pub const RUST_CLIENT: usize = 3;
 }
 
 impl Manager {
@@ -55,14 +56,24 @@ impl Manager {
             ],
             is_service: true,
         };
+        let pt_2 = PodType { 
+            id: ids::RUST_CLIENT,
+            name: "RustClient".to_string(),
+            descs: vec![
+                "Experimental".to_string(),
+                "Experimental".to_string()
+            ],
+            is_service: false, 
+        };
         let pod_types = vec![
             (0, pt_0), 
             (ids::DOK, pt_1), 
+            (ids::RUST_CLIENT, pt_2),
         ].into_iter().collect();
 
         // TODO: right now only hard coding
         let for_applications = vec![
-            (App::Gromacs, vec![0, 1]),
+            (App::Gromacs, vec![0, 1,3]),
             (App::OpenAIWhisper, vec![1]),
             (App::Llm, vec![1])
         ].into_iter().collect();

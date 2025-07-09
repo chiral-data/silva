@@ -12,6 +12,7 @@ pub enum Settings {
     // SakuraInternetServer(provider::sakura_internet::ServerSettings),
     SakuraInternetServer,
     SakuraInternetService(provider::sakura_internet::DokGpuType),
+    RustClient,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -32,6 +33,7 @@ pub mod ids {
     pub const LOCAL: usize = 0;
     pub const DOK_V100: usize = 1;
     pub const DOK_H100: usize = 2;
+    pub const RUST_CLIENT: usize = 3;
 }
 
 impl Manager {
@@ -54,10 +56,17 @@ impl Manager {
             settings: Settings::SakuraInternetService(provider::sakura_internet::DokGpuType::H100),
             name: "DOK service H100".to_string(),
         };
+        let pod_3 = Pod {
+            id: ids::RUST_CLIENT,
+            type_id: super::pod_type::ids::RUST_CLIENT, // we'll define this next
+            settings: Settings::RustClient,
+            name: "RustClient Node".to_string(),
+        };
         let pods = vec![
             (0, pod_0), 
             (ids::DOK_V100, pod_1), 
             (ids::DOK_H100, pod_2), 
+            (ids::RUST_CLIENT, pod_3),
         ].into_iter().collect();
 
         Manager { pods, pod_id_selected: None }

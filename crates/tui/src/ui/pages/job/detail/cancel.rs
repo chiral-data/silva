@@ -51,7 +51,11 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
                     } 
                 }
             });
-        }
+        },
+        data_model::job::Infra::RustClient(_task_id,_url) => {
+            let mut cancel_job_id = store.cancel_job_id.lock().unwrap();
+            cancel_job_id.replace(job_id);
+        },
     }
 
     Ok(())
