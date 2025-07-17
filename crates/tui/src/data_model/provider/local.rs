@@ -16,10 +16,9 @@ pub async fn run_single_job(
     job_mgr: Arc<Mutex<data_model::job::Manager>>,
     job_id_to_cancel: Arc<Mutex<Option<usize>>>,
     proj_dir: std::path::PathBuf,
-    settings_local: data_model::provider::local::Settings, 
+    settings_local: data_model::provider::local::Settings,
+    job_id: usize,
 ) -> anyhow::Result<()> {
-    // TODO: currently only support one job
-    let job_id = 0;
     let working_dir = "/workspace";
 
     let volume_binds = vec![
@@ -104,13 +103,35 @@ pub async fn run_jobs(
     proj_dir: std::path::PathBuf,
     settings_vec: Vec<data_model::job::settings::Settings>,
 ) {
-    for settings_local in settings_vec.into_iter() {
+    for (index, settings_local) in settings_vec.into_iter().enumerate() {
         if let Some(sl) = settings_local.infra_local {
-            match run_single_job(job_mgr.clone(), job_id_to_cancel.clone(), proj_dir.clone(), sl).await {
-                Ok(()) => (),
+            // Create a job for this execution
+            let job_id = {
+                let mut job_mgr = job_mgr.lock().unwrap();
+                job_mgr.create_job(Some(proj_dir.display().to_string()), Some(index))
+            };
+            
+            // Update job status to running
+            {
+                let mut job_mgr = job_mgr.lock().unwrap();
+                if let Err(e) = job_mgr.update_job_status(job_id, data_model::job::JobStatus::Running) {
+                    job_mgr.add_log(job_id, format!("Failed to update job status: {e}"));
+                }
+            }
+            
+            match run_single_job(job_mgr.clone(), job_id_to_cancel.clone(), proj_dir.clone(), sl, job_id).await {
+                Ok(()) => {
+                    let mut job_mgr = job_mgr.lock().unwrap();
+                    if let Err(e) = job_mgr.update_job_status(job_id, data_model::job::JobStatus::Completed) {
+                        job_mgr.add_log(job_id, format!("Failed to update job status: {e}"));
+                    }
+                },
                 Err(e) => {
                     let mut job_mgr = job_mgr.lock().unwrap();
-                    job_mgr.add_log(0, format!("run job error: {e}"));
+                    job_mgr.add_log(job_id, format!("run job error: {e}"));
+                    if let Err(e) = job_mgr.update_job_status(job_id, data_model::job::JobStatus::Failed) {
+                        job_mgr.add_log(job_id, format!("Failed to update job status: {e}"));
+                    }
                 } 
             }
         }
@@ -138,7 +159,7 @@ mod tests {
         };
 
         assert!(!proj_dir.join("1.txt").exists());
-        run_single_job(job_mgr, job_id_to_cancel, proj_dir.clone(), settings_local).await.unwrap();
+        run_single_job(job_mgr, job_id_to_cancel, proj_dir.clone(), settings_local, 1).await.unwrap();
         assert!(proj_dir.join("1.txt").exists());
 
         std::fs::remove_dir_all(&proj_dir).unwrap();

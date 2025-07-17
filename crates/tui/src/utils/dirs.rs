@@ -27,16 +27,37 @@ pub fn data_dir() -> PathBuf {
     home_dir.data_dir().to_path_buf()
 }
 
-// When the project dir contains a README.md file
+// When the project dir contains job configuration files
 fn add_project_dir(dir: &Path, project_dirs: &mut Vec<PathBuf>) {
-    let readme_file = dir.join("README.md");
-    if readme_file.exists() {
+    if is_silva_project_dir(dir) {
         project_dirs.push(dir.to_path_buf());
     } else {
         for new_dir in get_child_dirs(dir) {
             add_project_dir(&new_dir, project_dirs);
         }
     }
+}
+
+// Check if directory is a Silva project (has job configuration files)
+fn is_silva_project_dir(dir: &Path) -> bool {
+    // Check for single job configuration
+    if dir.join("@job.toml").exists() {
+        return true;
+    }
+    
+    // Check for multiple job configurations (@job_1.toml, @job_2.toml, etc.)
+    for i in 1..=10 {  // Check up to 10 job configurations
+        if dir.join(format!("@job_{}.toml", i)).exists() {
+            return true;
+        }
+    }
+    
+    // Optional: Also accept directories with README.md for backward compatibility
+    if dir.join("README.md").exists() {
+        return true;
+    }
+    
+    false
 }
 
 pub fn get_user_home() -> anyhow::Result<PathBuf> {

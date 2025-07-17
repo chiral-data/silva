@@ -23,7 +23,12 @@ futures-util = "0.3"
 reqwest = { version = "0.12", features = ["json"] }
 ollama-rs = { version = "0.2.4", features = ["stream"] }
 tui-markdown = "0.3"
+chrono = "0.4"
 sacloud-rs = { path = "../providers/sacloud-rs" }
+
+[dev-dependencies]
+tempfile = "3.0"
+tokio-test = "0.4"
 
 [[bin]]
 name = "silva"
