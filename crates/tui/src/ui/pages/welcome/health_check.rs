@@ -1,5 +1,5 @@
-//! This module defines the `WelcomePage` component, a terminal UI page
-//! designed to greet users and display a dynamic list of items with their
+//! This module defines the `HealthCheck` component, a terminal UI component 
+//! designed to display a dynamic list of items with their
 //! respective statuses (e.g., success or failure).
 //!
 use ratatui::{
@@ -9,48 +9,47 @@ use ratatui::{
     widgets::*,
 };
 
-/// Represents the Welcome Page in the terminal user interface.
-///
-/// This page provides an initial greeting and presents a dynamic list of items,
+/// This component presents a dynamic list of items,
 /// each indicating its status using visual cues like green checkmarks (✓) for success
 /// or red crosses (✗) for failure. It's typically used to show initial setup steps,
 /// feature availability, or recent activity summaries in a clear, at-a-glance format.
 ///
-/// The `WelcomePage` is a `ratatui` `StatefulWidget`, meaning it manages
+/// The `HealthCheck` is a `ratatui` `StatefulWidget`, meaning it manages
 /// its own internal state, such as item list and scroll position.
 ///
 /// # Structure
-/// The `WelcomePage` comprises:
+/// The `HealthCheck` comprises:
 /// - A prominent title or welcome message at the top.
-/// - A list of `WelcomeItem`s, each with a description and status icon.
+/// - A list of CheckItem`s, each with a description and status icon.
 ///
 /// ```
 
 #[derive(Debug)]
-pub struct WelcomePage {
+pub struct HealthCheck {
     /// The main title or welcome message displayed at the top of the page.
     title: String,
     /// A vector of items to be displayed in the list.
-    items: Vec<WelcomeItem>,
+    items: Vec<CheckItem>,
 }
-impl WelcomePage {
-    /// Creates a new `WelcomePage` with a specified title.
+
+impl HealthCheck {
+    /// Creates a new `HealthCheck` with a specified title.
     ///
-    /// Initializes the page with an empty list of items and a default
+    /// Initializes the component with an empty list of items and a default
     /// `ListState` for managing the list's rendering behavior.
     ///
     /// # Arguments
     /// * `title` - A string slice that will be used as the main title for the page.
     ///
     /// # Returns
-    /// A new `WelcomePage` instance.
+    /// A new `HealthCheck` instance.
     pub fn new(title: impl Into<String>) -> Self {
         Self {
             title: title.into(),
             items: Vec::new(),
         }
     }
-    /// Adds a new item to the welcome page's list.
+    /// Adds a new item to the list.
     ///
     /// Each item consists of a description and a status, which determines
     /// whether a green checkmark, red cross, or other icon is displayed next to it.
@@ -59,16 +58,16 @@ impl WelcomePage {
     /// * `description` - The textual description for the item.
     /// * `status` - The `ItemStatus` indicating success, failure, pending, or info.
     pub fn add_item(&mut self, description: impl Into<String>, status: ItemStatus) {
-        self.items.push(WelcomeItem {
+        self.items.push(CheckItem {
             description: description.into(),
             status,
         });
     }
 }
 
-impl StatefulWidget for WelcomePage {
+impl StatefulWidget for HealthCheck {
     type State = ListState;
-    /// Renders the `WelcomePage` widget onto the given `ratatui` buffer.
+    /// Renders the `HealthCheck` widget onto the given `ratatui` buffer.
     ///
     /// This method draws the title, the block borders, and the list of items
     /// with their respective status icons and colors within the provided `Rect`.
@@ -81,13 +80,13 @@ impl StatefulWidget for WelcomePage {
         // Create a base block for the page
         let block = Block::default()
             .borders(Borders::ALL)
-            .title(self.title.as_str());
+            .title(format!(" {} ", self.title));
         let inner_area = block.inner(area);
         // Prepare list items
         let list_items: Vec<ListItem> = self.items.iter().map(|item| item.to_list_item()).collect();
         // Create the list widget
         let list = List::new(list_items)
-            .block(Block::default()) // Use a default block for the list itself, as the parent block provides borders
+            .block(Block::default().padding(Padding::new(2, 2, 0, 0))) // Use a default block for the list itself, as the parent block provides borders
             .highlight_style(Style::default().bg(Color::DarkGray)); // Highlight selected item
                                                                     // Render the list
         StatefulWidget::render(list, inner_area, buffer, state);
@@ -95,20 +94,20 @@ impl StatefulWidget for WelcomePage {
         block.render(area, buffer);
     }
 }
-/// Represents a single item displayed within the `WelcomePage` list.
+/// Represents a single item displayed within the `HealthCheck` list.
 ///
 /// Each item has a textual description and an associated status
 /// that dictates its visual representation (e.g., icon and color).
 #[derive(Debug, Clone)]
-pub struct WelcomeItem {
+pub struct CheckItem {
     /// The descriptive text for this item.
     pub description: String,
     /// The status of the item, indicating success, failure, or other states.
     pub status: ItemStatus,
 }
 
-impl WelcomeItem {
-    /// Converts the `WelcomeItem` into a `ratatui::widgets::ListItem` for rendering.
+impl CheckItem {
+    /// Converts the `CheckItem` into a `ratatui::widgets::ListItem` for rendering.
     ///
     /// The `ListItem` will include the status icon, the description, and
     /// appropriate styling based on the `ItemStatus`.
@@ -127,7 +126,7 @@ impl WelcomeItem {
     }
 }
 
-/// Defines the possible statuses for a `WelcomeItem`.
+/// Defines the possible statuses for a `CheckItem`.
 ///
 /// These statuses determine the icon and potentially the color
 /// used when rendering the item in the terminal UI.

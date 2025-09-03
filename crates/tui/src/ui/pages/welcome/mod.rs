@@ -1,3 +1,5 @@
+use ratatui::widgets::*;
+
 mod health_check;
 
 
@@ -7,16 +9,16 @@ pub fn render(
     _states: &mut crate::ui::states::States,
     _store: &crate::data_model::Store,
 ) {
-    let mut page = WelcomePage::new("Welcome to gmn.nvim!");
-    page.add_item("Configuration loaded", ItemStatus::Success);
-    page.add_item("Gemini API connected", ItemStatus::Success);
-    page.add_item(
+    let mut hc = health_check::HealthCheck::new("Health Check Results");
+    hc.add_item("Configuration loaded", health_check::ItemStatus::Success);
+    hc.add_item("Gemini API connected", health_check::ItemStatus::Success);
+    hc.add_item(
         "Local cache initialized",
-        ItemStatus::Failure(Some("Permission denied".to_string())),
+        health_check::ItemStatus::Failure(Some("Permission denied".to_string())),
     );
-    page.add_item("Checking for updates", ItemStatus::Pending);
+    hc.add_item("Checking for updates", health_check::ItemStatus::Pending);
     let mut state = ListState::default();
-    f.render_stateful_widget(page, area, &mut state);
+    f.render_stateful_widget(hc, area, &mut state);
 }
 
 pub async fn handle_key(

@@ -21,7 +21,11 @@ For end users to easily verify their Silva setup.
 
 ### Remove the old configuration method
 
-### Configuration items to check
+### Build the UI
+
+- [x] 2025-09-03 "HealthCheck" component under the "Welcome" page completed
+
+### Establish configuration checking rules
 
 - [ ] Verify if both `SILVA_CHIRAL_USERNAME` and `SILVA_CHIRAL_API_TOKEN` environment variables are set. If they are, the chiral service will be utilized.
 - [ ] If the above environment variables are not set, confirm that _Docker_ is installed locally, as the local computer will be used for processing.
