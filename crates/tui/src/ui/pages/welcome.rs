@@ -6,7 +6,7 @@ use ratatui::{
     buffer::Buffer,
     layout::Rect,
     style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget},
+    widgets::{Block, Borders, List, ListItem, Paragraph, StatefulWidget, Widget},
 };
 
 /// Represents the Welcome Page in the terminal user interface.
@@ -52,8 +52,6 @@ pub struct WelcomePage {
     title: String,
     /// A vector of items to be displayed in the list.
     items: Vec<WelcomeItem>,
-    /// The current state of the list widget, used for scrolling and selection.
-    pub state: ListState,
 }
 impl WelcomePage {
     /// Creates a new `WelcomePage` with a specified title.
@@ -70,7 +68,6 @@ impl WelcomePage {
         Self {
             title: title.into(),
             items: Vec::new(),
-            state: ListState::default(),
         }
     }
     /// Adds a new item to the welcome page's list.
@@ -87,41 +84,8 @@ impl WelcomePage {
             status,
         });
     }
-    /// Scrolls the list of items up by one position.
-    ///
-    /// If an item is currently selected, it moves the selection up.
-    /// If at the top, it wraps around to the bottom.
-    pub fn scroll_up(&mut self) {
-        let i = match self.state.selected() {
-            Some(selected) => {
-                if selected == 0 {
-                    self.items.len().saturating_sub(1)
-                } else {
-                    selected.saturating_sub(1)
-                }
-            }
-            None => 0,
-        };
-        self.state.select(Some(i));
-    }
-    /// Scrolls the list of items down by one position.
-    ///
-    /// If an item is currently selected, it moves the selection down.
-    /// If at the bottom, it wraps around to the top.
-    pub fn scroll_down(&mut self) {
-        let i = match self.state.selected() {
-            Some(selected) => {
-                if selected >= self.items.len().saturating_sub(1) {
-                    0
-                } else {
-                    selected.saturating_add(1)
-                }
-            }
-            None => 0,
-        };
-        self.state.select(Some(i));
-    }
 }
+
 impl StatefulWidget for WelcomePage {
     type State = ListState;
     /// Renders the `WelcomePage` widget onto the given `ratatui` buffer.
@@ -243,16 +207,22 @@ use ratatui::widgets::*;
 
 pub fn render(f: &mut ratatui::prelude::Frame, area: ratatui::prelude::Rect, states: &mut crate::ui::states::States, _store: &crate::data_model::Store) {
     let current_style = states.get_style(true);
-    let cargo_version = env!("CARGO_PKG_VERSION");
-    let text = vec![
-        format!("chiral silva version {}", cargo_version).into(),
-    ];
-    let par = Paragraph::new(text)
-        .block(Block::bordered().padding(Padding::horizontal(1)))
-        .style(current_style)
-        .alignment(Alignment::Left)
-        .wrap(Wrap { trim: true });
-    f.render_widget(par, area);
+    // let cargo_version = env!("CARGO_PKG_VERSION");
+    // let text = vec![
+    //     format!("chiral silva version {}", cargo_version).into(),
+    // ];
+    // let par = Paragraph::new(text)
+    //     .block(Block::bordered().padding(Padding::horizontal(1)))
+    //     .style(current_style)
+    //     .alignment(Alignment::Left)
+    //     .wrap(Wrap { trim: true });
+    let mut page = WelcomePage::new("Welcome to gmn.nvim!");
+    page.add_item("Configuration loaded", ItemStatus::Success);
+    page.add_item("Gemini API connected", ItemStatus::Success);
+    page.add_item("Local cache initialized", ItemStatus::Failure(Some("Permission denied".to_string())));
+    page.add_item("Checking for updates", ItemStatus::Pending);
+    let mut state = ListState::default();
+    f.render_stateful_widget(page, area, &mut state);
 }
 
 pub async fn handle_key(
