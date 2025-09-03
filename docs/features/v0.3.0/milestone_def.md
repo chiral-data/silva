@@ -1,30 +1,28 @@
-# Milestone: [Workflow Builder]
+# Milestone: Workflow Builder
 
 ## 1. Summary
 
-- experienced users use silva to build their own workflows
+- Empower experienced users to build custom workflows using Silva.
 
 ## 2. Objective
 
-_Example: Provide users with the ability to not only view logs but also search within them, making the TUI app practical for daily debugging._
-
-- to build the container images of applications required by the workflow
-- to run multiple jobs within the workflow
+- Build container images for applications required by the workflow.
+- Run multiple jobs within the workflow.
 
 ## 3. Scope
 
-(will updated during development)
+(To be updated during development)
 
-- Features in scope:
-  - users create and manage workflows
-  - users create and manage jobs under a workflow
-- Features out of scope:
-  - users will edit files with their favorite IDEs.
+- **Features in scope:**
+  - Creation and management of workflows.
+  - Creation and management of jobs within a workflow.
+- **Features out of scope:**
+  - File editing will be handled by users' preferred IDEs.
 
 ## 4. Deliverables
 
-- workflow management
-- job management
+- Workflow management functionality.
+- Job management functionality.
 
 ## 5. Future Considerations
 
