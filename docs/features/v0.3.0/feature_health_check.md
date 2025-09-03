@@ -2,27 +2,27 @@
 
 ## 1. Summary
 
-Check the configuration to ensure silva can run successfully, simply the current configuration which is too complicated.
+This feature introduces a health check mechanism to validate Silva's configuration, ensuring successful operation. It aims to simplify the current, often complex, configuration method for end-users.
 
 ## 2. User Goal
 
-- end users
+For end users to easily verify their Silva setup.
 
 ## 3. UI Behavior
 
-- **Location:** a new Tab "Health Check"
+- **Location:** A new "Health Check" tab.
 - **Appearance:**
-  - a list of configuration to be checked
-  - if it is success, show a green check, othewise show a red cross
+  - A list of configuration items to be checked.
+  - Each item will display a green checkmark upon success, or a red cross upon failure.
 - **Interaction:**
-  - user can rerun the health check and the results shown in the UI will be updated.
+  - Users can manually rerun the health check, and the UI will update with the latest results.
 
 ## 4. Tasks
 
-### Configuration items to be checked
+### Configuration Items to Check
 
-- [ ] If SILVA_CHIRAL_USERNAME and SILVA_CHIRAL_API_TOKEN are both set, then the chiral service will be used
-- [ ] Otherwise local computer will be used. In this case, "docker" is required to be installed locally.
+- [ ] Verify if both `SILVA_CHIRAL_USERNAME` and `SILVA_CHIRAL_API_TOKEN` environment variables are set. If they are, the chiral service will be utilized.
+- [ ] If the above environment variables are not set, confirm that _Docker_ is installed locally, as the local computer will be used for processing.
 
 ## 5. Acceptance Criteria
 
