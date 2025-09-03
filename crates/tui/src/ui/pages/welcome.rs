@@ -6,7 +6,7 @@ use ratatui::{
     buffer::Buffer,
     layout::Rect,
     style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, Paragraph, StatefulWidget, Widget},
+    widgets::*,
 };
 
 /// Represents the Welcome Page in the terminal user interface.
@@ -22,28 +22,8 @@ use ratatui::{
 /// # Structure
 /// The `WelcomePage` comprises:
 /// - A prominent title or welcome message at the top.
-/// - A scrollable list of `WelcomeItem`s, each with a description and status icon.
+/// - A list of `WelcomeItem`s, each with a description and status icon.
 ///
-/// # Examples
-/// ```rust
-/// use ratatui::{backend::TestBackend, Terminal};
-/// use ratatui::layout::Rect;
-/// use gmn_nvim::ui::welcome_page::{WelcomePage, WelcomeItem, ItemStatus}; // Assuming this path
-///
-/// let mut backend = TestBackend::new(100, 20);
-/// let mut terminal = Terminal::new(backend).unwrap();
-///
-/// let mut page = WelcomePage::new("Welcome to gmn.nvim!");
-/// page.add_item("Configuration loaded", ItemStatus::Success);
-/// page.add_item("Gemini API connected", ItemStatus::Success);
-/// page.add_item("Local cache initialized", ItemStatus::Failure(Some("Permission denied".to_string())));
-/// page.add_item("Checking for updates", ItemStatus::Pending);
-///
-/// // In a real application, you would render this within a main loop.
-/// // terminal.draw(|f| {
-/// //     let area = Rect::new(0,0,100,20);
-/// //     f.render_stateful_widget(page, area, &mut page.state);
-/// // }).unwrap();
 /// ```
 
 #[derive(Debug)]
@@ -104,16 +84,12 @@ impl StatefulWidget for WelcomePage {
             .title(self.title.as_str());
         let inner_area = block.inner(area);
         // Prepare list items
-        let list_items: Vec<ListItem> = self
-            .items
-            .iter()
-            .map(|item| item.to_list_item())
-            .collect();
+        let list_items: Vec<ListItem> = self.items.iter().map(|item| item.to_list_item()).collect();
         // Create the list widget
         let list = List::new(list_items)
             .block(Block::default()) // Use a default block for the list itself, as the parent block provides borders
             .highlight_style(Style::default().bg(Color::DarkGray)); // Highlight selected item
-        // Render the list
+                                                                    // Render the list
         StatefulWidget::render(list, inner_area, buffer, state);
         // Render the parent block over the entire area
         block.render(area, buffer);
@@ -130,6 +106,7 @@ pub struct WelcomeItem {
     /// The status of the item, indicating success, failure, or other states.
     pub status: ItemStatus,
 }
+
 impl WelcomeItem {
     /// Converts the `WelcomeItem` into a `ratatui::widgets::ListItem` for rendering.
     ///
@@ -138,10 +115,10 @@ impl WelcomeItem {
     ///
     /// # Returns
     /// A `ListItem` ready for display in a `ratatui` `List` widget.
-    pub fn to_list_item(&self) -> ListItem {
+    pub fn to_list_item(&self) -> ListItem<'_> {
         let icon = self.status.icon();
         let color = self.status.color();
-        let status_text = if let ItemStatus::Failure(Some(ref msg)) = self.status {
+        let status_text = if let ItemStatus::Failure(Some(msg)) = &self.status {
             format!("{} {} - {}", icon, self.description, msg)
         } else {
             format!("{} {}", icon, self.description)
@@ -149,6 +126,7 @@ impl WelcomeItem {
         ListItem::new(status_text).style(Style::default().fg(color))
     }
 }
+
 /// Defines the possible statuses for a `WelcomeItem`.
 ///
 /// These statuses determine the icon and potentially the color
@@ -162,16 +140,14 @@ pub enum ItemStatus {
     Failure(Option<String>),
     /// Indicates an ongoing or pending operation, often with an indeterminate state.
     Pending,
-    /// A neutral or informational status, used for general messages.
-    Info,
 }
+
 impl ItemStatus {
     /// Returns the character icon associated with the status.
     ///
     /// * `Success`: '✓'
     /// * `Failure`: '✗'
     /// * `Pending`: '…'
-    /// * `Info`: 'i'
     ///
     /// These icons are chosen for clear visual distinction in a terminal.
     pub fn icon(&self) -> char {
@@ -179,7 +155,6 @@ impl ItemStatus {
             ItemStatus::Success => '✓',
             ItemStatus::Failure(_) => '✗',
             ItemStatus::Pending => '…',
-            ItemStatus::Info => 'i',
         }
     }
     /// Returns the `ratatui::style::Color` associated with the status.
@@ -187,7 +162,6 @@ impl ItemStatus {
     /// * `Success`: `Color::Green`
     /// * `Failure`: `Color::Red`
     /// * `Pending`: `Color::Yellow`
-    /// * `Info`: `Color::LightBlue` (or `White` if `LightBlue` is too similar to `Success` on some terminals)
     ///
     /// These colors provide immediate visual feedback on the item's state.
     pub fn color(&self) -> Color {
@@ -195,31 +169,24 @@ impl ItemStatus {
             ItemStatus::Success => Color::Green,
             ItemStatus::Failure(_) => Color::Red,
             ItemStatus::Pending => Color::Yellow,
-            ItemStatus::Info => Color::LightBlue, // Or Color::White
         }
     }
 }
 
 
-use ratatui::prelude::*;
-use ratatui::widgets::*;
-
-
-pub fn render(f: &mut ratatui::prelude::Frame, area: ratatui::prelude::Rect, states: &mut crate::ui::states::States, _store: &crate::data_model::Store) {
-    let current_style = states.get_style(true);
-    // let cargo_version = env!("CARGO_PKG_VERSION");
-    // let text = vec![
-    //     format!("chiral silva version {}", cargo_version).into(),
-    // ];
-    // let par = Paragraph::new(text)
-    //     .block(Block::bordered().padding(Padding::horizontal(1)))
-    //     .style(current_style)
-    //     .alignment(Alignment::Left)
-    //     .wrap(Wrap { trim: true });
+pub fn render(
+    f: &mut ratatui::prelude::Frame,
+    area: ratatui::prelude::Rect,
+    _states: &mut crate::ui::states::States,
+    _store: &crate::data_model::Store,
+) {
     let mut page = WelcomePage::new("Welcome to gmn.nvim!");
     page.add_item("Configuration loaded", ItemStatus::Success);
     page.add_item("Gemini API connected", ItemStatus::Success);
-    page.add_item("Local cache initialized", ItemStatus::Failure(Some("Permission denied".to_string())));
+    page.add_item(
+        "Local cache initialized",
+        ItemStatus::Failure(Some("Permission denied".to_string())),
+    );
     page.add_item("Checking for updates", ItemStatus::Pending);
     let mut state = ListState::default();
     f.render_stateful_widget(page, area, &mut state);
@@ -228,10 +195,7 @@ pub fn render(f: &mut ratatui::prelude::Frame, area: ratatui::prelude::Rect, sta
 pub async fn handle_key(
     _key: &crossterm::event::KeyEvent,
     _states: &mut crate::ui::states::States,
-    _store: &mut crate::data_model::Store
+    _store: &mut crate::data_model::Store,
 ) {
     unimplemented!()
 }
-
-
-
