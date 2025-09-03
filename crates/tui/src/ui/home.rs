@@ -23,7 +23,7 @@ pub fn render(f: &mut Frame, states: &mut ui::states::States, store: &mut data_m
 
     tabs::render(f, top, states);
     match states.tabs_states.tab {
-        tabs::Tab::Tutorial => tutorial::render(f, mid, states, store),
+        tabs::Tab::Welcome => welcome::render(f, mid, states, store),
         tabs::Tab::Project => project::render(f, mid, states, store),
         tabs::Tab::Job => job::render(f, mid, states, store),
         tabs::Tab::Setting => setting::render(f, mid, states, store),
@@ -52,15 +52,15 @@ pub async fn handle_key(tick_rate: Duration, last_tick: &mut Instant, states: &m
                 //     };
                 } else if key.code == event::KeyCode::Tab {
                     states.tabs_states.tab = match states.tabs_states.tab {
-                        tabs::Tab::Tutorial => tabs::Tab::Project,
+                        tabs::Tab::Welcome => tabs::Tab::Project,
                         tabs::Tab::Project => tabs::Tab::Job,
                         tabs::Tab::Job => tabs::Tab::Setting, 
                         tabs::Tab::Setting => tabs::Tab::About, 
-                        tabs::Tab::About => tabs::Tab::Tutorial 
+                        tabs::Tab::About => tabs::Tab::Welcome
                     };
                 } else {
                     match states.tabs_states.tab {
-                        tabs::Tab::Tutorial => tutorial::handle_key(&key, states, store).await,
+                        tabs::Tab::Welcome => welcome::handle_key(&key, states, store).await,
                         tabs::Tab::Project => project::handle_key(&key, states, store),
                         tabs::Tab::Job => job::handle_key(&key, states, store),
                         tabs::Tab::Setting => setting::handle_key(&key, states, store).await,
