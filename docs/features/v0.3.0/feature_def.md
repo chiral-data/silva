@@ -1,17 +1,11 @@
-# Feature Definition: [Feature Name]
+# Feature Definition: [Workflow Builder]
 
 ## 1. Summary
-
-- Short description of the feature in plain language.  
-  _Example: Add a status bar showing current mode and last action._
 
 ## 2. User Goal
 
 - Who is this feature for?
-- What problem does it solve?
-- How will the user know it works?
-
-_Example: As a user, I want to see a status bar so I can always tell if I’m in normal or search mode._
+  - experienced users
 
 ## 3. UI Behavior
 
