@@ -8,6 +8,7 @@ use ratatui::{
     style::{Color, Style},
     widgets::*,
 };
+use crate::action;
 
 /// This component presents a dynamic list of items,
 /// each indicating its status using visual cues like green checkmarks (✓) for success
@@ -24,31 +25,13 @@ use ratatui::{
 ///
 /// ```
 
-#[derive(Debug)]
+#[derive(Debug, Default, Clone)]
 pub struct HealthCheck {
-    /// The main title or welcome message displayed at the top of the page.
-    title: String,
-    /// A vector of items to be displayed in the list.
     items: Vec<CheckItem>,
+    is_initialized: bool,
 }
 
 impl HealthCheck {
-    /// Creates a new `HealthCheck` with a specified title.
-    ///
-    /// Initializes the component with an empty list of items and a default
-    /// `ListState` for managing the list's rendering behavior.
-    ///
-    /// # Arguments
-    /// * `title` - A string slice that will be used as the main title for the page.
-    ///
-    /// # Returns
-    /// A new `HealthCheck` instance.
-    pub fn new(title: impl Into<String>) -> Self {
-        Self {
-            title: title.into(),
-            items: Vec::new(),
-        }
-    }
     /// Adds a new item to the list.
     ///
     /// Each item consists of a description and a status, which determines
@@ -57,11 +40,48 @@ impl HealthCheck {
     /// # Arguments
     /// * `description` - The textual description for the item.
     /// * `status` - The `ItemStatus` indicating success, failure, pending, or info.
-    pub fn add_item(&mut self, description: impl Into<String>, status: ItemStatus) {
+    fn add_item(&mut self, description: impl Into<String>, status: ItemStatus) {
         self.items.push(CheckItem {
             description: description.into(),
             status,
         });
+    }
+
+    /// Updates the component.
+    /// If the state is not yet initialized, it runs the initialization logic.
+    /// Otherwise, it does nothing.
+    pub fn initialize(&mut self) {
+        if self.is_initialized {
+            return;
+        }
+
+        match action::health_check::check_chiral_service() {
+            Ok(msg) => {
+                let new_msg = format!("[Chiral service OK] {msg} ");
+                self.add_item(new_msg, ItemStatus::Success);
+            }
+            Err(e) => {
+                self.add_item(
+                    "[Chiral service Error] ",
+                    ItemStatus::Failure(Some(e.to_string())),
+                );
+                match action::health_check::check_local_computer() {
+                    Ok(msg) => {
+                        let new_msg = format!("[Local computer as computation node OK] {msg}");
+                        self.add_item(new_msg, ItemStatus::Success);
+                    }
+                    Err(e) => {
+                        self.add_item(
+                            "[Local computer as computation node ERROR] ",
+                            ItemStatus::Failure(Some(e.to_string())),
+                        );
+                    }
+                }
+            }
+
+        }
+
+        self.is_initialized = true;
     }
 }
 
@@ -80,7 +100,7 @@ impl StatefulWidget for HealthCheck {
         // Create a base block for the page
         let block = Block::default()
             .borders(Borders::ALL)
-            .title(format!(" {} ", self.title));
+            .title(" Health Check Results ");
         let inner_area = block.inner(area);
         // Prepare list items
         let list_items: Vec<ListItem> = self.items.iter().map(|item| item.to_list_item()).collect();
@@ -138,6 +158,7 @@ pub enum ItemStatus {
     /// Optionally includes an error message for more detail.
     Failure(Option<String>),
     /// Indicates an ongoing or pending operation, often with an indeterminate state.
+    #[allow(dead_code)]
     Pending,
 }
 

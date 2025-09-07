@@ -1,24 +1,22 @@
 use ratatui::widgets::*;
+use crate::ui::components as _components;
 
-mod health_check;
+#[derive(Default)]
+pub struct States {
+    pub health_check_widget: _components::health_check::HealthCheck,
+    pub health_check_state: ListState,
+}
 
 
 pub fn render(
     f: &mut ratatui::prelude::Frame,
     area: ratatui::prelude::Rect,
-    _states: &mut crate::ui::states::States,
+    states: &mut crate::ui::states::States,
     _store: &crate::data_model::Store,
 ) {
-    let mut hc = health_check::HealthCheck::new("Health Check Results");
-    hc.add_item("Configuration loaded", health_check::ItemStatus::Success);
-    hc.add_item("Gemini API connected", health_check::ItemStatus::Success);
-    hc.add_item(
-        "Local cache initialized",
-        health_check::ItemStatus::Failure(Some("Permission denied".to_string())),
-    );
-    hc.add_item("Checking for updates", health_check::ItemStatus::Pending);
-    let mut state = ListState::default();
-    f.render_stateful_widget(hc, area, &mut state);
+    let states_current = &mut states.welcome_states;
+    states_current.health_check_widget.initialize();
+    f.render_stateful_widget(states_current.health_check_widget.to_owned(), area, &mut states_current.health_check_state);
 }
 
 pub async fn handle_key(
