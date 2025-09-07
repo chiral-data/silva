@@ -11,9 +11,8 @@
 
 ## 3. Scope
 
-(To be updated during development)
-
 - **Features in scope:**
+  - [ ] Health check
   - Creation and management of workflows.
   - Creation and management of jobs within a workflow.
 - **Features out of scope:**

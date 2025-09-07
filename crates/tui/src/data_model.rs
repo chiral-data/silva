@@ -26,9 +26,10 @@ impl std::default::Default for Store {
         let job_mgr = job::Manager::load().unwrap();
 
         if setting_mgr.account_id_sel.is_none() {
-            let account = account_mgr.accounts.first().unwrap();
-            setting_mgr.account_id_sel = Some(account.id().to_string());
-            setting_mgr.save().unwrap();
+            if let Some(account) = account_mgr.accounts.first() {
+                setting_mgr.account_id_sel = Some(account.id().to_string());
+                setting_mgr.save().unwrap();
+            }
         }
 
         if setting_mgr.registry_id_sel.is_none() {
