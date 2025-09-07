@@ -24,7 +24,7 @@ For end users to easily verify their Silva setup.
 ### Build the UI
 
 - [x] 2025-09-03 "HealthCheck" component under the "Welcome" page completed
-- [ ] create a status bar
+- [ ] status bar
 
 ### Establish configuration checking rules
 
