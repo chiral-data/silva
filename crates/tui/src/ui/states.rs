@@ -10,7 +10,7 @@ const COLOR_FOCUS: style::Color = style::Color::Yellow;
 pub struct States {
     pub tabs_states: tabs::States,
     pub info_states: info::States,
-    pub tutorial_states: tutorial::States,
+    // pub tutorial_states: tutorial::States,
     pub project_states: project::States,
     pub job_states: job::States,
     pub setting_states: setting::States,
