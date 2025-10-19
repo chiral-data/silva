@@ -8,7 +8,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 
-use crate::components::workflow::Job;
+use crate::components::workflow::{self, Job};
 
 use super::{
     executor::DockerExecutor,
@@ -28,7 +28,6 @@ pub struct State {
     pub auto_scroll_enabled: bool,
     pub last_viewport_width: usize,
     pub last_viewport_height: usize,
-    pub job_temp_dirs: Arc<Mutex<HashMap<String, tempfile::TempDir>>>,
 }
 
 impl Default for State {
@@ -44,23 +43,12 @@ impl Default for State {
             auto_scroll_enabled: true,
             last_viewport_width: 80,
             last_viewport_height: 20,
-            job_temp_dirs: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
 
 fn copy_to_temp_dir<P: AsRef<Path>>(source_path: P) -> Result<TempDir, std::io::Error> {
     // Create temp directory
-    let temp_dir = tempfile::Builder::new().prefix("silva-").tempdir()?;
-
-    // Copy source folder contents to temp directory
-    let mut options = fs_extra::dir::CopyOptions::new();
-    options.overwrite = true;
-    options.copy_inside = true; // Copy contents, not the folder itself
-    options.content_only = true;
-
-    fs_extra::dir::copy(source_path, temp_dir.path(), &options)
-        .map_err(|e| std::io::Error::other(format!("copy folder error {e}")))?;
 
     Ok(temp_dir)
 }
@@ -114,7 +102,7 @@ impl State {
         }
     }
 
-    pub fn run_workflow(&mut self) {
+    pub fn run_workflow(&mut self, workflow_folder: workflow::WorkflowFolder) {
         self.is_executing_workflow = true;
         self.select_next_job();
 
@@ -123,7 +111,6 @@ impl State {
         self.rx = Some(rx);
         self.cancel_tx = Some(cancel_tx);
         let jobs = self.jobs.clone();
-        let job_temp_dirs = self.job_temp_dirs.clone();
 
         tokio::spawn(async move {
             let mut docker_executor = match DockerExecutor::new(tx.clone()) {
@@ -141,6 +128,21 @@ impl State {
                     return;
                 }
             };
+
+            // Create a temp workflow path
+            let now = chrono::Local::now();
+            let timestamp = now.format("%Y-%m-%d-%H-%M-%S").to_string();
+            let prefix = format!("silva-{timestamp}-");
+            let temp_dir = tempfile::Builder::new().prefix(prefix).tempdir()?;
+
+            // Copy source folder contents to temp directory
+            let mut options = fs_extra::dir::CopyOptions::new();
+            options.overwrite = true;
+            options.copy_inside = true; // Copy contents, not the folder itself
+            options.content_only = true;
+
+            fs_extra::dir::copy(source_path, temp_dir.path(), &options)
+                .map_err(|e| std::io::Error::other(format!("copy folder error {e}")))?;
 
             // Execute jobs sequentially
             let jobs_length = jobs.len();
