@@ -10,7 +10,7 @@ mod layout;
 mod style;
 
 pub async fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
-    let mut app = app::App::new();
+    let mut app = app::App::new().await;
     app.health_check_state.run_health_checks();
 
     loop {
