@@ -16,12 +16,14 @@ pub struct App {
     pub workflow_state: workflow::state::State,
 }
 
-impl Default for App {
-    fn default() -> Self {
-        // Load applications from JSON
+impl App {
+    pub async fn new() -> App {
         let loader = application::ApplicationLoader::default();
+        let url = "https://raw.githubusercontent.com/chiral-data/container-images-silva/refs/heads/main/applications.json";
         let catalog = loader
-            .load_from_file()
+            // .load_from_file()
+            .load_with_fallback(Some(url))
+            .await
             .unwrap_or_else(|_| application::ApplicationCatalog {
                 version: String::from("1.0"),
                 last_updated: String::new(),
@@ -36,12 +38,6 @@ impl Default for App {
             health_check_state: health_check::state::State::default(),
             workflow_state: workflow::state::State::default(),
         }
-    }
-}
-
-impl App {
-    pub fn new() -> App {
-        App::default()
     }
 
     pub async fn update(&mut self) {

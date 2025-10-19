@@ -45,8 +45,10 @@ impl State {
                         KeyCode::Up | KeyCode::Char('j') => self.select_previous_workflow(),
                         KeyCode::Down | KeyCode::Char('k') => self.select_next_workflow(),
                         KeyCode::Enter => {
-                            self.docker_state.run_workflow();
-                            self.toggle_docker_popup();
+                            if let Some(workflow_folder) = self.get_selected_workflow() {
+                                self.docker_state.run_workflow(workflow_folder.to_owned());
+                                self.toggle_docker_popup();
+                            }
                         }
                         _ => (),
                     }

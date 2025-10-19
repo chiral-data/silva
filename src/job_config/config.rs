@@ -134,7 +134,7 @@ impl JobConfig {
     /// # Example
     ///
     /// ```no_run
-    /// use research_silva::job_config::config::JobConfig;
+    /// use silva::job_config::config::JobConfig;
     ///
     /// let config = JobConfig::load_from_file("@job.toml").unwrap();
     /// ```
@@ -292,7 +292,7 @@ mod tests {
         "#;
 
         let config: JobConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.use_gpu, false);
+        assert!(!config.use_gpu);
     }
 
     #[test]
@@ -305,7 +305,7 @@ mod tests {
         "#;
 
         let config: JobConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.use_gpu, true);
+        assert!(config.use_gpu);
     }
 
     #[test]
@@ -318,6 +318,6 @@ mod tests {
         "#;
 
         let config: JobConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.use_gpu, false);
+        assert!(!config.use_gpu);
     }
 }

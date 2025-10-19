@@ -42,6 +42,7 @@ impl State {
 pub fn render(frame: &mut Frame, area: ratatui::prelude::Rect, app: &App) {
     let state = &app.footer_state;
     let uptime = state.start_time.elapsed().as_secs();
+
     let footer_text = vec![Line::from(vec![
         Span::styled(
             "Silva: workflow automation in the terminal",
@@ -49,7 +50,7 @@ pub fn render(frame: &mut Frame, area: ratatui::prelude::Rect, app: &App) {
         ),
         Span::raw(" | "),
         Span::styled("Ver: ", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw("0.1.0"),
+        Span::raw(crate::VERSION),
         Span::raw(" | "),
         Span::styled("Uptime: ", Style::default().add_modifier(Modifier::BOLD)),
         Span::styled(format!("{uptime}s"), Style::default().fg(Color::Cyan)),

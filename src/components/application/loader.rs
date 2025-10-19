@@ -8,6 +8,7 @@ use super::model::ApplicationCatalog;
 pub enum LoadError {
     Io(io::Error),
     JsonParse(serde_json::Error),
+    Http(reqwest::Error),
 }
 
 impl From<io::Error> for LoadError {
@@ -22,11 +23,18 @@ impl From<serde_json::Error> for LoadError {
     }
 }
 
+impl From<reqwest::Error> for LoadError {
+    fn from(err: reqwest::Error) -> Self {
+        LoadError::Http(err)
+    }
+}
+
 impl std::fmt::Display for LoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LoadError::Io(err) => write!(f, "IO error: {err}"),
             LoadError::JsonParse(err) => write!(f, "JSON parse error: {err}"),
+            LoadError::Http(err) => write!(f, "HTTP error: {err}"),
         }
     }
 }
@@ -52,13 +60,14 @@ impl ApplicationLoader {
         Ok(catalog)
     }
 
-    /// Placeholder for future network fetch implementation
-    /// This will be implemented when network fetching is needed
+    /// Load applications from a URL
+    /// Example URL: https://raw.githubusercontent.com/chiral-data/container-images-silva/refs/heads/main/applications.json
     #[allow(dead_code)]
-    pub async fn load_from_network(&self, _url: &str) -> Result<ApplicationCatalog, LoadError> {
-        // TODO: Implement network fetching using reqwest
-        // For now, fall back to local file
-        self.load_from_file()
+    pub async fn load_from_network(&self, url: &str) -> Result<ApplicationCatalog, LoadError> {
+        let client = reqwest::Client::new();
+        let response = client.get(url).send().await?;
+        let catalog: ApplicationCatalog = response.json().await?;
+        Ok(catalog)
     }
 
     /// Load with fallback: try network first, then local file
