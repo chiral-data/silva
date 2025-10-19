@@ -1,4 +1,0 @@
-# Treat all text files without a CR (for Docker)
-* text eol=lf
-
-*.mp3 binary
