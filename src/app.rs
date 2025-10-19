@@ -22,7 +22,8 @@ impl App {
         let url = "https://raw.githubusercontent.com/chiral-data/container-images-silva/refs/heads/main/applications.json";
         let catalog = loader
             // .load_from_file()
-            .load_with_fallback(Some(url)).await
+            .load_with_fallback(Some(url))
+            .await
             .unwrap_or_else(|_| application::ApplicationCatalog {
                 version: String::from("1.0"),
                 last_updated: String::new(),
