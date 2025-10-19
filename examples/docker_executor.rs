@@ -1,7 +1,10 @@
 use std::path::Path;
 
 use silva::{
-    components::docker::{executor::DockerExecutor, job::JobStatus, logs::LogLine},
+    components::{
+        docker::{executor::DockerExecutor, job::JobStatus, logs::LogLine},
+        workflow,
+    },
     job_config::config,
 };
 use tokio::sync::mpsc;
@@ -34,6 +37,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         // Load job configuration
         let job_folder_path = Path::new(job_path).canonicalize().unwrap();
+        let workflow_path = job_folder_path.parent().unwrap().to_owned();
+        let job_name = job_folder_path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
         let job_cfg = job_folder_path.join("@job.toml");
         println!("Loading job configuration from {job_cfg:?} ...");
         let config = match config::JobConfig::load_from_file(job_cfg) {
@@ -67,6 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (tx, mut rx) = mpsc::channel::<(usize, JobStatus, LogLine)>(32);
         let (cancel_tx, mut cancel_rx) = mpsc::channel::<()>(1);
 
+        let job = workflow::Job::new(job_name, job_folder_path);
         tokio::spawn(async move {
             let executor = DockerExecutor::new(tx)
                 .map_err(|e| {
@@ -79,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Starting job execution...");
             println!("─────────────────────────────\n");
             executor
-                .run_job(&job_folder_path, &config, &mut cancel_rx)
+                .run_job(&workflow_path, &job, &config, &mut cancel_rx)
                 .await
                 .map_err(|e| {
                     eprintln!("✗ Job execution error: {e}");

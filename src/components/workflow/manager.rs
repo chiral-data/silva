@@ -228,7 +228,7 @@ mod tests {
 
     fn setup_test_env() -> (String, WorkflowHome) {
         let test_path = format!("/tmp/silva_workflow_test_{}", std::process::id());
-        unsafe { env::set_var("SILVA_HOME_DIR", &test_path) };
+        unsafe { env::set_var(crate::SILVA_WORKFLOW_HOME, &test_path) };
 
         // Clean up if exists
         let _ = fs::remove_dir_all(&test_path);
@@ -239,7 +239,7 @@ mod tests {
 
     fn teardown_test_env(test_path: &str) {
         let _ = fs::remove_dir_all(test_path);
-        unsafe { env::remove_var("SILVA_HOME_DIR") };
+        unsafe { env::remove_var(crate::SILVA_WORKFLOW_HOME) };
     }
 
     #[test]
