@@ -1,6 +1,6 @@
 # Silva TUI - Automate Workflows
 
-A terminal interface for managing and running bioinformatics workflows.
+A terminal interface for managing and running workflows.
 
 ## Installation
 
@@ -9,13 +9,13 @@ A terminal interface for managing and running bioinformatics workflows.
 **Linux/macOS:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/research-silva/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/chiral-data/silva/main/install.sh | sh
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-iwr -useb https://raw.githubusercontent.com/YOUR_USERNAME/research-silva/main/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/chiral-data/silva/main/install.ps1 | iex
 ```
 
 The script will:
@@ -27,17 +27,17 @@ The script will:
 
 ### Manual Download
 
-Download pre-built binaries from the [Releases](https://github.com/YOUR_USERNAME/research-silva/releases) page:
+Download pre-built binaries from the [Releases](https://github.com/chiral-data/silva/releases) page:
 
-- Linux: x86_64, ARM64
+- Linux: x86_64, ARM64 (WIP)
 - macOS: x86_64 (Intel), ARM64 (Apple Silicon)
 - Windows: x86_64, ARM64
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/research-silva.git
-cd research-silva
+git clone https://github.com/chiral-data/silva.git
+cd silva
 cargo build --release
 ./target/release/silva
 ```
