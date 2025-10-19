@@ -19,9 +19,6 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
     let job_infra = job_mgr.jobs.get(&job_id)
         .ok_or(anyhow::Error::msg(format!("cannot find job {job_id}")))?
         .infra.to_owned();
-    let (proj_sel, _) = store.project_sel.as_ref()
-        .ok_or(anyhow::Error::msg("no selected project"))?;
-    let proj = proj_sel.to_owned();
 
     match job_infra {
         data_model::job::Infra::None => unreachable!(),
@@ -30,13 +27,6 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
             cancel_job_id.replace(job_id);
         },
         data_model::job::Infra::SakuraInternetDOK(task_id, _) => {
-            let (with_build, _param_dok) = super::params::params_dok(store)?;
-            if proj.get_job_settings().dok.is_some() && with_build {
-                // TODO: this requirement has to be deprecated
-                proj.get_dir().join("Dockerfile").exists().then_some(0)
-                    .ok_or(anyhow::Error::msg("using DOK service requires a Dockerfile under the project folder"))?;
-            }
-
             let job_mgr = store.job_mgr.clone();
             let client = store.account_mgr.create_client(&store.setting_mgr)?.clone();
             tokio::spawn(async move {

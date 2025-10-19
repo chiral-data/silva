@@ -26,9 +26,10 @@ impl std::default::Default for Store {
         let job_mgr = job::Manager::load().unwrap();
 
         if setting_mgr.account_id_sel.is_none() {
-            let account = account_mgr.accounts.first().unwrap();
-            setting_mgr.account_id_sel = Some(account.id().to_string());
-            setting_mgr.save().unwrap();
+            if let Some(account) = account_mgr.accounts.first() {
+                setting_mgr.account_id_sel = Some(account.id().to_string());
+                setting_mgr.save().unwrap();
+            }
         }
 
         if setting_mgr.registry_id_sel.is_none() {
@@ -52,8 +53,8 @@ impl Store {
         self.pod_type_mgr.pod_type_id_selected = None;
         self.pod_mgr.pod_id_selected = None;
 
-        let job_settings = job::Job::get_settings(proj_dir)?;
-        if let Some(dok) = job_settings.dok.as_ref() {
+        let job_settings_vec = job::Job::get_settings_vec(proj_dir)?;
+        if let Some(dok) = job_settings_vec.first().unwrap().dok.as_ref() {
             if let Some(plan) = dok.plan.as_ref() {
                 self.pod_type_mgr.pod_type_id_selected = Some(pod_type::ids::DOK);
                 match plan {
@@ -66,7 +67,7 @@ impl Store {
             }
         }
 
-        let proj = project::Project::new(proj_dir.to_path_buf(), job_settings);
+        let proj = project::Project::new(proj_dir.to_path_buf(), job_settings_vec);
         let proj_mgr = project::Manager::default();
         self.project_sel = Some((proj, proj_mgr));
 

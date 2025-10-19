@@ -1,7 +1,4 @@
-use std::path::Path;
-
 use serde::Deserialize;
-
 use crate::data_model::provider;
 
 #[derive(Debug, Default, Deserialize, Clone)]
@@ -43,10 +40,11 @@ impl Settings {
         Ok(df)
     }
 
-    pub fn new_from_file(filepath: &Path) -> anyhow::Result<Self> {
-        let content = std::fs::read_to_string(filepath)?;
-        Self::new(&content)
-    }
+    // TODO: to deprecate
+    // pub fn new_from_file(filepath: &Path) -> anyhow::Result<Self> {
+    //     let content = std::fs::read_to_string(filepath)?;
+    //     Self::new(&content)
+    // }
 }
 
 

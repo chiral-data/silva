@@ -35,8 +35,6 @@ pub enum Infra {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Job {
     pub id: usize,
-    // status: JobStatus,
-    // desc: String,
     pub infra: Infra
 }
 
@@ -52,13 +50,100 @@ impl Job {
         Self { id, infra: Infra::None }
     }
 
-    pub fn get_settings(proj_dir: &Path) ->anyhow::Result<settings::Settings> {
-        let settings_filepath = proj_dir.join("@job.toml");
-        let job_settings = settings::Settings::new_from_file(&settings_filepath)
-            .map_err(|e| anyhow::Error::msg(format!("{e} no settings file {settings_filepath:?}")))?;
+    // TODO: to deprecate
+    // pub fn get_settings(proj_dir: &Path) -> anyhow::Result<settings::Settings> {
+    //     let settings_filepath = proj_dir.join("@job.toml");
+    //     let content = std::fs::read_to_string(&settings_filepath)
+    //         .map_err(|e| anyhow::Error::msg(format!("{e}: no settings file {settings_filepath:?}")))?;
+    //     let job_settings = settings::Settings::new(&content)
+    //         .map_err(|e| anyhow::Error::msg(format!("{e}: incorrect settings in {settings_filepath:?}")))?;
 
-        Ok(job_settings)
+    //     Ok(job_settings)
+    // }
+
+    pub fn get_settings_vec(proj_dir: &Path) -> anyhow::Result<Vec<settings::Settings>> {
+        let single_filepath = proj_dir.join("@job.toml");
+        let multiple_filepath = proj_dir.join("@job_1.toml");
+        if single_filepath.exists() {
+            let content = std::fs::read_to_string(&single_filepath)
+                .map_err(|e| anyhow::Error::msg(format!("{e}: no settings file {single_filepath:?}")))?;
+            let job_s = settings::Settings::new(&content)
+                .map_err(|e| anyhow::Error::msg(format!("{e}: incorrect settings in {single_filepath:?}")))?;
+            Ok(vec![job_s])
+        } else if multiple_filepath.exists() {
+            let mut job_sv = vec![];
+            loop {
+                let multi_filepath = proj_dir.join(format!("@job_{}.toml", job_sv.len() + 1));
+                match std::fs::read_to_string(&multi_filepath) {
+                    Ok(content) => {
+                        let job_s = settings::Settings::new(&content)
+                            .map_err(|e| anyhow::Error::msg(format!("{e}: incorrect settings in {multi_filepath:?}")))?;
+                        job_sv.push(job_s)
+                    }
+                    Err(_e) => break
+                }
+            }
+
+            Ok(job_sv)
+        } else {
+            Err(anyhow::Error::msg("no job settings file, single settings with @job.toml and mutilple settings with @job_i.toml"))
+        }
     }
+}
+
+#[cfg(test)]
+fn test_job_settings() {
+    let toml_str = r#"
+        [files]
+        inputs = [
+            "a.in",
+            "b.in",
+            "c.in"
+        ]
+        outputs = [
+            "1.out",
+        ]
+        scripts = [
+            "start.sh",
+            "finish.sh"
+        ]
+
+        [dok]
+        base_image = "a"
+        extra_build_commands = ["python load_model.py"]
+        http_path = "/dok"
+        http_port = 11203
+        plan = "v100-32gb"
+        "#;
+
+    let temp_dir = std::env::temp_dir();
+    let test_dir = temp_dir.join("silva_test_job_settings");
+    std::fs::create_dir_all(&test_dir).unwrap();
+
+    // test case 1: no job settings file 
+    let proj_dir_1 = test_dir.join("proj_1");
+    std::fs::create_dir_all(&proj_dir_1).unwrap();
+    let result_err =Job::get_settings_vec(&proj_dir_1);
+    assert!(result_err.is_err());
+
+    // test case 2: one file @job.toml under the project folder
+    let proj_dir_2 = test_dir.join("proj_2");
+    std::fs::create_dir_all(&proj_dir_2).unwrap();
+    std::fs::write(proj_dir_2.join("@job.toml"), toml_str).unwrap();
+    let job_sv_2 =Job::get_settings_vec(&proj_dir_2).unwrap();
+    assert!(job_sv_2.len() == 1);
+
+    // test case 2: 3 files @job_1.toml, @job_2.toml, @job_3.toml under the project folder
+    let proj_dir_3 = test_dir.join("proj_3");
+    std::fs::create_dir_all(&proj_dir_3).unwrap();
+    std::fs::write(proj_dir_3.join("@job_1.toml"), toml_str).unwrap();
+    std::fs::write(proj_dir_3.join("@job_2.toml"), toml_str).unwrap();
+    std::fs::write(proj_dir_3.join("@job_3.toml"), toml_str).unwrap();
+    let job_sv_3 =Job::get_settings_vec(&proj_dir_3).unwrap();
+    assert!(job_sv_3.len() == 3);
+
+    // clean
+    std::fs::remove_dir_all(&test_dir).unwrap();
 }
 
 
@@ -84,6 +169,16 @@ pub struct Manager {
 }
 
 impl Manager {
+    pub fn new() -> Self {
+        Self {
+            jobs: HashMap::new(),
+            chat_stream: String::new(),
+            logs: HashMap::new(),
+            logs_tmp: HashMap::new(),
+            local_infra_cancel_job: false
+        }
+    }
+
     fn data_filepath() -> anyhow::Result<PathBuf> {
         let data_dir = utils::dirs::data_dir();
         let fp = data_dir.join(constants::FILENAME_JOBS);
@@ -143,17 +238,20 @@ mod tests {
         let toml_str = r#"
             [[jobs]]
             id = 1 
-            status = "Created"
-            desc = "some job 1"
+            infra = "Local"
 
             [[jobs]]
             id = 2
-            status = "Completed"
-            desc = "some job 2"
+            infra = "Local"
         "#;
         
         let df = DataFile::new(toml_str).unwrap();
         assert_eq!(df.jobs.unwrap().len(), 2);
+    }
+
+    #[test]
+    fn run_test_job_settings() {
+        test_job_settings();
     }
 }
 

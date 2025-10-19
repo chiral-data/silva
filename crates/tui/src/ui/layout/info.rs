@@ -89,7 +89,7 @@ pub fn render(f: &mut Frame, area: Rect, states: &ui::states::States, store: &mu
     use ui::layout::tabs::Tab;
 
     match states.tabs_states.tab {
-        Tab::Tutorial => render_tutorial(f, area, states, store),
+        Tab::Welcome => render_tutorial(f, area, states, store),
         _ => render_infra(f, area, states, store)
     }
 }

@@ -31,7 +31,7 @@ pub fn params_dok(store: &data_model::Store) -> anyhow::Result<(bool, dok::param
             data_model::provider::sakura_internet::DokGpuType::H100 => dok::params::Plan::H100GB80,
         }
     };
-    let http = if let Some(dok) = proj_sel.get_job_settings().dok.as_ref() {
+    let http = if let Some(dok) = proj_sel.get_job_settings_vec().first().unwrap().dok.as_ref() {
         let path = if let Some(http_path) = dok.http_path.as_ref() {
             http_path.to_string()
         } else { "/".to_string() };
@@ -43,7 +43,7 @@ pub fn params_dok(store: &data_model::Store) -> anyhow::Result<(bool, dok::param
         sacloud_rs::api::dok::params::Http { path: "/".to_string(), port: 80 }
     };
 
-    let dok = proj_sel.get_job_settings().dok.as_ref()
+    let dok = proj_sel.get_job_settings_vec().first().unwrap().dok.as_ref()
         .ok_or(anyhow::Error::msg("DOK settings are mandatory"))?;
     let image_name = dok.docker_image.clone().unwrap_or(image_name_by_dirname);
     let with_build = dok.docker_image.is_none();
