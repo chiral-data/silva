@@ -61,10 +61,11 @@ jobs:
             asset_name: silva-linux-x86_64
 
           # Linux ARM64
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            artifact_name: silva
-            asset_name: silva-linux-aarch64
+          # TODO::   a "cc" link error to be fixed
+          # - target: aarch64-unknown-linux-gnu
+          #   os: ubuntu-latest
+          #   artifact_name: silva
+          #   asset_name: silva-linux-aarch64
 
           # macOS x86_64
           - target: x86_64-apple-darwin

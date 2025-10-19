@@ -97,6 +97,8 @@ The workflow home directory is configurable via the `SILVA_WORKFLOW_HOME` enviro
 export SILVA_WORKFLOW_HOME=/path/to/workflows
 ```
 
+A collection of workflows can be found in [this repository](https://github.com/chiral-data/collab-workflows).
+
 #### Workflow and Job Structure
 
 ```
