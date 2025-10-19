@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use research_silva::{
+use silva::{
     components::docker::{executor::DockerExecutor, job::JobStatus, logs::LogLine},
-    job_config::config::JobConfig,
+    job_config::config,
 };
 use tokio::sync::mpsc;
 
@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let job_folder_path = Path::new(job_path).canonicalize().unwrap();
         let job_cfg = job_folder_path.join("@job.toml");
         println!("Loading job configuration from {job_cfg:?} ...");
-        let config = match JobConfig::load_from_file(job_cfg) {
+        let config = match config::JobConfig::load_from_file(job_cfg) {
             Ok(cfg) => {
                 println!("✓ Configuration loaded successfully\n");
                 cfg
@@ -51,10 +51,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Display configuration
         println!("Job Configuration:");
         match &config.container {
-            research_silva::job_config::config::Container::DockerImage(img) => {
+            config::Container::DockerImage(img) => {
                 println!("  Container: Docker Image '{img}'");
             }
-            research_silva::job_config::config::Container::DockerFile(path) => {
+            config::Container::DockerFile(path) => {
                 println!("  Container: Dockerfile at '{path}'");
             }
         }

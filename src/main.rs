@@ -4,7 +4,7 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
-use research_silva::run_app;
+use silva::run_app;
 use std::{error::Error, io};
 
 #[tokio::main]

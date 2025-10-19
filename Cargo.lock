@@ -1127,27 +1127,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "research-silva"
-version = "0.1.0"
-dependencies = [
- "bollard",
- "chrono",
- "crossterm",
- "flume",
- "fs_extra",
- "futures-util",
- "ratatui",
- "serde",
- "serde_json",
- "sysinfo",
- "tar",
- "tempfile",
- "textwrap",
- "tokio",
- "toml",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1348,6 +1327,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2a4719bff48cee6b39d12c020eeb490953ad2443b7055bd0b21fca26bd8c28b"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "silva"
+version = "0.3.0-pre-1"
+dependencies = [
+ "bollard",
+ "chrono",
+ "crossterm",
+ "flume",
+ "fs_extra",
+ "futures-util",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "tar",
+ "tempfile",
+ "textwrap",
+ "tokio",
+ "toml",
 ]
 
 [[package]]

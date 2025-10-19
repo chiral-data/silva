@@ -13,9 +13,10 @@ This document explains how to create a new release for Silva TUI.
 ### 1. Update Version
 
 Edit `Cargo.toml`:
+
 ```toml
 [package]
-name = "research-silva"
+name = "silva"
 version = "1.0.0"  # Update this version
 edition = "2024"
 ```
@@ -56,12 +57,12 @@ Once you push the tag, GitHub Actions will automatically:
 
 ### 4. Verify the Release
 
-1. Go to `https://github.com/YOUR_USERNAME/research-silva/releases`
+1. Go to `https://github.com/chiral-data/silva/releases`
 2. Check that the release was created with version tag
 3. Verify all 6 platform binaries are attached
 4. Test the installation script:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/research-silva/main/install.sh | sh
+   curl -fsSL https://raw.githubusercontent.com/chiral-data/silva/main/install.sh | sh
    ```
 
 ## Installation Scripts
@@ -69,6 +70,7 @@ Once you push the tag, GitHub Actions will automatically:
 ### Unix (Linux/macOS)
 
 The `install.sh` script:
+
 - Auto-detects OS (Linux/macOS) and architecture (x86_64/ARM64)
 - Downloads the appropriate release binary
 - Installs to `/usr/local/bin` (if writable) or `~/.local/bin`
@@ -76,13 +78,15 @@ The `install.sh` script:
 - Provides PATH instructions if needed
 
 **Usage:**
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/research-silva/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/chiral-data/silva/main/install.sh | sh
 ```
 
 ### Windows
 
 The `install.ps1` script:
+
 - Auto-detects architecture (x86_64/ARM64)
 - Downloads the appropriate release binary
 - Installs to `%LOCALAPPDATA%\Programs\Silva`
@@ -90,6 +94,7 @@ The `install.ps1` script:
 - Requires PowerShell
 
 **Usage:**
+
 ```powershell
 iwr -useb https://raw.githubusercontent.com/YOUR_USERNAME/research-silva/main/install.ps1 | iex
 ```
@@ -99,33 +104,25 @@ iwr -useb https://raw.githubusercontent.com/YOUR_USERNAME/research-silva/main/in
 If you need to create a release manually:
 
 1. Build for a specific target:
+
    ```bash
    cargo build --release --target x86_64-unknown-linux-gnu
    ```
 
 2. Package the binary:
+
    ```bash
    cd target/x86_64-unknown-linux-gnu/release
-   tar czf research-silva-linux-x86_64.tar.gz research-silva
+   tar czf silva-linux-x86_64.tar.gz silva
    ```
 
 3. Create a GitHub release manually and upload the archive
-
-## Updating Installation Script Repository URL
-
-Before the first release, update `YOUR_USERNAME` in:
-- `install.sh` (line 11)
-- `install.ps1` (line 5)
-- `README.md` (installation section)
-- `.github/workflows/release.yml` (if needed)
-
-Replace with your actual GitHub username or organization name.
 
 ## Troubleshooting
 
 ### Release workflow fails
 
-- Check GitHub Actions logs at `https://github.com/YOUR_USERNAME/research-silva/actions`
+- Check GitHub Actions logs at `https://github.com/chiral-data/silva/actions`
 - Ensure `GITHUB_TOKEN` has proper permissions (should be automatic)
 - Verify Cargo.toml syntax is valid
 
@@ -141,7 +138,7 @@ Replace with your actual GitHub username or organization name.
 - Verify URL in installation script matches your repository
 - Test download URL manually:
   ```bash
-  curl -I https://github.com/YOUR_USERNAME/research-silva/releases/download/v1.0.0/research-silva-linux-x86_64.tar.gz
+  curl -I https://github.com/chiral-data/silva/releases/download/v1.0.0/silva-linux-x86_64.tar.gz
   ```
 
 ## Best Practices

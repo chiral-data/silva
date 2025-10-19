@@ -1,11 +1,11 @@
 # Silva TUI Installation Script for Windows
-# Usage: iwr -useb https://raw.githubusercontent.com/YOUR_USERNAME/research-silva/main/install.ps1 | iex
+# Usage: iwr -useb https://raw.githubusercontent.com/chiral-data/silva/main/install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
 # Repository information
-$REPO = "YOUR_USERNAME/research-silva"
-$BINARY_NAME = "research-silva"
+$REPO = "chiral-data/silva"
+$BINARY_NAME = "silva"
 
 # Colors
 function Write-ColorOutput($ForegroundColor) {
@@ -136,7 +136,7 @@ function Install-Silva {
         Write-Success "========================================"
         Write-Output ""
         Write-Info "Run the application with:"
-        Write-Info "    research-silva"
+        Write-Info "    silva"
         Write-Output ""
         Write-Warning "Note: You may need to restart your terminal for PATH changes to take effect"
     }
