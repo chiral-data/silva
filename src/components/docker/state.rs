@@ -8,7 +8,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 
-use crate::components::workflow::Job;
+use crate::components::workflow::{self, Job};
 
 use super::{
     executor::DockerExecutor,
@@ -25,10 +25,10 @@ pub struct State {
     pub rx: Option<mpsc::Receiver<(usize, JobStatus, LogLine)>>,
     pub cancel_tx: Option<mpsc::Sender<()>>,
     pub is_executing_workflow: bool,
+    pub workflow_temp_dirs: Arc<Mutex<HashMap<String, Vec<TempDir>>>>,
     pub auto_scroll_enabled: bool,
     pub last_viewport_width: usize,
     pub last_viewport_height: usize,
-    pub job_temp_dirs: Arc<Mutex<HashMap<String, tempfile::TempDir>>>,
 }
 
 impl Default for State {
@@ -41,17 +41,20 @@ impl Default for State {
             rx: None,
             cancel_tx: None,
             is_executing_workflow: false,
+            workflow_temp_dirs: Arc::new(Mutex::new(HashMap::new())),
             auto_scroll_enabled: true,
             last_viewport_width: 80,
             last_viewport_height: 20,
-            job_temp_dirs: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
 
-fn copy_to_temp_dir<P: AsRef<Path>>(source_path: P) -> Result<TempDir, std::io::Error> {
+fn create_tmp_workflow_folder<P: AsRef<Path>>(source_path: P) -> Result<TempDir, std::io::Error> {
     // Create temp directory
-    let temp_dir = tempfile::Builder::new().prefix("silva-").tempdir()?;
+    let now = chrono::Local::now();
+    let timestamp = now.format("%Y-%m-%d-%H-%M-%S").to_string();
+    let prefix = format!("silva-{timestamp}-");
+    let temp_dir = tempfile::Builder::new().prefix(&prefix).tempdir()?;
 
     // Copy source folder contents to temp directory
     let mut options = fs_extra::dir::CopyOptions::new();
@@ -114,7 +117,7 @@ impl State {
         }
     }
 
-    pub fn run_workflow(&mut self) {
+    pub fn run_workflow(&mut self, workflow_folder: workflow::WorkflowFolder) {
         self.is_executing_workflow = true;
         self.select_next_job();
 
@@ -123,7 +126,7 @@ impl State {
         self.rx = Some(rx);
         self.cancel_tx = Some(cancel_tx);
         let jobs = self.jobs.clone();
-        let job_temp_dirs = self.job_temp_dirs.clone();
+        let workflow_temp_dirs = self.workflow_temp_dirs.clone();
 
         tokio::spawn(async move {
             let mut docker_executor = match DockerExecutor::new(tx.clone()) {
@@ -142,33 +145,36 @@ impl State {
                 }
             };
 
+            // Create a temp workflow path
+            let temp_workflow_dir = match create_tmp_workflow_folder(&workflow_folder.path) {
+                Ok(temp_dir) => {
+                    let temp_dir_path = temp_dir.path().to_path_buf();
+                    let workflow_temp_dirs_arc = workflow_temp_dirs.clone();
+                    let mut workflow_temp_dirs = workflow_temp_dirs_arc.lock().unwrap();
+                    let workflow_dir_vec =
+                        workflow_temp_dirs.entry(workflow_folder.name).or_default();
+                    workflow_dir_vec.push(temp_dir);
+                    temp_dir_path
+                }
+                Err(e) => {
+                    let log_line =
+                        LogLine::new(LogSource::Stderr, format!("Create temp dir error: {e}"));
+                    tx.send((jobs.len(), JobStatus::Failed, log_line))
+                        .await
+                        .unwrap();
+                    return;
+                }
+            };
+
             // Execute jobs sequentially
             let jobs_length = jobs.len();
             for (idx, job) in jobs.into_iter().enumerate() {
                 match job.load_config() {
                     Ok(config) => {
-                        let temp_dir_path = match copy_to_temp_dir(&job.path) {
-                            Ok(temp_dir) => {
-                                let temp_dir_path = temp_dir.path().to_path_buf();
-                                let job_temp_dirs_arc = job_temp_dirs.clone();
-                                let mut job_temp_dirs = job_temp_dirs_arc.lock().unwrap();
-                                job_temp_dirs.insert(job.name.to_string(), temp_dir);
-                                temp_dir_path
-                            }
-                            Err(e) => {
-                                let log_line = LogLine::new(
-                                    LogSource::Stderr,
-                                    format!("Create temp dir error: {e}"),
-                                );
-                                tx.send((idx, JobStatus::Failed, log_line)).await.unwrap();
-                                break;
-                            }
-                        };
-
                         docker_executor.set_job_idx(idx);
 
                         match docker_executor
-                            .run_job(&temp_dir_path, &config, &mut cancel_rx)
+                            .run_job(&temp_workflow_dir, &job, &config, &mut cancel_rx)
                             .await
                         {
                             Ok(_) => (),

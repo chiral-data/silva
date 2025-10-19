@@ -57,38 +57,39 @@ jobs:
           # Linux x86_64
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            artifact_name: research-silva
-            asset_name: research-silva-linux-x86_64
+            artifact_name: silva
+            asset_name: silva-linux-x86_64
 
           # Linux ARM64
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            artifact_name: research-silva
-            asset_name: research-silva-linux-aarch64
+          # TODO::   a "cc" link error to be fixed
+          # - target: aarch64-unknown-linux-gnu
+          #   os: ubuntu-latest
+          #   artifact_name: silva
+          #   asset_name: silva-linux-aarch64
 
           # macOS x86_64
           - target: x86_64-apple-darwin
             os: macos-latest
-            artifact_name: research-silva
-            asset_name: research-silva-macos-x86_64
+            artifact_name: silva
+            asset_name: silva-macos-x86_64
 
           # macOS ARM64 (Apple Silicon)
           - target: aarch64-apple-darwin
             os: macos-latest
-            artifact_name: research-silva
-            asset_name: research-silva-macos-aarch64
+            artifact_name: silva
+            asset_name: silva-macos-aarch64
 
           # Windows x86_64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            artifact_name: research-silva.exe
-            asset_name: research-silva-windows-x86_64.exe
+            artifact_name: silva.exe
+            asset_name: silva-windows-x86_64.exe
 
           # Windows ARM64
           - target: aarch64-pc-windows-msvc
             os: windows-latest
-            artifact_name: research-silva.exe
-            asset_name: research-silva-windows-aarch64.exe
+            artifact_name: silva.exe
+            asset_name: silva-windows-aarch64.exe
 
     steps:
       - name: Checkout code
