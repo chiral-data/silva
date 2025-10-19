@@ -7,16 +7,19 @@ A terminal interface for managing and running bioinformatics workflows.
 ### One-line Install
 
 **Linux/macOS:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/research-silva/main/install.sh | sh
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 iwr -useb https://raw.githubusercontent.com/YOUR_USERNAME/research-silva/main/install.ps1 | iex
 ```
 
 The script will:
+
 - Auto-detect your OS and architecture
 - Download the latest release
 - Install the binary to an appropriate location
@@ -25,6 +28,7 @@ The script will:
 ### Manual Download
 
 Download pre-built binaries from the [Releases](https://github.com/YOUR_USERNAME/research-silva/releases) page:
+
 - Linux: x86_64, ARM64
 - macOS: x86_64 (Intel), ARM64 (Apple Silicon)
 - Windows: x86_64, ARM64
@@ -35,7 +39,7 @@ Download pre-built binaries from the [Releases](https://github.com/YOUR_USERNAME
 git clone https://github.com/YOUR_USERNAME/research-silva.git
 cd research-silva
 cargo build --release
-./target/release/research-silva
+./target/release/silva
 ```
 
 ## Navigation

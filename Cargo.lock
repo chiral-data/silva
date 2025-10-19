@@ -1331,7 +1331,7 @@ dependencies = [
 
 [[package]]
 name = "silva"
-version = "0.3.0-pre"
+version = "0.3.0-pre-1"
 dependencies = [
  "bollard",
  "chrono",

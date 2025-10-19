@@ -1,6 +1,6 @@
 #!/bin/sh
 # Silva TUI Installation Script
-# Usage: curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/research-silva/main/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/chiral-data/silva/main/install.sh | sh
 
 set -e
 
@@ -11,20 +11,20 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Repository information
-REPO="YOUR_USERNAME/research-silva"
-BINARY_NAME="research-silva"
+REPO="chiral-data/silva"
+BINARY_NAME="silva"
 
 # Detect OS
 detect_os() {
     OS=$(uname -s)
     case "$OS" in
-        Linux*)     OS_TYPE="linux";;
-        Darwin*)    OS_TYPE="macos";;
-        MINGW*|MSYS*|CYGWIN*) OS_TYPE="windows";;
-        *)
-            echo "${RED}Error: Unsupported operating system: $OS${NC}"
-            exit 1
-            ;;
+    Linux*) OS_TYPE="linux" ;;
+    Darwin*) OS_TYPE="macos" ;;
+    MINGW* | MSYS* | CYGWIN*) OS_TYPE="windows" ;;
+    *)
+        echo "${RED}Error: Unsupported operating system: $OS${NC}"
+        exit 1
+        ;;
     esac
 }
 
@@ -32,12 +32,12 @@ detect_os() {
 detect_arch() {
     ARCH=$(uname -m)
     case "$ARCH" in
-        x86_64|amd64)   ARCH_TYPE="x86_64";;
-        aarch64|arm64)  ARCH_TYPE="aarch64";;
-        *)
-            echo "${RED}Error: Unsupported architecture: $ARCH${NC}"
-            exit 1
-            ;;
+    x86_64 | amd64) ARCH_TYPE="x86_64" ;;
+    aarch64 | arm64) ARCH_TYPE="aarch64" ;;
+    *)
+        echo "${RED}Error: Unsupported architecture: $ARCH${NC}"
+        exit 1
+        ;;
     esac
 }
 
