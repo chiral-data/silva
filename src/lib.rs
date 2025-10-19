@@ -25,3 +25,5 @@ pub async fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -
         }
     }
 }
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
