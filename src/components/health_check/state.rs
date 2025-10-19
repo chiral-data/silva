@@ -38,7 +38,7 @@ impl State {
     }
 
     pub fn check_environment_variables(&mut self) {
-        let env_vars = vec!["SILVA_HOME_DIR", "SHELL"];
+        let env_vars = vec!["SILVA_WORKFLOW_HOME", "SHELL"];
 
         for var in env_vars {
             let status = if std::env::var(var).is_ok() {
@@ -62,7 +62,7 @@ impl State {
     }
 
     pub fn check_software_installations(&mut self) {
-        let software = vec!["docker", "dock"];
+        let software = vec!["docker"];
 
         for sw in software {
             let output = std::process::Command::new("which").arg(sw).output();
