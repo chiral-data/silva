@@ -2,8 +2,10 @@ use ratatui::prelude::*;
 use ratatui::widgets::*;
 
 const HELPER_NEW_JOB: &[&str] = &[
-    "Create a new job", 
-    "based on the selected project",
+    "Create a new job from the selected project",
+    "Single config: Creates job directly",
+    "Multiple configs: Shows configuration selection",
+    "Use ↑/↓ to navigate jobs, Enter to select",
 ];
 
 pub fn render(

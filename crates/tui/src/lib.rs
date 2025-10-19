@@ -1,8 +1,8 @@
 mod constants;
 mod utils;
 
-mod data_model;
-mod ui;
+pub mod data_model;
+pub mod ui;
 mod entry;
 pub use entry::run;
 

@@ -15,12 +15,9 @@ pub const HELPER: &[&str] = &[
 ];
 
 
-async fn ollama_generate(prompt: String, job_mgr: Arc<Mutex<data_model::job::Manager>>) -> anyhow::Result<()> {
+async fn ollama_generate(prompt: String, job_mgr: Arc<Mutex<data_model::job::Manager>>, job_id: usize) -> anyhow::Result<()> {
     use ollama_rs::generation::completion::request::GenerationRequest;
     use tokio_stream::StreamExt;
-
-    // TODO: currently only support 1 job
-    let job_id = 0;
 
     let http_uri = {
         let job_mgr = job_mgr.lock().unwrap();
@@ -172,8 +169,7 @@ fn render_service_unavailable(f: &mut Frame, area: Rect) {
 }
 
 pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &mut data_model::Store) {
-    // TODO: currently only support one job
-    let job_id = 0;
+    let job_id = states.job_states.get_current_job_id();
 
     let mut job_mgr = store.job_mgr.lock().unwrap();
     if let Some(job) = job_mgr.jobs.get(&job_id) {
@@ -194,12 +190,13 @@ pub fn handle_key(key: &event::KeyEvent, states: &mut ui::states::States, store:
         KeyCode::Enter => {
             let prompt = states_current.submit();
             let job_mgr = store.job_mgr.clone();
+            let job_id = states.job_states.get_current_job_id();
             tokio::spawn(async move {
-                match ollama_generate(prompt, job_mgr.clone()).await {
+                match ollama_generate(prompt, job_mgr.clone(), job_id).await {
                     Ok(()) => (),
                     Err(e) => {
                         let mut job_mgr = job_mgr.lock().unwrap();
-                        job_mgr.add_log(0, format!("run job error: {e}"));
+                        job_mgr.add_log(job_id, format!("run job error: {e}"));
                     } 
                 }
             });

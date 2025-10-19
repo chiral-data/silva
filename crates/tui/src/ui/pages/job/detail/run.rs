@@ -5,6 +5,7 @@ use ratatui::widgets::*;
 use sacloud_rs::api::dok;
 use crate::data_model;
 use crate::ui;
+use crate::ui::layout::info::MessageLevel;
 use crate::utils;
 
 pub const HELPER: &[&str] = &[
@@ -18,9 +19,8 @@ async fn launch_job_dok(
     param_dok: dok::params::Container, 
     job_mgr: Arc<Mutex<data_model::job::Manager>>,
     with_build: bool,
+    job_id: usize,
 ) -> anyhow::Result<()> {
-    // TODO: currently only support one job
-    let job_id = 0;
 
     if with_build {
         // build & push the docker image
@@ -104,15 +104,72 @@ async fn launch_job_dok(
     Ok(())
 }
 
-pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> anyhow::Result<()> {
-    // TODO: currently only support one job
-    let job_id = 0;
-    {
-        let job_mgr = store.job_mgr.lock().unwrap();
-        if job_mgr.jobs.contains_key(&job_id) {
-            return Err(anyhow::Error::msg("current job already running"));
+pub fn action(states: &mut ui::states::States, store: &mut data_model::Store) -> anyhow::Result<()> {
+    let selected_job_id = states.job_states.get_selected_job_id();
+    
+    let job_id = match selected_job_id {
+        Some(id) => id,
+        None => {
+            return Err(anyhow::Error::msg("No job selected. Please select a job from the list first (press Enter on a job)."));
         }
+    };
+    
+    // Queue the job instead of executing immediately
+    let job_started = {
+        let mut job_mgr = store.job_mgr.lock().unwrap();
+        
+        // Check if job can be queued
+        if let Some(job) = job_mgr.jobs.get(&job_id) {
+            if job.is_running() {
+                return Err(anyhow::Error::msg("Job is already running"));
+            }
+            if job.status == data_model::job::JobStatus::Queued {
+                return Err(anyhow::Error::msg("Job is already queued"));
+            }
+        }
+        
+        // Queue the job
+        job_mgr.queue_job(job_id)?;
+        
+        // Process the queue to potentially start the job
+        let started_jobs = job_mgr.process_queue();
+        
+        if started_jobs.contains(&job_id) {
+            states.update_info(format!("Job {} started immediately", job_id), MessageLevel::Info);
+            true
+        } else {
+            let (queued, running, available) = job_mgr.get_queue_status();
+            states.update_info(
+                format!("Job {} queued (Queue: {}, Running: {}, Available: {})", 
+                        job_id, queued, running, available),
+                MessageLevel::Info
+            );
+            false
+        }
+    };
+    
+    // Execute the job if it was started (outside the lock scope)
+    if job_started {
+        execute_running_job(job_id, store)?;
     }
+    
+    Ok(())
+}
+
+fn execute_running_job(job_id: usize, store: &mut data_model::Store) -> anyhow::Result<()> {
+    // Get the job and its configuration index
+    let config_index = {
+        let job_mgr = store.job_mgr.lock().unwrap();
+        let job = job_mgr.jobs.get(&job_id)
+            .ok_or(anyhow::Error::msg("Job not found"))?;
+        
+        if !job.is_running() {
+            return Ok(()); // Job is not running, nothing to execute
+        }
+        
+        job.config_index
+            .ok_or(anyhow::Error::msg("Job has no configuration index"))?
+    };
 
     let (proj_sel, _) = store.project_sel.as_ref()
         .ok_or(anyhow::Error::msg("no selected project"))?;
@@ -127,30 +184,84 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
     match &pod_sel.settings {
         Settings::Local => {
             let settings_vec = proj_sel.get_job_settings_vec().to_owned();
+            let job_settings = settings_vec.get(config_index)
+                .ok_or(anyhow::Error::msg("Invalid configuration index"))?
+                .clone();
+            
             let job_mgr = store.job_mgr.clone();
             let job_id_to_cancel = store.cancel_job_id.clone();
             let proj_dir = proj.get_dir().to_path_buf();
+            
+            // Update job status to running
+            {
+                let mut job_mgr = job_mgr.lock().unwrap();
+                if let Err(e) = job_mgr.update_job_status(job_id, data_model::job::JobStatus::Running) {
+                    job_mgr.add_log(job_id, format!("Failed to update job status: {}", e));
+                }
+            }
+            
             tokio::spawn(async move {
-                data_model::provider::local::run_jobs(job_mgr, job_id_to_cancel, proj_dir, settings_vec).await;
+                if let Some(local_settings) = job_settings.infra_local {
+                    match data_model::provider::local::run_single_job(job_mgr.clone(), job_id_to_cancel, proj_dir, local_settings, job_id).await {
+                        Ok(()) => {
+                            let mut job_mgr = job_mgr.lock().unwrap();
+                            if let Err(e) = job_mgr.update_job_status(job_id, data_model::job::JobStatus::Completed) {
+                                job_mgr.add_log(job_id, format!("Failed to update job status: {}", e));
+                            }
+                        }
+                        Err(e) => {
+                            let mut job_mgr = job_mgr.lock().unwrap();
+                            job_mgr.add_log(job_id, format!("Job execution error: {}", e));
+                            if let Err(e) = job_mgr.update_job_status(job_id, data_model::job::JobStatus::Failed) {
+                                job_mgr.add_log(job_id, format!("Failed to update job status: {}", e));
+                            }
+                        }
+                    }
+                } else {
+                    let mut job_mgr = job_mgr.lock().unwrap();
+                    job_mgr.add_log(job_id, "No local infrastructure configuration found".to_string());
+                    if let Err(e) = job_mgr.update_job_status(job_id, data_model::job::JobStatus::Failed) {
+                        job_mgr.add_log(job_id, format!("Failed to update job status: {}", e));
+                    }
+                }
             });
         },
         Settings::SakuraInternetServer => { return Err(anyhow::Error::msg("not DOK service")); },
         Settings::SakuraInternetService(_) => {
+            let settings_vec = proj_sel.get_job_settings_vec().to_owned();
+            let job_settings = settings_vec.get(config_index)
+                .ok_or(anyhow::Error::msg("Invalid configuration index"))?
+                .clone();
+            
             let mut job_mgr = store.job_mgr.lock().unwrap();
-            job_mgr.add_log(0, "send the job Sakura Internet DOK service ...".to_string());
+            job_mgr.add_log(job_id, "send the job Sakura Internet DOK service ...".to_string());
+            
+            // Update job status to running
+            if let Err(e) = job_mgr.update_job_status(job_id, data_model::job::JobStatus::Running) {
+                job_mgr.add_log(job_id, format!("Failed to update job status: {}", e));
+            }
+            
             let (with_build, param_dok) = super::params::params_dok(store)?;
-            if proj.get_job_settings_vec().first().unwrap().dok.is_some() && with_build {
+            if job_settings.dok.is_some() && with_build {
                 proj.get_dir().join("Dockerfile").exists().then_some(0)
                     .ok_or(anyhow::Error::msg("using DOK service with self built docker image requires a Dockerfile under the project folder"))?;
             }
             let client = store.account_mgr.create_client(&store.setting_mgr)?.clone();
             let job_mgr_clone = store.job_mgr.clone();
             tokio::spawn(async move {
-                match launch_job_dok(proj, registry_sel, client, param_dok, job_mgr_clone.clone(), with_build).await {
-                    Ok(()) => (),
+                match launch_job_dok(proj, registry_sel, client, param_dok, job_mgr_clone.clone(), with_build, job_id).await {
+                    Ok(()) => {
+                        let mut job_mgr = job_mgr_clone.lock().unwrap();
+                        if let Err(e) = job_mgr.update_job_status(job_id, data_model::job::JobStatus::Completed) {
+                            job_mgr.add_log(job_id, format!("Failed to update job status: {}", e));
+                        }
+                    }
                     Err(e) => {
                         let mut job_mgr = job_mgr_clone.lock().unwrap();
-                        job_mgr.add_log(job_id, format!("[Local infra] job {} exits with error {}", job_id, e));
+                        job_mgr.add_log(job_id, format!("[DOK] job {} exits with error {}", job_id, e));
+                        if let Err(e) = job_mgr.update_job_status(job_id, data_model::job::JobStatus::Failed) {
+                            job_mgr.add_log(job_id, format!("Failed to update job status: {}", e));
+                        }
                     } 
                 }
             });
@@ -160,9 +271,8 @@ pub fn action(_states: &mut ui::states::States, store: &data_model::Store) -> an
     Ok(())
 }
 
-pub fn render(f: &mut Frame, area: Rect, _states: &mut ui::states::States, store: &data_model::Store) {
-    // TODO: use job id 0 for testing first
-    let job_id = 0;
+pub fn render(f: &mut Frame, area: Rect, states: &mut ui::states::States, store: &data_model::Store) {
+    let job_id = states.job_states.get_current_job_id();
     let job_mgr = store.job_mgr.lock().unwrap();
     let mut logs: Vec<Line> = job_mgr.logs.get(&job_id)
         .map(|v| {
