@@ -16,9 +16,9 @@ A terminal interface for managing and running workflows.
 curl -fsSL https://raw.githubusercontent.com/chiral-data/silva/main/install.sh | sh
 ```
 
-**Windows (PowerShell):**
+**Windows:**
 
-```powershell
+```Windows Terminal(recommended) or powershell
 iwr -useb https://raw.githubusercontent.com/chiral-data/silva/main/install.ps1 | iex
 ```
 
