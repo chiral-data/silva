@@ -63,7 +63,7 @@ pub fn render(frame: &mut Frame, area: ratatui::prelude::Rect, app: &App) {
         Span::raw(" | "),
         Span::styled("CPU: ", Style::default().add_modifier(Modifier::BOLD)),
         Span::styled(
-            format!("{:.1}%", state.cpu_usage),
+            format!("{:2.1}%", state.cpu_usage),
             Style::default().fg(Color::Yellow),
         ),
     ])];
