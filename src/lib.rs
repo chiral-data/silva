@@ -1,6 +1,6 @@
 use std::{io, time::Duration};
 
-use crossterm::event::{self, Event};
+use crossterm::event::{self, Event, KeyEventKind};
 use ratatui::Terminal;
 
 pub mod app;
@@ -19,6 +19,7 @@ pub async fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -
 
         if event::poll(Duration::from_millis(100))?
             && let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
             && app.handle_key_event(key).await?
         {
             return Ok(());
