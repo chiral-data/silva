@@ -468,3 +468,8 @@ For issues or questions:
 - Check the logs in the Docker popup (press `d`)
 - Review test files for examples
 - See source code in `src/components/workflow/` and `src/components/docker/`
+
+### FAQ
+
+- Q: the emojis do not show correctly under Windows.
+  - A: we recommand using Windows Terminal instead of PowerShell. To install Windows Terminal, run `winget install Microsoft.WindowsTerminal`.
