@@ -549,22 +549,23 @@ impl DockerExecutor {
         }
 
         // Stop and remove container
-        let _ = self.client.stop_container(&container.id, None).await;
-
-        let remove_options = RemoveContainerOptions {
-            force: true,
-            ..Default::default()
-        };
-        let _ = self
-            .client
-            .remove_container(&container.id, Some(remove_options))
-            .await;
-
-        let log_line = LogLine::new(
-            LogSource::Stdout,
-            "Container stopped and removed".to_string(),
-        );
-        self.tx_send(JobStatus::Completed, log_line).await?;
+        // TODO: clean containers at the end
+        // let _ = self.client.stop_container(&container.id, None).await;
+        //
+        // let remove_options = RemoveContainerOptions {
+        //     force: true,
+        //     ..Default::default()
+        // };
+        // let _ = self
+        //     .client
+        //     .remove_container(&container.id, Some(remove_options))
+        //     .await;
+        //
+        // let log_line = LogLine::new(
+        //     LogSource::Stdout,
+        //     "Container stopped and removed".to_string(),
+        // );
+        // self.tx_send(JobStatus::Completed, log_line).await?;
 
         Ok(())
     }
