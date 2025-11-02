@@ -260,11 +260,15 @@ impl DockerExecutor {
     ///
     /// * `Ok(String)` - Image ID of the built image
     /// * `Err(DockerError)` - Build error
-    pub async fn build_image(&self, dockerfile_path: &str) -> Result<String, DockerError> {
+    pub async fn build_image(
+        &self,
+        image_name: &str,
+        dockerfile_path: &Path,
+    ) -> Result<String, DockerError> {
         // update job entry
         let log_line = LogLine::new(
             LogSource::Stdout,
-            format!("Building image from: {dockerfile_path}"),
+            format!("Building image from: {dockerfile_path:?}"),
         );
         self.tx_send(JobStatus::BuildingImage, log_line).await?;
 
@@ -276,13 +280,14 @@ impl DockerExecutor {
 
         // Create tar archive of the build context
         let tar_file = self.create_tar_archive(context_path)?;
+        let image_tag = format!("{image_name}:latest");
 
         let build_options = BuildImageOptions {
             dockerfile: path
                 .file_name()
                 .and_then(|s| s.to_str())
                 .unwrap_or("Dockerfile"),
-            t: "silva-job:latest",
+            t: &image_tag,
             rm: true,
             ..Default::default()
         };
@@ -313,11 +318,13 @@ impl DockerExecutor {
             }
         }
 
-        if image_id.is_empty() {
-            image_id = "silva-job:latest".to_string();
-        }
+        let log_line = LogLine::new(
+            LogSource::Stdout,
+            format!("Building image complete with image id: {image_id}"),
+        );
+        self.tx_send(JobStatus::BuildingImage, log_line).await?;
 
-        Ok(image_id)
+        Ok(image_tag)
     }
 
     /// Pulls a Docker image from a registry.
@@ -377,7 +384,8 @@ impl DockerExecutor {
     /// Job status and logs are streamed via the message channel throughout execution.
     pub async fn run_job(
         &self,
-        workflow_folder: &Path,
+        workflow_name: &str,
+        workflow_folder: &Path, // tmp workflow folder
         job: &workflow::Job,
         config: &JobConfig,
         cancel_rx: &mut mpsc::Receiver<()>,
@@ -389,7 +397,12 @@ impl DockerExecutor {
                 self.pull_image(url).await?;
                 url.clone()
             }
-            Container::DockerFile(path) => self.build_image(path).await?,
+            Container::DockerFile(path) => {
+                let job_folder = workflow_folder.join(&job.name);
+                let docker_file_path = job_folder.join(path);
+                let image_tag = format!("{workflow_name}_{}", job.name);
+                self.build_image(&image_tag, &docker_file_path).await?
+            }
         };
 
         // Create container
