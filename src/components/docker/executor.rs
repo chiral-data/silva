@@ -400,8 +400,37 @@ impl DockerExecutor {
             Container::DockerFile(path) => {
                 let job_folder = workflow_folder.join(&job.name);
                 let docker_file_path = job_folder.join(path);
-                let image_tag = format!("{workflow_name}_{}", job.name);
-                self.build_image(&image_tag, &docker_file_path).await?
+                let image_name = format!("{workflow_name}_{}", job.name);
+                match self
+                    .client
+                    .inspect_image(format!("{image_name}:latest").as_str())
+                    .await
+                {
+                    Ok(_) => {
+                        // If inspect_image succeeds, the image exists
+                        let log_line = LogLine::new(
+                            LogSource::Stdout,
+                            format!(
+                                "docker image {image_name} exists, skip building, remove the image to rebuild ..."
+                            ),
+                        );
+                        self.tx_send(JobStatus::BuildingImage, log_line).await?;
+                        format!("{image_name}:latest")
+                    }
+                    Err(bollard::errors::Error::DockerResponseServerError {
+                        status_code: 404,
+                        ..
+                    }) => {
+                        // A 404 status code from the Docker API means "no such image"
+                        self.build_image(&image_name, &docker_file_path).await?
+                    }
+                    Err(e) => {
+                        // Handle other errors (e.g., connection, authentication)
+                        return Err(DockerError::ImageBuildFailed(format!(
+                            "inspect image {image_name} error: {e}"
+                        )));
+                    }
+                }
             }
         };
 
@@ -549,23 +578,22 @@ impl DockerExecutor {
         }
 
         // Stop and remove container
-        // TODO: clean containers at the end
-        // let _ = self.client.stop_container(&container.id, None).await;
-        //
-        // let remove_options = RemoveContainerOptions {
-        //     force: true,
-        //     ..Default::default()
-        // };
-        // let _ = self
-        //     .client
-        //     .remove_container(&container.id, Some(remove_options))
-        //     .await;
-        //
-        // let log_line = LogLine::new(
-        //     LogSource::Stdout,
-        //     "Container stopped and removed".to_string(),
-        // );
-        // self.tx_send(JobStatus::Completed, log_line).await?;
+        let _ = self.client.stop_container(&container.id, None).await;
+
+        let remove_options = RemoveContainerOptions {
+            force: true,
+            ..Default::default()
+        };
+        let _ = self
+            .client
+            .remove_container(&container.id, Some(remove_options))
+            .await;
+
+        let log_line = LogLine::new(
+            LogSource::Stdout,
+            "Container stopped and removed".to_string(),
+        );
+        self.tx_send(JobStatus::Completed, log_line).await?;
 
         Ok(())
     }
@@ -589,7 +617,10 @@ impl DockerExecutor {
         let exec = self.client.create_exec(container_id, exec_config).await?;
         let log_line = LogLine::new(
             LogSource::Stdout,
-            format!("Docker exec {} created", exec.id),
+            format!(
+                "Docker exec {} with container {container_id} created",
+                exec.id
+            ),
         );
         self.tx_send(JobStatus::Running, log_line).await?;
 
