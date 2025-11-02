@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- build images (2025-11-02): Dockerfile file path, Avoid rebuilding the image
 - Windows: Fixed double keystroke registration by filtering key press/release events
 - Windows: Fixed PowerShell install script returning incorrect version string
 - Windows: Improved emoji display compatibility
