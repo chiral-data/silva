@@ -151,8 +151,9 @@ impl State {
                     let temp_dir_path = temp_dir.path().to_path_buf();
                     let workflow_temp_dirs_arc = workflow_temp_dirs.clone();
                     let mut workflow_temp_dirs = workflow_temp_dirs_arc.lock().unwrap();
-                    let workflow_dir_vec =
-                        workflow_temp_dirs.entry(workflow_folder.name).or_default();
+                    let workflow_dir_vec = workflow_temp_dirs
+                        .entry(workflow_folder.name.to_string())
+                        .or_default();
                     workflow_dir_vec.push(temp_dir);
                     temp_dir_path
                 }
@@ -174,7 +175,13 @@ impl State {
                         docker_executor.set_job_idx(idx);
 
                         match docker_executor
-                            .run_job(&temp_workflow_dir, &job, &config, &mut cancel_rx)
+                            .run_job(
+                                &workflow_folder.name,
+                                &temp_workflow_dir,
+                                &job,
+                                &config,
+                                &mut cancel_rx,
+                            )
                             .await
                         {
                             Ok(_) => (),

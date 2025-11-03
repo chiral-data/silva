@@ -57,13 +57,13 @@ pub fn render(frame: &mut Frame, area: ratatui::prelude::Rect, app: &App) {
         Span::raw(" | "),
         Span::styled("Memory: ", Style::default().add_modifier(Modifier::BOLD)),
         Span::styled(
-            format!("{:.1}Gi / {:.1}Gi", state.used_memory, state.total_memory),
+            format!("{:.1}Gi / {:3.1}Gi", state.used_memory, state.total_memory),
             Style::default().fg(Color::Green),
         ),
         Span::raw(" | "),
         Span::styled("CPU: ", Style::default().add_modifier(Modifier::BOLD)),
         Span::styled(
-            format!("{:2.1}%", state.cpu_usage),
+            format!("{:3.1}%", state.cpu_usage),
             Style::default().fg(Color::Yellow),
         ),
     ])];
