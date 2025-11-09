@@ -198,6 +198,9 @@ impl State {
                 .map(|(idx, job)| (job.name.clone(), idx))
                 .collect();
 
+            // Container registry: image_name -> container_id (for reusing containers)
+            let mut container_registry: HashMap<String, String> = HashMap::new();
+
             for job in sorted_jobs.iter() {
                 // Get the original index for this job (for UI updates)
                 let idx = *job_name_to_idx.get(&job.name).unwrap();
@@ -223,11 +226,15 @@ impl State {
                                 &temp_workflow_dir,
                                 job,
                                 &config,
+                                &mut container_registry,
                                 &mut cancel_rx,
                             )
                             .await
                         {
-                            Ok(_) => (),
+                            Ok(container_id) => {
+                                // Container is tracked in the registry and will be cleaned up at the end
+                                let _ = container_id;  // Suppress unused variable warning
+                            }
                             Err(e) => {
                                 let log_line = LogLine::new(
                                     LogSource::Stderr,
@@ -246,6 +253,10 @@ impl State {
                     }
                 }
             }
+
+            // Cleanup all containers after workflow completes (success or failure)
+            let container_ids: Vec<String> = container_registry.values().cloned().collect();
+            docker_executor.cleanup_containers(&container_ids).await;
 
             // run workflow completes
             tx.send((jobs_length, JobStatus::Completed, LogLine::empty()))

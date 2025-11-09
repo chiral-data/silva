@@ -370,7 +370,7 @@ impl DockerExecutor {
     ///
     /// # Returns
     ///
-    /// * `Ok(())` - Job execution completed (successfully or with errors)
+    /// * `Ok(String)` - Container ID of the job container (for cleanup later)
     /// * `Err(DockerError)` - Fatal execution error
     ///
     /// # Behavior
@@ -378,18 +378,21 @@ impl DockerExecutor {
     /// 1. Pulls/builds the Docker image specified in config
     /// 2. Creates and starts a container with job_folder mounted
     /// 3. Executes pre-run, run, and post-run scripts sequentially
-    /// 4. Stops and removes the container when done
+    /// 4. Returns the container ID (container is NOT stopped/removed)
     /// 5. Can be interrupted via cancel_rx channel
     ///
     /// Job status and logs are streamed via the message channel throughout execution.
+    ///
+    /// **Note**: The container is left running. Call `cleanup_containers()` after all jobs complete.
     pub async fn run_job(
         &self,
         workflow_name: &str,
         workflow_folder: &Path, // tmp workflow folder
         job: &workflow::Job,
         config: &JobConfig,
+        container_registry: &mut std::collections::HashMap<String, String>,
         cancel_rx: &mut mpsc::Receiver<()>,
-    ) -> Result<(), DockerError> {
+    ) -> Result<String, DockerError> {
         let work_dir = "/workspace";
 
         let image_name = match &config.container {
@@ -434,7 +437,16 @@ impl DockerExecutor {
             }
         };
 
-        // Create container
+        // Check if we already have a container for this image
+        let container_id = if let Some(existing_id) = container_registry.get(&image_name) {
+            let log_line = LogLine::new(
+                LogSource::Stdout,
+                format!("Reusing existing container {} for image {}", existing_id, image_name),
+            );
+            self.tx_send(JobStatus::Running, log_line).await?;
+            existing_id.clone()
+        } else {
+            // Create new container
         let log_line = LogLine::new(
             LogSource::Stdout,
             format!("Creating container with image: {image_name}"),
@@ -521,6 +533,11 @@ impl DockerExecutor {
         let log_line = LogLine::new(LogSource::Stdout, "Container started and ready".to_string());
         self.tx_send(JobStatus::Running, log_line).await?;
 
+            // Register the new container in the registry
+            container_registry.insert(image_name.clone(), container.id.clone());
+            container.id
+        };
+
         // Execute scripts sequentially
         let scripts = vec![
             ("pre_run.sh", &config.scripts.pre),
@@ -547,7 +564,7 @@ impl DockerExecutor {
             let job_workdir = Path::new(work_dir).join(&job.name);
             match self
                 .exec_script(
-                    &container.id,
+                    &container_id,
                     job_workdir.to_str().unwrap(),
                     script,
                     cancel_rx,
@@ -590,7 +607,7 @@ impl DockerExecutor {
 
             let job_workdir = Path::new(work_dir).join(&job.name);
             match self
-                .collect_output_files(&container.id, job_workdir.to_str().unwrap(), &config.outputs, cancel_rx)
+                .collect_output_files(&container_id, job_workdir.to_str().unwrap(), &config.outputs, cancel_rx)
                 .await
             {
                 Ok(file_count) => {
@@ -610,25 +627,86 @@ impl DockerExecutor {
             }
         }
 
-        // Stop and remove container
-        let _ = self.client.stop_container(&container.id, None).await;
-
-        let remove_options = RemoveContainerOptions {
-            force: true,
-            ..Default::default()
-        };
-        let _ = self
-            .client
-            .remove_container(&container.id, Some(remove_options))
-            .await;
-
+        // Return container ID for cleanup later
         let log_line = LogLine::new(
             LogSource::Stdout,
-            "Container stopped and removed".to_string(),
+            format!("Job completed, container {} will be cleaned up after workflow finishes", container_id),
         );
         self.tx_send(JobStatus::Completed, log_line).await?;
 
-        Ok(())
+        Ok(container_id)
+    }
+
+    /// Cleans up (stops and removes) multiple containers.
+    ///
+    /// # Arguments
+    ///
+    /// * `container_ids` - List of container IDs to clean up
+    ///
+    /// # Behavior
+    ///
+    /// - Stops each container
+    /// - Removes each container with force option
+    /// - Logs cleanup progress
+    /// - Continues even if some containers fail to stop/remove
+    pub async fn cleanup_containers(&self, container_ids: &[String]) {
+        if container_ids.is_empty() {
+            return;
+        }
+
+        let log_line = LogLine::new(
+            LogSource::Stdout,
+            format!("Cleaning up {} container(s)...", container_ids.len()),
+        );
+        let _ = self.tx_send(JobStatus::Completed, log_line).await;
+
+        for container_id in container_ids {
+            // Stop container
+            match self.client.stop_container(container_id, None).await {
+                Ok(_) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stdout,
+                        format!("Stopped container {}", container_id),
+                    );
+                    let _ = self.tx_send(JobStatus::Completed, log_line).await;
+                }
+                Err(e) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stderr,
+                        format!("Failed to stop container {}: {}", container_id, e),
+                    );
+                    let _ = self.tx_send(JobStatus::Completed, log_line).await;
+                }
+            }
+
+            // Remove container
+            let remove_options = RemoveContainerOptions {
+                force: true,
+                ..Default::default()
+            };
+            match self.client.remove_container(container_id, Some(remove_options)).await {
+                Ok(_) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stdout,
+                        format!("Removed container {}", container_id),
+                    );
+                    let _ = self.tx_send(JobStatus::Completed, log_line).await;
+                }
+                Err(e) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stderr,
+                        format!("Failed to remove container {}: {}", container_id, e),
+                    );
+                    let _ = self.tx_send(JobStatus::Completed, log_line).await;
+                }
+            }
+        }
+
+        let log_line = LogLine::new(
+            LogSource::Stdout,
+            "All containers cleaned up".to_string(),
+        );
+        let _ = self.tx_send(JobStatus::Completed, log_line).await;
     }
 
     /// Executes a script inside a running container.
