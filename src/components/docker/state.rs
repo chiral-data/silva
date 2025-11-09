@@ -167,18 +167,61 @@ impl State {
                 }
             };
 
-            // Execute jobs sequentially
+            // Sort jobs in dependency order (topological sort)
+            let sorted_jobs = match topological_sort_jobs(&jobs) {
+                Ok(sorted) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stdout,
+                        format!("Jobs will execute in dependency order: {}",
+                            sorted.iter().map(|j| j.name.as_str()).collect::<Vec<_>>().join(" → ")),
+                    );
+                    tx.send((0, JobStatus::Idle, log_line)).await.unwrap();
+                    sorted
+                }
+                Err(e) => {
+                    let log_line = LogLine::new(LogSource::Stderr, format!("Dependency error: {e}"));
+                    tx.send((0, JobStatus::Failed, log_line)).await.unwrap();
+                    tx.send((jobs.len(), JobStatus::Failed, LogLine::empty()))
+                        .await
+                        .unwrap();
+                    return;
+                }
+            };
+
+            // Execute jobs sequentially in dependency order
             let jobs_length = jobs.len();
-            for (idx, job) in jobs.into_iter().enumerate() {
+
+            // Create a map from job name to original index for UI updates
+            let job_name_to_idx: HashMap<String, usize> = jobs
+                .iter()
+                .enumerate()
+                .map(|(idx, job)| (job.name.clone(), idx))
+                .collect();
+
+            for job in sorted_jobs.iter() {
+                // Get the original index for this job (for UI updates)
+                let idx = *job_name_to_idx.get(&job.name).unwrap();
+
                 match job.load_config() {
                     Ok(config) => {
                         docker_executor.set_job_idx(idx);
+
+                        // Copy input files from dependencies before running the job
+                        copy_input_files_from_dependencies(
+                            &temp_workflow_dir,
+                            job,
+                            &jobs,
+                            &config,
+                            &tx,
+                            idx,
+                        )
+                        .await;
 
                         match docker_executor
                             .run_job(
                                 &workflow_folder.name,
                                 &temp_workflow_dir,
-                                &job,
+                                job,
                                 &config,
                                 &mut cancel_rx,
                             )
@@ -326,6 +369,276 @@ impl State {
         self.job_entries.clear();
         self.selected_job_index = None;
         self.scroll_offset = 0;
+    }
+}
+
+/// Performs topological sort on jobs based on their dependencies.
+///
+/// # Arguments
+///
+/// * `jobs` - List of jobs to sort
+///
+/// # Returns
+///
+/// * `Ok(Vec<Job>)` - Jobs sorted in dependency order (dependencies first)
+/// * `Err(String)` - Error message if circular dependency detected or invalid dependency
+///
+/// # Algorithm
+///
+/// Uses Kahn's algorithm for topological sorting:
+/// 1. Build dependency graph and calculate in-degrees
+/// 2. Start with jobs that have no dependencies (in-degree = 0)
+/// 3. Process jobs in order, removing edges as we go
+/// 4. If we can't process all jobs, there's a cycle
+fn topological_sort_jobs(jobs: &[Job]) -> Result<Vec<Job>, String> {
+    use std::collections::{HashMap, VecDeque};
+
+    if jobs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Build a map of job names to job data for quick lookup
+    let job_map: HashMap<String, Job> = jobs.iter().map(|j| (j.name.clone(), j.clone())).collect();
+
+    // Build dependency graph: job_name -> Vec<jobs that depend on it>
+    let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
+    let mut in_degree: HashMap<String, usize> = HashMap::new();
+
+    // Initialize all jobs with in-degree 0
+    for job in jobs {
+        in_degree.insert(job.name.clone(), 0);
+        dependents.entry(job.name.clone()).or_default();
+    }
+
+    // Build the graph
+    for job in jobs {
+        let config = match job.load_config() {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                return Err(format!(
+                    "Failed to load config for job '{}': {}",
+                    job.name, e
+                ))
+            }
+        };
+
+        for dep_name in &config.depends_on {
+            // Validate that the dependency exists
+            if !job_map.contains_key(dep_name) {
+                return Err(format!(
+                    "Job '{}' depends on '{}', but '{}' does not exist in the workflow",
+                    job.name, dep_name, dep_name
+                ));
+            }
+
+            // Add edge: dep_name -> job.name
+            dependents
+                .entry(dep_name.clone())
+                .or_default()
+                .push(job.name.clone());
+
+            // Increment in-degree of current job
+            *in_degree.get_mut(&job.name).unwrap() += 1;
+        }
+    }
+
+    // Kahn's algorithm: start with jobs that have no dependencies
+    let mut queue: VecDeque<String> = in_degree
+        .iter()
+        .filter(|&(_, &degree)| degree == 0)
+        .map(|(name, _)| name.clone())
+        .collect();
+
+    let mut sorted_jobs = Vec::new();
+
+    while let Some(job_name) = queue.pop_front() {
+        // Add this job to the sorted list
+        if let Some(job) = job_map.get(&job_name) {
+            sorted_jobs.push(job.clone());
+        }
+
+        // Process all jobs that depend on this one
+        if let Some(deps) = dependents.get(&job_name) {
+            for dependent in deps {
+                // Decrease in-degree
+                let degree = in_degree.get_mut(dependent).unwrap();
+                *degree -= 1;
+
+                // If in-degree becomes 0, add to queue
+                if *degree == 0 {
+                    queue.push_back(dependent.clone());
+                }
+            }
+        }
+    }
+
+    // Check if all jobs were processed (no cycles)
+    if sorted_jobs.len() != jobs.len() {
+        // Find jobs that are part of the cycle
+        let processed: std::collections::HashSet<_> =
+            sorted_jobs.iter().map(|j| &j.name).collect();
+        let unprocessed: Vec<_> = jobs
+            .iter()
+            .filter(|j| !processed.contains(&j.name))
+            .map(|j| j.name.as_str())
+            .collect();
+
+        return Err(format!(
+            "Circular dependency detected involving jobs: {}",
+            unprocessed.join(", ")
+        ));
+    }
+
+    Ok(sorted_jobs)
+}
+
+/// Helper function to copy input files from dependency jobs' outputs to the current job folder.
+///
+/// # Arguments
+///
+/// * `temp_workflow_dir` - The temporary workflow directory containing all job folders
+/// * `current_job` - The current job that needs input files
+/// * `all_jobs` - List of all jobs in the workflow (to look up dependencies by name)
+/// * `config` - The job configuration containing dependencies and input patterns
+/// * `tx` - Message channel for logging
+/// * `job_idx` - Current job index for message tagging
+///
+/// # Behavior
+///
+/// For each dependency specified in config.depends_on:
+/// - Looks for the dependency's outputs/ folder
+/// - If config.inputs is specified: copies only matching files (supports globs)
+/// - If config.inputs is empty: copies all files from dependency outputs
+/// - Handles conflicts: uses first match and sends warning
+async fn copy_input_files_from_dependencies(
+    temp_workflow_dir: &Path,
+    current_job: &Job,
+    all_jobs: &[Job],
+    config: &crate::job_config::config::JobConfig,
+    tx: &mpsc::Sender<(usize, JobStatus, LogLine)>,
+    job_idx: usize,
+) {
+    use std::collections::HashSet;
+    use std::fs;
+    use std::path::PathBuf;
+
+    if config.depends_on.is_empty() {
+        return;
+    }
+
+    let current_job_dir = temp_workflow_dir.join(&current_job.name);
+    let mut copied_files: HashSet<String> = HashSet::new();
+
+    for dep_job_name in &config.depends_on {
+        // Find the dependency job
+        let dep_job = all_jobs.iter().find(|j| &j.name == dep_job_name);
+        if dep_job.is_none() {
+            let log_line = LogLine::new(
+                LogSource::Stderr,
+                format!("Warning: Dependency job '{dep_job_name}' not found"),
+            );
+            let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
+            continue;
+        }
+
+        let dep_outputs_dir = temp_workflow_dir.join(dep_job_name).join("outputs");
+        if !dep_outputs_dir.exists() {
+            let log_line = LogLine::new(
+                LogSource::Stdout,
+                format!("No outputs found for dependency '{dep_job_name}', skipping"),
+            );
+            let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
+            continue;
+        }
+
+        // Determine which files to copy
+        let files_to_copy: Vec<PathBuf> = if config.inputs.is_empty() {
+            // Copy all files from outputs/
+            match fs::read_dir(&dep_outputs_dir) {
+                Ok(entries) => entries
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.path())
+                    .collect(),
+                Err(e) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stderr,
+                        format!("Error reading outputs from '{dep_job_name}': {e}"),
+                    );
+                    let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
+                    continue;
+                }
+            }
+        } else {
+            // Copy only matching files based on input patterns
+            let mut matching_files = Vec::new();
+            for pattern in &config.inputs {
+                let glob_pattern = dep_outputs_dir.join(pattern).to_string_lossy().to_string();
+                match glob::glob(&glob_pattern) {
+                    Ok(paths) => {
+                        for path_result in paths {
+                            if let Ok(path) = path_result {
+                                matching_files.push(path);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let log_line = LogLine::new(
+                            LogSource::Stderr,
+                            format!("Invalid glob pattern '{pattern}': {e}"),
+                        );
+                        let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
+                    }
+                }
+            }
+            matching_files
+        };
+
+        // Copy files to current job directory
+        for source_path in files_to_copy {
+            if let Some(filename) = source_path.file_name() {
+                let filename_str = filename.to_string_lossy().to_string();
+                let dest_path = current_job_dir.join(filename);
+
+                // Check for conflicts
+                if copied_files.contains(&filename_str) {
+                    let log_line = LogLine::new(
+                        LogSource::Stderr,
+                        format!(
+                            "Warning: File '{filename_str}' already copied from another dependency, skipping from '{dep_job_name}'"
+                        ),
+                    );
+                    let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
+                    continue;
+                }
+
+                // Copy the file
+                match fs::copy(&source_path, &dest_path) {
+                    Ok(_) => {
+                        copied_files.insert(filename_str.clone());
+                        let log_line = LogLine::new(
+                            LogSource::Stdout,
+                            format!("Copied '{filename_str}' from '{dep_job_name}'"),
+                        );
+                        let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
+                    }
+                    Err(e) => {
+                        let log_line = LogLine::new(
+                            LogSource::Stderr,
+                            format!("Error copying '{filename_str}' from '{dep_job_name}': {e}"),
+                        );
+                        let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
+                    }
+                }
+            }
+        }
+    }
+
+    if !copied_files.is_empty() {
+        let log_line = LogLine::new(
+            LogSource::Stdout,
+            format!("Copied {} input file(s) from dependencies", copied_files.len()),
+        );
+        let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
     }
 }
 
