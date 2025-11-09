@@ -729,26 +729,39 @@ impl DockerExecutor {
         cancel_rx: &mut mpsc::Receiver<()>,
     ) -> Result<usize, DockerError> {
         // Build a bash script that creates outputs/ dir and copies matching files
-        let mut script = String::from("set -e\n");
-        script.push_str("mkdir -p outputs\n");
+        // Note: We don't use 'set -e' to make it more forgiving when patterns don't match
+        let mut script = String::from("mkdir -p outputs\n");
         script.push_str("file_count=0\n");
+        script.push_str("echo 'Collecting output files...'\n");
 
         for pattern in output_patterns {
             // Use shopt -s nullglob to handle cases where pattern doesn't match anything
             script.push_str("shopt -s nullglob\n");
-            script.push_str(&format!("for file in {}; do\n", pattern));
-            script.push_str("  if [ -f \"$file\" ]; then\n");
-            script.push_str("    cp -v \"$file\" outputs/\n");
-            script.push_str("    ((file_count++))\n");
-            script.push_str("  elif [ -d \"$file\" ]; then\n");
-            script.push_str("    cp -rv \"$file\" outputs/\n");
-            script.push_str("    ((file_count++))\n");
-            script.push_str("  fi\n");
-            script.push_str("done\n");
+            script.push_str(&format!("matched_files=({})\n", pattern));
             script.push_str("shopt -u nullglob\n");
+            script.push_str("if [ ${#matched_files[@]} -eq 0 ]; then\n");
+            script.push_str(&format!("  echo 'Pattern \"{}\" matched no files'\n", pattern));
+            script.push_str("else\n");
+            script.push_str("  for file in \"${matched_files[@]}\"; do\n");
+            script.push_str("    if [ -f \"$file\" ]; then\n");
+            script.push_str("      if cp -v \"$file\" outputs/ 2>&1; then\n");
+            script.push_str("        file_count=$((file_count + 1))\n");
+            script.push_str("      else\n");
+            script.push_str("        echo \"Warning: Failed to copy file: $file\"\n");
+            script.push_str("      fi\n");
+            script.push_str("    elif [ -d \"$file\" ]; then\n");
+            script.push_str("      if cp -rv \"$file\" outputs/ 2>&1; then\n");
+            script.push_str("        file_count=$((file_count + 1))\n");
+            script.push_str("      else\n");
+            script.push_str("        echo \"Warning: Failed to copy directory: $file\"\n");
+            script.push_str("      fi\n");
+            script.push_str("    fi\n");
+            script.push_str("  done\n");
+            script.push_str("fi\n");
         }
 
-        script.push_str("echo $file_count\n");
+        script.push_str("echo \"Total files collected: $file_count\"\n");
+        script.push_str("exit 0\n");
 
         let exec_config = CreateExecOptions {
             attach_stdout: Some(true),
@@ -761,6 +774,7 @@ impl DockerExecutor {
         let exec = self.client.create_exec(container_id, exec_config).await?;
 
         let mut file_count = 0;
+        let mut last_line = String::new();
         match self.client.start_exec(&exec.id, None).await? {
             StartExecResults::Attached { mut output, .. } => {
                 loop {
@@ -771,12 +785,9 @@ impl DockerExecutor {
                                     let content = String::from_utf8_lossy(&message)
                                         .trim_end_matches("\n").to_string();
 
-                                    // Try to parse the last line as the file count
-                                    if let Ok(count) = content.trim().parse::<usize>() {
-                                        file_count = count;
-                                    }
-
+                                    // Save the last line to parse file count at the end
                                     if !content.is_empty() {
+                                        last_line = content.clone();
                                         let log_line = LogLine::new(LogSource::Stdout, content);
                                         self.tx_send(JobStatus::Running, log_line).await?;
                                     }
@@ -809,6 +820,14 @@ impl DockerExecutor {
                     "Exec started in detached mode".to_string(),
                 ));
             }
+        }
+
+        // Parse the file count from the last line
+        if let Some(count) = last_line.rsplit_once(':').and_then(|(_, num)| num.trim().parse().ok()) {
+            file_count = count;
+        } else {
+            let log_line = LogLine::new(LogSource::Stderr, format!("parse file count from -{last_line}- error"));
+            self.tx_send(JobStatus::Running, log_line).await?;
         }
 
         // Get exit code to ensure the script ran successfully
