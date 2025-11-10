@@ -503,6 +503,45 @@ fn topological_sort_jobs(jobs: &[Job]) -> Result<Vec<Job>, String> {
     Ok(sorted_jobs)
 }
 
+/// Helper function to recursively copy a directory and all its contents.
+///
+/// # Arguments
+///
+/// * `src` - Source directory to copy from
+/// * `dst` - Destination directory to copy to
+///
+/// # Returns
+///
+/// Returns the number of files copied, or an error if the copy fails.
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<usize> {
+    use std::fs;
+
+    // Create the destination directory if it doesn't exist
+    if !dst.exists() {
+        fs::create_dir_all(dst)?;
+    }
+
+    let mut file_count = 0;
+
+    // Iterate through entries in the source directory
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let dest_path = dst.join(entry.file_name());
+
+        if path.is_dir() {
+            // Recursively copy subdirectory
+            file_count += copy_dir_recursive(&path, &dest_path)?;
+        } else {
+            // Copy file
+            fs::copy(&path, &dest_path)?;
+            file_count += 1;
+        }
+    }
+
+    Ok(file_count)
+}
+
 /// Helper function to copy input files from dependency jobs' outputs to the current job folder.
 ///
 /// # Arguments
@@ -622,23 +661,52 @@ async fn copy_input_files_from_dependencies(
                     continue;
                 }
 
-                // Copy the file
-                match fs::copy(&source_path, &dest_path) {
-                    Ok(_) => {
-                        copied_files.insert(filename_str.clone());
-                        let log_line = LogLine::new(
-                            LogSource::Stdout,
-                            format!("Copied '{filename_str}' from '{dep_job_name}'"),
-                        );
-                        let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
+                // Copy the file or directory
+                if source_path.is_file() {
+                    // Copy single file
+                    match fs::copy(&source_path, &dest_path) {
+                        Ok(_) => {
+                            copied_files.insert(filename_str.clone());
+                            let log_line = LogLine::new(
+                                LogSource::Stdout,
+                                format!("Copied file '{filename_str}' from '{dep_job_name}'"),
+                            );
+                            let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
+                        }
+                        Err(e) => {
+                            let log_line = LogLine::new(
+                                LogSource::Stderr,
+                                format!("Error copying file '{filename_str}' from '{dep_job_name}': {e}"),
+                            );
+                            let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
+                        }
                     }
-                    Err(e) => {
-                        let log_line = LogLine::new(
-                            LogSource::Stderr,
-                            format!("Error copying '{filename_str}' from '{dep_job_name}': {e}"),
-                        );
-                        let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
+                } else if source_path.is_dir() {
+                    // Copy directory recursively
+                    match copy_dir_recursive(&source_path, &dest_path) {
+                        Ok(file_count) => {
+                            copied_files.insert(filename_str.clone());
+                            let log_line = LogLine::new(
+                                LogSource::Stdout,
+                                format!("Copied directory '{filename_str}/' ({file_count} file(s)) from '{dep_job_name}'"),
+                            );
+                            let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
+                        }
+                        Err(e) => {
+                            let log_line = LogLine::new(
+                                LogSource::Stderr,
+                                format!("Error copying directory '{filename_str}/' from '{dep_job_name}': {e}"),
+                            );
+                            let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
+                        }
                     }
+                } else {
+                    // Not a regular file or directory (e.g., symlink)
+                    let log_line = LogLine::new(
+                        LogSource::Stderr,
+                        format!("Warning: Skipping '{filename_str}' from '{dep_job_name}' (not a regular file or directory)"),
+                    );
+                    let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
                 }
             }
         }
