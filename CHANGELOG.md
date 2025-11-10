@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.3]
 
-- input and output files, job dependencies
+### Added
+- Job dependencies with `depends_on` field and topological sorting
+- Input/output file patterns with glob support (`*.csv`, `data/*`)
+- Recursive directory copying for input files
+- Container reuse by image for improved performance
+
+### Changed
+- Extracted `job_config` as standalone publishable crate
+- Restructured project as Cargo workspace
 
 ## [0.3.2]
 
