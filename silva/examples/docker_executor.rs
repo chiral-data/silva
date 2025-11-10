@@ -1,11 +1,9 @@
 use std::path::Path;
 
-use silva::{
-    components::{
-        docker::{executor::DockerExecutor, job::JobStatus, logs::LogLine},
-        workflow,
-    },
-    job_config::config,
+use job_config::config;
+use silva::components::{
+    docker::{executor::DockerExecutor, job::JobStatus, logs::LogLine},
+    workflow,
 };
 use tokio::sync::mpsc;
 
