@@ -90,7 +90,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let mut container_registry = std::collections::HashMap::new();
             let container_id = executor
-                .run_job("workflow_1", &workflow_path, &job, &config, &mut container_registry, &mut cancel_rx)
+                .run_job(
+                    "workflow_1",
+                    &workflow_path,
+                    &job,
+                    &config,
+                    &mut container_registry,
+                    &mut cancel_rx,
+                )
                 .await
                 .map_err(|e| {
                     eprintln!("✗ Job execution error: {e}");

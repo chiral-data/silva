@@ -447,91 +447,92 @@ impl DockerExecutor {
             existing_id.clone()
         } else {
             // Create new container
-        let log_line = LogLine::new(
-            LogSource::Stdout,
-            format!("Creating container with image: {image_name}"),
-        );
-        self.tx_send(JobStatus::CreatingContainer, log_line).await?;
-
-        // Build host config based on GPU requirement
-        let mut host_config = if config.use_gpu {
             let log_line = LogLine::new(
                 LogSource::Stdout,
-                "GPU support enabled for this container".to_string(),
+                format!("Creating container with image: {image_name}"),
             );
             self.tx_send(JobStatus::CreatingContainer, log_line).await?;
 
-            bollard::models::HostConfig {
-                extra_hosts: Some(vec!["host.docker.internal:host-gateway".into()]),
-                device_requests: Some(vec![bollard::models::DeviceRequest {
-                    driver: Some("".into()),
-                    count: Some(-1),
-                    device_ids: None,
-                    capabilities: Some(vec![vec!["gpu".into()]]),
-                    options: Some(HashMap::new()),
-                }]),
+            // Build host config based on GPU requirement
+            let mut host_config = if config.use_gpu {
+                let log_line = LogLine::new(
+                    LogSource::Stdout,
+                    "GPU support enabled for this container".to_string(),
+                );
+                self.tx_send(JobStatus::CreatingContainer, log_line).await?;
+
+                bollard::models::HostConfig {
+                    extra_hosts: Some(vec!["host.docker.internal:host-gateway".into()]),
+                    device_requests: Some(vec![bollard::models::DeviceRequest {
+                        driver: Some("".into()),
+                        count: Some(-1),
+                        device_ids: None,
+                        capabilities: Some(vec![vec!["gpu".into()]]),
+                        options: Some(HashMap::new()),
+                    }]),
+                    ..Default::default()
+                }
+            } else {
+                bollard::models::HostConfig {
+                    extra_hosts: Some(vec!["host.docker.internal:host-gateway".into()]),
+                    ..Default::default()
+                }
+            };
+            let workflow_folder_str = workflow_folder.to_str().unwrap();
+            let volume_binds = vec![format!("{workflow_folder_str}:{work_dir}")];
+            host_config.binds = Some(volume_binds);
+            let container_config = Config {
+                image: Some(image_name.clone()),
+                tty: Some(true),
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                host_config: Some(host_config),
+                working_dir: Some(work_dir.to_string()),
                 ..Default::default()
-            }
-        } else {
-            bollard::models::HostConfig {
-                extra_hosts: Some(vec!["host.docker.internal:host-gateway".into()]),
-                ..Default::default()
-            }
-        };
-        let workflow_folder_str = workflow_folder.to_str().unwrap();
-        let volume_binds = vec![format!("{workflow_folder_str}:{work_dir}")];
-        host_config.binds = Some(volume_binds);
-        let container_config = Config {
-            image: Some(image_name.clone()),
-            tty: Some(true),
-            attach_stdout: Some(true),
-            attach_stderr: Some(true),
-            host_config: Some(host_config),
-            working_dir: Some(work_dir.to_string()),
-            ..Default::default()
-        };
+            };
 
-        let container = self
-            .client
-            .create_container::<String, String>(None, container_config)
-            .await
-            .map_err(|e| DockerError::ContainerCreateFailed(e.to_string()))?;
-        let log_line = LogLine::new(
-            LogSource::Stdout,
-            format!(
-                "Container created: {}, binding {workflow_folder_str} to {work_dir}",
-                container.id
-            ),
-        );
-        self.tx_send(JobStatus::CreatingContainer, log_line).await?;
+            let container = self
+                .client
+                .create_container::<String, String>(None, container_config)
+                .await
+                .map_err(|e| DockerError::ContainerCreateFailed(e.to_string()))?;
+            let log_line = LogLine::new(
+                LogSource::Stdout,
+                format!(
+                    "Container created: {}, binding {workflow_folder_str} to {work_dir}",
+                    container.id
+                ),
+            );
+            self.tx_send(JobStatus::CreatingContainer, log_line).await?;
 
-        // Start container
-        self.client
-            .start_container::<String>(&container.id, None)
-            .await
-            .map_err(|e| DockerError::ContainerStartFailed(e.to_string()))?;
+            // Start container
+            self.client
+                .start_container::<String>(&container.id, None)
+                .await
+                .map_err(|e| DockerError::ContainerStartFailed(e.to_string()))?;
 
-        let log_line = LogLine::new(
-            LogSource::Stdout,
-            format!("Waiting for Container {} running ... ", container.id),
-        );
-        self.tx_send(JobStatus::CreatingContainer, log_line).await?;
+            let log_line = LogLine::new(
+                LogSource::Stdout,
+                format!("Waiting for Container {} running ... ", container.id),
+            );
+            self.tx_send(JobStatus::CreatingContainer, log_line).await?;
 
-        // Wait for container to be running (timeout: 30 seconds)
-        self.wait_for_container_running(&container.id, 30).await?;
+            // Wait for container to be running (timeout: 30 seconds)
+            self.wait_for_container_running(&container.id, 30).await?;
 
-        let log_line = LogLine::new(
-            LogSource::Stdout,
-            format!("Now container {} is running ... ", container.id),
-        );
-        self.tx_send(
-            JobStatus::ContainerRunning(container.id.to_string()),
-            log_line,
-        )
-        .await?;
+            let log_line = LogLine::new(
+                LogSource::Stdout,
+                format!("Now container {} is running ... ", container.id),
+            );
+            self.tx_send(
+                JobStatus::ContainerRunning(container.id.to_string()),
+                log_line,
+            )
+            .await?;
 
-        let log_line = LogLine::new(LogSource::Stdout, "Container started and ready".to_string());
-        self.tx_send(JobStatus::Running, log_line).await?;
+            let log_line =
+                LogLine::new(LogSource::Stdout, "Container started and ready".to_string());
+            self.tx_send(JobStatus::Running, log_line).await?;
 
             // Register the new container in the registry
             container_registry.insert(image_name.clone(), container.id.clone());
@@ -599,15 +600,18 @@ impl DockerExecutor {
 
         // Collect output files if all scripts succeeded
         if all_scripts_succeeded && !config.outputs.is_empty() {
-            let log_line = LogLine::new(
-                LogSource::Stdout,
-                "Collecting output files...".to_string(),
-            );
+            let log_line =
+                LogLine::new(LogSource::Stdout, "Collecting output files...".to_string());
             self.tx_send(JobStatus::Running, log_line).await?;
 
             let job_workdir = Path::new(work_dir).join(&job.name);
             match self
-                .collect_output_files(&container_id, job_workdir.to_str().unwrap(), &config.outputs, cancel_rx)
+                .collect_output_files(
+                    &container_id,
+                    job_workdir.to_str().unwrap(),
+                    &config.outputs,
+                    cancel_rx,
+                )
                 .await
             {
                 Ok(file_count) => {
@@ -630,7 +634,9 @@ impl DockerExecutor {
         // Return container ID for cleanup later
         let log_line = LogLine::new(
             LogSource::Stdout,
-            format!("Job completed, container {container_id} will be cleaned up after workflow finishes"),
+            format!(
+                "Job completed, container {container_id} will be cleaned up after workflow finishes"
+            ),
         );
         self.tx_send(JobStatus::Completed, log_line).await?;
 
@@ -684,7 +690,11 @@ impl DockerExecutor {
                 force: true,
                 ..Default::default()
             };
-            match self.client.remove_container(container_id, Some(remove_options)).await {
+            match self
+                .client
+                .remove_container(container_id, Some(remove_options))
+                .await
+            {
                 Ok(_) => {
                     let log_line = LogLine::new(
                         LogSource::Stdout,
@@ -702,10 +712,7 @@ impl DockerExecutor {
             }
         }
 
-        let log_line = LogLine::new(
-            LogSource::Stdout,
-            "All containers cleaned up".to_string(),
-        );
+        let log_line = LogLine::new(LogSource::Stdout, "All containers cleaned up".to_string());
         let _ = self.tx_send(JobStatus::Completed, log_line).await;
     }
 
@@ -818,7 +825,9 @@ impl DockerExecutor {
             script.push_str(&format!("matched_files=({pattern})\n"));
             script.push_str("shopt -u nullglob\n");
             script.push_str("if [ ${#matched_files[@]} -eq 0 ]; then\n");
-            script.push_str(&format!("  echo 'Pattern \"{pattern}\" matched no files'\n"));
+            script.push_str(&format!(
+                "  echo 'Pattern \"{pattern}\" matched no files'\n"
+            ));
             script.push_str("else\n");
             script.push_str("  for file in \"${matched_files[@]}\"; do\n");
             script.push_str("    if [ -f \"$file\" ]; then\n");
@@ -901,10 +910,16 @@ impl DockerExecutor {
         }
 
         // Parse the file count from the last line
-        if let Some(count) = last_line.rsplit_once(':').and_then(|(_, num)| num.trim().parse().ok()) {
+        if let Some(count) = last_line
+            .rsplit_once(':')
+            .and_then(|(_, num)| num.trim().parse().ok())
+        {
             file_count = count;
         } else {
-            let log_line = LogLine::new(LogSource::Stderr, format!("parse file count from -{last_line}- error"));
+            let log_line = LogLine::new(
+                LogSource::Stderr,
+                format!("parse file count from -{last_line}- error"),
+            );
             self.tx_send(JobStatus::Running, log_line).await?;
         }
 

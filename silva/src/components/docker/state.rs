@@ -172,14 +172,21 @@ impl State {
                 Ok(sorted) => {
                     let log_line = LogLine::new(
                         LogSource::Stdout,
-                        format!("Jobs will execute in dependency order: {}",
-                            sorted.iter().map(|j| j.name.as_str()).collect::<Vec<_>>().join(" → ")),
+                        format!(
+                            "Jobs will execute in dependency order: {}",
+                            sorted
+                                .iter()
+                                .map(|j| j.name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(" → ")
+                        ),
                     );
                     tx.send((0, JobStatus::Idle, log_line)).await.unwrap();
                     sorted
                 }
                 Err(e) => {
-                    let log_line = LogLine::new(LogSource::Stderr, format!("Dependency error: {e}"));
+                    let log_line =
+                        LogLine::new(LogSource::Stderr, format!("Dependency error: {e}"));
                     tx.send((0, JobStatus::Failed, log_line)).await.unwrap();
                     tx.send((jobs.len(), JobStatus::Failed, LogLine::empty()))
                         .await
@@ -233,7 +240,7 @@ impl State {
                         {
                             Ok(container_id) => {
                                 // Container is tracked in the registry and will be cleaned up at the end
-                                let _ = container_id;  // Suppress unused variable warning
+                                let _ = container_id; // Suppress unused variable warning
                             }
                             Err(e) => {
                                 let log_line = LogLine::new(
@@ -429,7 +436,7 @@ fn topological_sort_jobs(jobs: &[Job]) -> Result<Vec<Job>, String> {
                 return Err(format!(
                     "Failed to load config for job '{}': {}",
                     job.name, e
-                ))
+                ));
             }
         };
 
@@ -486,8 +493,7 @@ fn topological_sort_jobs(jobs: &[Job]) -> Result<Vec<Job>, String> {
     // Check if all jobs were processed (no cycles)
     if sorted_jobs.len() != jobs.len() {
         // Find jobs that are part of the cycle
-        let processed: std::collections::HashSet<_> =
-            sorted_jobs.iter().map(|j| &j.name).collect();
+        let processed: std::collections::HashSet<_> = sorted_jobs.iter().map(|j| &j.name).collect();
         let unprocessed: Vec<_> = jobs
             .iter()
             .filter(|j| !processed.contains(&j.name))
@@ -605,10 +611,7 @@ async fn copy_input_files_from_dependencies(
         let files_to_copy: Vec<PathBuf> = if config.inputs.is_empty() {
             // Copy all files from outputs/
             match fs::read_dir(&dep_outputs_dir) {
-                Ok(entries) => entries
-                    .filter_map(|e| e.ok())
-                    .map(|e| e.path())
-                    .collect(),
+                Ok(entries) => entries.filter_map(|e| e.ok()).map(|e| e.path()).collect(),
                 Err(e) => {
                     let log_line = LogLine::new(
                         LogSource::Stderr,
@@ -674,7 +677,9 @@ async fn copy_input_files_from_dependencies(
                         Err(e) => {
                             let log_line = LogLine::new(
                                 LogSource::Stderr,
-                                format!("Error copying file '{filename_str}' from '{dep_job_name}': {e}"),
+                                format!(
+                                    "Error copying file '{filename_str}' from '{dep_job_name}': {e}"
+                                ),
                             );
                             let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
                         }
@@ -686,14 +691,18 @@ async fn copy_input_files_from_dependencies(
                             copied_files.insert(filename_str.clone());
                             let log_line = LogLine::new(
                                 LogSource::Stdout,
-                                format!("Copied directory '{filename_str}/' ({file_count} file(s)) from '{dep_job_name}'"),
+                                format!(
+                                    "Copied directory '{filename_str}/' ({file_count} file(s)) from '{dep_job_name}'"
+                                ),
                             );
                             let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
                         }
                         Err(e) => {
                             let log_line = LogLine::new(
                                 LogSource::Stderr,
-                                format!("Error copying directory '{filename_str}/' from '{dep_job_name}': {e}"),
+                                format!(
+                                    "Error copying directory '{filename_str}/' from '{dep_job_name}': {e}"
+                                ),
                             );
                             let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
                         }
@@ -702,7 +711,9 @@ async fn copy_input_files_from_dependencies(
                     // Not a regular file or directory (e.g., symlink)
                     let log_line = LogLine::new(
                         LogSource::Stderr,
-                        format!("Warning: Skipping '{filename_str}' from '{dep_job_name}' (not a regular file or directory)"),
+                        format!(
+                            "Warning: Skipping '{filename_str}' from '{dep_job_name}' (not a regular file or directory)"
+                        ),
                     );
                     let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
                 }
@@ -713,7 +724,10 @@ async fn copy_input_files_from_dependencies(
     if !copied_files.is_empty() {
         let log_line = LogLine::new(
             LogSource::Stdout,
-            format!("Copied {} input file(s) from dependencies", copied_files.len()),
+            format!(
+                "Copied {} input file(s) from dependencies",
+                copied_files.len()
+            ),
         );
         let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
     }
