@@ -939,6 +939,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
+name = "job_config"
+version = "0.3.3"
+dependencies = [
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "js-sys"
 version = "0.3.81"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1645,6 +1653,7 @@ dependencies = [
  "fs_extra",
  "futures-util",
  "glob",
+ "job_config",
  "ratatui",
  "reqwest",
  "serde",
