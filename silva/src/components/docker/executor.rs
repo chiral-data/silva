@@ -140,7 +140,7 @@ use std::path::Path;
 use tokio::sync::mpsc;
 
 use crate::components::workflow;
-use crate::job_config::config::{Container, JobConfig};
+use job_config::config::{Container, JobConfig};
 
 use super::error::DockerError;
 use super::job::JobStatus;
@@ -370,7 +370,7 @@ impl DockerExecutor {
     ///
     /// # Returns
     ///
-    /// * `Ok(())` - Job execution completed (successfully or with errors)
+    /// * `Ok(String)` - Container ID of the job container (for cleanup later)
     /// * `Err(DockerError)` - Fatal execution error
     ///
     /// # Behavior
@@ -378,18 +378,21 @@ impl DockerExecutor {
     /// 1. Pulls/builds the Docker image specified in config
     /// 2. Creates and starts a container with job_folder mounted
     /// 3. Executes pre-run, run, and post-run scripts sequentially
-    /// 4. Stops and removes the container when done
+    /// 4. Returns the container ID (container is NOT stopped/removed)
     /// 5. Can be interrupted via cancel_rx channel
     ///
     /// Job status and logs are streamed via the message channel throughout execution.
+    ///
+    /// **Note**: The container is left running. Call `cleanup_containers()` after all jobs complete.
     pub async fn run_job(
         &self,
         workflow_name: &str,
         workflow_folder: &Path, // tmp workflow folder
         job: &workflow::Job,
         config: &JobConfig,
+        container_registry: &mut std::collections::HashMap<String, String>,
         cancel_rx: &mut mpsc::Receiver<()>,
-    ) -> Result<(), DockerError> {
+    ) -> Result<String, DockerError> {
         let work_dir = "/workspace";
 
         let image_name = match &config.container {
@@ -434,7 +437,16 @@ impl DockerExecutor {
             }
         };
 
-        // Create container
+        // Check if we already have a container for this image
+        let container_id = if let Some(existing_id) = container_registry.get(&image_name) {
+            let log_line = LogLine::new(
+                LogSource::Stdout,
+                format!("Reusing existing container {existing_id} for image {image_name}"),
+            );
+            self.tx_send(JobStatus::Running, log_line).await?;
+            existing_id.clone()
+        } else {
+            // Create new container
         let log_line = LogLine::new(
             LogSource::Stdout,
             format!("Creating container with image: {image_name}"),
@@ -521,6 +533,11 @@ impl DockerExecutor {
         let log_line = LogLine::new(LogSource::Stdout, "Container started and ready".to_string());
         self.tx_send(JobStatus::Running, log_line).await?;
 
+            // Register the new container in the registry
+            container_registry.insert(image_name.clone(), container.id.clone());
+            container.id
+        };
+
         // Execute scripts sequentially
         let scripts = vec![
             ("pre_run.sh", &config.scripts.pre),
@@ -528,6 +545,7 @@ impl DockerExecutor {
             ("post_run.sh", &config.scripts.post),
         ];
 
+        let mut all_scripts_succeeded = true;
         for (name, script) in scripts {
             if ["pre_run.sh", "post_run.sh"].contains(&name)
                 && !workflow_folder.join(&job.name).join(script).exists()
@@ -546,7 +564,7 @@ impl DockerExecutor {
             let job_workdir = Path::new(work_dir).join(&job.name);
             match self
                 .exec_script(
-                    &container.id,
+                    &container_id,
                     job_workdir.to_str().unwrap(),
                     script,
                     cancel_rx,
@@ -560,6 +578,7 @@ impl DockerExecutor {
                             format!("Script {script} failed with exit code {exit_code}"),
                         );
                         self.tx_send(JobStatus::Failed, log_line).await?;
+                        all_scripts_succeeded = false;
                         break;
                     } else {
                         let log_line = LogLine::new(
@@ -572,30 +591,122 @@ impl DockerExecutor {
                 Err(e) => {
                     let log_line = LogLine::new(LogSource::Stderr, format!("Error: {e}"));
                     self.tx_send(JobStatus::Failed, log_line).await?;
+                    all_scripts_succeeded = false;
                     break;
                 }
             }
         }
 
-        // Stop and remove container
-        let _ = self.client.stop_container(&container.id, None).await;
+        // Collect output files if all scripts succeeded
+        if all_scripts_succeeded && !config.outputs.is_empty() {
+            let log_line = LogLine::new(
+                LogSource::Stdout,
+                "Collecting output files...".to_string(),
+            );
+            self.tx_send(JobStatus::Running, log_line).await?;
 
-        let remove_options = RemoveContainerOptions {
-            force: true,
-            ..Default::default()
-        };
-        let _ = self
-            .client
-            .remove_container(&container.id, Some(remove_options))
-            .await;
+            let job_workdir = Path::new(work_dir).join(&job.name);
+            match self
+                .collect_output_files(&container_id, job_workdir.to_str().unwrap(), &config.outputs, cancel_rx)
+                .await
+            {
+                Ok(file_count) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stdout,
+                        format!("Collected {file_count} output file(s) to outputs/ folder"),
+                    );
+                    self.tx_send(JobStatus::Completed, log_line).await?;
+                }
+                Err(e) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stderr,
+                        format!("Warning: Failed to collect output files: {e}"),
+                    );
+                    self.tx_send(JobStatus::Running, log_line).await?;
+                }
+            }
+        }
 
+        // Return container ID for cleanup later
         let log_line = LogLine::new(
             LogSource::Stdout,
-            "Container stopped and removed".to_string(),
+            format!("Job completed, container {container_id} will be cleaned up after workflow finishes"),
         );
         self.tx_send(JobStatus::Completed, log_line).await?;
 
-        Ok(())
+        Ok(container_id)
+    }
+
+    /// Cleans up (stops and removes) multiple containers.
+    ///
+    /// # Arguments
+    ///
+    /// * `container_ids` - List of container IDs to clean up
+    ///
+    /// # Behavior
+    ///
+    /// - Stops each container
+    /// - Removes each container with force option
+    /// - Logs cleanup progress
+    /// - Continues even if some containers fail to stop/remove
+    pub async fn cleanup_containers(&self, container_ids: &[String]) {
+        if container_ids.is_empty() {
+            return;
+        }
+
+        let log_line = LogLine::new(
+            LogSource::Stdout,
+            format!("Cleaning up {} container(s)...", container_ids.len()),
+        );
+        let _ = self.tx_send(JobStatus::Completed, log_line).await;
+
+        for container_id in container_ids {
+            // Stop container
+            match self.client.stop_container(container_id, None).await {
+                Ok(_) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stdout,
+                        format!("Stopped container {container_id}"),
+                    );
+                    let _ = self.tx_send(JobStatus::Completed, log_line).await;
+                }
+                Err(e) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stderr,
+                        format!("Failed to stop container {container_id}: {e}"),
+                    );
+                    let _ = self.tx_send(JobStatus::Completed, log_line).await;
+                }
+            }
+
+            // Remove container
+            let remove_options = RemoveContainerOptions {
+                force: true,
+                ..Default::default()
+            };
+            match self.client.remove_container(container_id, Some(remove_options)).await {
+                Ok(_) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stdout,
+                        format!("Removed container {container_id}"),
+                    );
+                    let _ = self.tx_send(JobStatus::Completed, log_line).await;
+                }
+                Err(e) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stderr,
+                        format!("Failed to remove container {container_id}: {e}"),
+                    );
+                    let _ = self.tx_send(JobStatus::Completed, log_line).await;
+                }
+            }
+        }
+
+        let log_line = LogLine::new(
+            LogSource::Stdout,
+            "All containers cleaned up".to_string(),
+        );
+        let _ = self.tx_send(JobStatus::Completed, log_line).await;
     }
 
     /// Executes a script inside a running container.
@@ -670,6 +781,145 @@ impl DockerExecutor {
         let exit_code = inspect.exit_code.unwrap_or(1);
 
         Ok(exit_code)
+    }
+
+    /// Collects output files from the container based on glob patterns.
+    ///
+    /// Creates an outputs/ directory in the job folder and copies matching files.
+    /// Since the job folder is bind-mounted, files will automatically appear on the host.
+    ///
+    /// # Arguments
+    ///
+    /// * `container_id` - The running container ID
+    /// * `job_work_dir` - Working directory inside the container (e.g., "/workspace/job1")
+    /// * `output_patterns` - List of glob patterns to match files (e.g., ["*.csv", "results/*.json"])
+    /// * `cancel_rx` - Channel receiver for cancellation signals
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(usize)` - Number of files collected
+    /// * `Err(DockerError)` - Collection error
+    async fn collect_output_files(
+        &self,
+        container_id: &str,
+        job_work_dir: &str,
+        output_patterns: &[String],
+        cancel_rx: &mut mpsc::Receiver<()>,
+    ) -> Result<usize, DockerError> {
+        // Build a bash script that creates outputs/ dir and copies matching files
+        // Note: We don't use 'set -e' to make it more forgiving when patterns don't match
+        let mut script = String::from("mkdir -p outputs\n");
+        script.push_str("file_count=0\n");
+        script.push_str("echo 'Collecting output files...'\n");
+
+        for pattern in output_patterns {
+            // Use shopt -s nullglob to handle cases where pattern doesn't match anything
+            script.push_str("shopt -s nullglob\n");
+            script.push_str(&format!("matched_files=({pattern})\n"));
+            script.push_str("shopt -u nullglob\n");
+            script.push_str("if [ ${#matched_files[@]} -eq 0 ]; then\n");
+            script.push_str(&format!("  echo 'Pattern \"{pattern}\" matched no files'\n"));
+            script.push_str("else\n");
+            script.push_str("  for file in \"${matched_files[@]}\"; do\n");
+            script.push_str("    if [ -f \"$file\" ]; then\n");
+            script.push_str("      if cp -v \"$file\" outputs/ 2>&1; then\n");
+            script.push_str("        file_count=$((file_count + 1))\n");
+            script.push_str("      else\n");
+            script.push_str("        echo \"Warning: Failed to copy file: $file\"\n");
+            script.push_str("      fi\n");
+            script.push_str("    elif [ -d \"$file\" ]; then\n");
+            script.push_str("      if cp -rv \"$file\" outputs/ 2>&1; then\n");
+            script.push_str("        file_count=$((file_count + 1))\n");
+            script.push_str("      else\n");
+            script.push_str("        echo \"Warning: Failed to copy directory: $file\"\n");
+            script.push_str("      fi\n");
+            script.push_str("    fi\n");
+            script.push_str("  done\n");
+            script.push_str("fi\n");
+        }
+
+        script.push_str("echo \"Total files collected: $file_count\"\n");
+        script.push_str("exit 0\n");
+
+        let exec_config = CreateExecOptions {
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            cmd: Some(vec!["/bin/bash", "-c", &script]),
+            working_dir: Some(job_work_dir),
+            ..Default::default()
+        };
+
+        let exec = self.client.create_exec(container_id, exec_config).await?;
+
+        let mut file_count = 0;
+        let mut last_line = String::new();
+        match self.client.start_exec(&exec.id, None).await? {
+            StartExecResults::Attached { mut output, .. } => {
+                loop {
+                    tokio::select! {
+                        result = output.next() => {
+                            match result {
+                                Some(Ok(LogOutput::StdOut { message })) => {
+                                    let content = String::from_utf8_lossy(&message)
+                                        .trim_end_matches("\n").to_string();
+
+                                    // Save the last line to parse file count at the end
+                                    if !content.is_empty() {
+                                        last_line = content.clone();
+                                        let log_line = LogLine::new(LogSource::Stdout, content);
+                                        self.tx_send(JobStatus::Running, log_line).await?;
+                                    }
+                                }
+                                Some(Ok(LogOutput::StdErr { message })) => {
+                                    let content = String::from_utf8_lossy(&message)
+                                        .trim_end_matches("\n").to_string();
+                                    if !content.is_empty() {
+                                        let log_line = LogLine::new(LogSource::Stderr, content);
+                                        self.tx_send(JobStatus::Running, log_line).await?;
+                                    }
+                                }
+                                Some(Err(e)) => {
+                                    return Err(DockerError::LogStreamError(e.to_string()));
+                                }
+                                None => {
+                                    break;
+                                }
+                                _ => {}
+                            }
+                        }
+                        _ = cancel_rx.recv() => {
+                            break;
+                        }
+                    }
+                }
+            }
+            StartExecResults::Detached => {
+                return Err(DockerError::LogStreamError(
+                    "Exec started in detached mode".to_string(),
+                ));
+            }
+        }
+
+        // Parse the file count from the last line
+        if let Some(count) = last_line.rsplit_once(':').and_then(|(_, num)| num.trim().parse().ok()) {
+            file_count = count;
+        } else {
+            let log_line = LogLine::new(LogSource::Stderr, format!("parse file count from -{last_line}- error"));
+            self.tx_send(JobStatus::Running, log_line).await?;
+        }
+
+        // Get exit code to ensure the script ran successfully
+        let inspect = self.client.inspect_exec(&exec.id).await?;
+        let exit_code = inspect.exit_code.unwrap_or(1);
+
+        if exit_code != 0 {
+            return Err(DockerError::ScriptExecutionFailed {
+                script: "output_collection".to_string(),
+                exit_code,
+            });
+        }
+
+        Ok(file_count)
     }
 
     /// Creates a tar archive from a directory for Docker build context.

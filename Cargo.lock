@@ -507,6 +507,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
 
 [[package]]
+name = "glob"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
+
+[[package]]
 name = "h2"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -931,6 +937,14 @@ name = "itoa"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
+
+[[package]]
+name = "job_config"
+version = "0.3.3"
+dependencies = [
+ "serde",
+ "toml",
+]
 
 [[package]]
 name = "js-sys"
@@ -1630,7 +1644,7 @@ dependencies = [
 
 [[package]]
 name = "silva"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "bollard",
  "chrono",
@@ -1638,6 +1652,8 @@ dependencies = [
  "flume",
  "fs_extra",
  "futures-util",
+ "glob",
+ "job_config",
  "ratatui",
  "reqwest",
  "serde",
