@@ -5,7 +5,6 @@ use ratatui::Terminal;
 
 pub mod app;
 pub mod components;
-pub mod job_config;
 mod layout;
 mod style;
 

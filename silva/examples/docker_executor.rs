@@ -1,11 +1,9 @@
 use std::path::Path;
 
-use silva::{
-    components::{
-        docker::{executor::DockerExecutor, job::JobStatus, logs::LogLine},
-        workflow,
-    },
-    job_config::config,
+use job_config::config;
+use silva::components::{
+    docker::{executor::DockerExecutor, job::JobStatus, logs::LogLine},
+    workflow,
 };
 use tokio::sync::mpsc;
 
@@ -89,15 +87,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             println!("Starting job execution...");
             println!("─────────────────────────────\n");
-            executor
-                .run_job("workflow_1", &workflow_path, &job, &config, &mut cancel_rx)
+
+            let mut container_registry = std::collections::HashMap::new();
+            let container_id = executor
+                .run_job(
+                    "workflow_1",
+                    &workflow_path,
+                    &job,
+                    &config,
+                    &mut container_registry,
+                    &mut cancel_rx,
+                )
                 .await
                 .map_err(|e| {
                     eprintln!("✗ Job execution error: {e}");
                 })
                 .unwrap();
+
             println!("\n─────────────────────────────");
             println!("Job Execution Complete\n");
+            println!("Cleaning up container {container_id}...");
+            executor.cleanup_containers(&[container_id]).await;
+            println!("✓ Container cleaned up\n");
         });
 
         let mut cancel_sent = false;

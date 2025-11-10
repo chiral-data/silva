@@ -2,7 +2,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::job_config::config::{JobConfig, JobConfigError};
+use job_config::config::{JobConfig, JobConfigError};
 
 /// Represents a job within a workflow.
 #[derive(Debug, Clone, PartialEq)]

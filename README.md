@@ -177,6 +177,101 @@ run = "process_data.sh"
 post = "generate_report.sh"
 ```
 
+#### Job Dependencies and Data Flow (v0.3.3+)
+
+Jobs can now specify dependencies on other jobs and automatically handle input/output file transfers:
+
+```toml
+# Example: A job that depends on preprocessing and uses its outputs
+depends_on = ["01_preprocessing", "02_feature_extraction"]
+inputs = ["*.csv", "features/*.json"]
+outputs = ["model.pkl", "metrics/*.txt"]
+
+[container]
+docker_image = "python:3.11-slim"
+
+[scripts]
+run = "train_model.sh"
+```
+
+**Dependency Fields:**
+
+- `depends_on`: List of job names that must complete before this job runs
+  - Jobs execute in dependency order (topological sort)
+  - Circular dependencies are detected and reported as errors
+  - If a dependency job fails, dependent jobs won't execute
+
+- `inputs`: Glob patterns for files to copy from dependency outputs
+  - Files are copied from each dependency's `outputs/` folder
+  - If empty or omitted, **all** output files from dependencies are copied
+  - Supports wildcards: `*.csv`, `data_*.json`, `results/**/*.txt`
+  - Conflicts (same filename from multiple dependencies) use first match with warning
+
+- `outputs`: Glob patterns for files to collect after job execution
+  - Matching files are copied to an `outputs/` folder in the job directory
+  - Supports wildcards and directory patterns
+  - Files become available to jobs that depend on this one
+  - If empty, no output collection occurs
+
+**Example Multi-Job Workflow with Dependencies:**
+
+```
+ml_pipeline/
+├── 01_data_prep/
+│   ├── @job.toml         # No dependencies
+│   └── prepare.sh        # Outputs: train.csv, test.csv
+├── 02_feature_eng/
+│   ├── @job.toml         # depends_on: ["01_data_prep"]
+│   └── features.sh       # Inputs: *.csv, Outputs: features.json
+└── 03_train_model/
+    ├── @job.toml         # depends_on: ["02_feature_eng"]
+    └── train.sh          # Inputs: features.json, Outputs: model.pkl
+```
+
+**01_data_prep/@job.toml:**
+```toml
+outputs = ["train.csv", "test.csv"]
+
+[container]
+docker_image = "python:3.11-slim"
+
+[scripts]
+run = "prepare.sh"
+```
+
+**02_feature_eng/@job.toml:**
+```toml
+depends_on = ["01_data_prep"]
+inputs = ["*.csv"]
+outputs = ["features.json"]
+
+[container]
+docker_image = "python:3.11-slim"
+
+[scripts]
+run = "features.sh"
+```
+
+**03_train_model/@job.toml:**
+```toml
+depends_on = ["02_feature_eng"]
+inputs = ["features.json"]
+outputs = ["model.pkl", "metrics.txt"]
+
+[container]
+docker_image = "python:3.11-slim"
+
+[scripts]
+run = "train.sh"
+```
+
+**How It Works:**
+
+1. Jobs execute in dependency order (not alphabetical when dependencies exist)
+2. Before a job runs, input files from dependencies are copied to the job directory
+3. After successful execution, output files are collected to the `outputs/` folder
+4. The workflow displays execution order at startup: `01_data_prep → 02_feature_eng → 03_train_model`
+
 ### Creating Workflows
 
 #### 1. Create Workflow Directory
@@ -269,10 +364,13 @@ chmod +x $SILVA_HOME_DIR/my_workflow/01_preprocessing/preprocess.sh
 
 #### Sequential Execution
 
-- Jobs execute in **alphabetical order** by folder name
+- Jobs execute in **dependency order** (topological sort) when dependencies are specified
+- For workflows without dependencies, jobs execute in **alphabetical order** by folder name
 - Each job runs to completion before the next job starts
 - Job folder is mounted as `/workspace` in the container
 - Scripts execute with `/workspace` as the working directory
+- Input files from dependencies are copied to the job directory before execution
+- Output files are collected to the `outputs/` folder after successful execution
 
 #### Script Execution Order
 
@@ -392,7 +490,34 @@ run = "npm test"
 
 #### Sharing Data Between Jobs
 
-Jobs execute in separate containers, so data must be persisted to the job folder:
+**Recommended Approach (v0.3.3+):** Use the `depends_on`, `inputs`, and `outputs` configuration:
+
+```toml
+# job_1/@job.toml
+outputs = ["result.txt", "data.csv"]
+
+[container]
+docker_image = "ubuntu:22.04"
+
+[scripts]
+run = "process.sh"
+```
+
+```toml
+# job_2/@job.toml
+depends_on = ["job_1"]
+inputs = ["*.txt", "*.csv"]  # or omit to copy all outputs
+
+[container]
+docker_image = "ubuntu:22.04"
+
+[scripts]
+run = "analyze.sh"
+```
+
+Files from job_1's outputs are automatically copied to job_2's directory before execution.
+
+**Legacy Approach:** Access other job folders via relative paths:
 
 ```bash
 ##!/bin/bash
@@ -403,7 +528,7 @@ echo "result data" > /workspace/output.txt
 cat /workspace/../job_1/output.txt
 ```
 
-**Note**: Each job's folder is mounted as `/workspace`, but you can access other job folders via relative paths.
+**Note**: The dependency-based approach is preferred as it makes data flow explicit and handles file copying automatically.
 
 #### Using Environment Variables
 

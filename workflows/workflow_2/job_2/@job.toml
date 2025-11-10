@@ -1,7 +1,0 @@
-use_gpu = true
-
-[container]
-docker_image = "nvidia/cuda:11.8.0-base-ubuntu22.04"
-
-
-[scripts]
