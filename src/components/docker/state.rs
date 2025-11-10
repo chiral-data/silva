@@ -625,10 +625,8 @@ async fn copy_input_files_from_dependencies(
                 let glob_pattern = dep_outputs_dir.join(pattern).to_string_lossy().to_string();
                 match glob::glob(&glob_pattern) {
                     Ok(paths) => {
-                        for path_result in paths {
-                            if let Ok(path) = path_result {
-                                matching_files.push(path);
-                            }
+                        for path in paths.flatten() {
+                            matching_files.push(path);
                         }
                     }
                     Err(e) => {

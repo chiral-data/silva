@@ -101,7 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             println!("\n─────────────────────────────");
             println!("Job Execution Complete\n");
-            println!("Cleaning up container {}...", container_id);
+            println!("Cleaning up container {container_id}...");
             executor.cleanup_containers(&[container_id]).await;
             println!("✓ Container cleaned up\n");
         });

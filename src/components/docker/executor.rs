@@ -441,7 +441,7 @@ impl DockerExecutor {
         let container_id = if let Some(existing_id) = container_registry.get(&image_name) {
             let log_line = LogLine::new(
                 LogSource::Stdout,
-                format!("Reusing existing container {} for image {}", existing_id, image_name),
+                format!("Reusing existing container {existing_id} for image {image_name}"),
             );
             self.tx_send(JobStatus::Running, log_line).await?;
             existing_id.clone()
@@ -630,7 +630,7 @@ impl DockerExecutor {
         // Return container ID for cleanup later
         let log_line = LogLine::new(
             LogSource::Stdout,
-            format!("Job completed, container {} will be cleaned up after workflow finishes", container_id),
+            format!("Job completed, container {container_id} will be cleaned up after workflow finishes"),
         );
         self.tx_send(JobStatus::Completed, log_line).await?;
 
@@ -666,14 +666,14 @@ impl DockerExecutor {
                 Ok(_) => {
                     let log_line = LogLine::new(
                         LogSource::Stdout,
-                        format!("Stopped container {}", container_id),
+                        format!("Stopped container {container_id}"),
                     );
                     let _ = self.tx_send(JobStatus::Completed, log_line).await;
                 }
                 Err(e) => {
                     let log_line = LogLine::new(
                         LogSource::Stderr,
-                        format!("Failed to stop container {}: {}", container_id, e),
+                        format!("Failed to stop container {container_id}: {e}"),
                     );
                     let _ = self.tx_send(JobStatus::Completed, log_line).await;
                 }
@@ -688,14 +688,14 @@ impl DockerExecutor {
                 Ok(_) => {
                     let log_line = LogLine::new(
                         LogSource::Stdout,
-                        format!("Removed container {}", container_id),
+                        format!("Removed container {container_id}"),
                     );
                     let _ = self.tx_send(JobStatus::Completed, log_line).await;
                 }
                 Err(e) => {
                     let log_line = LogLine::new(
                         LogSource::Stderr,
-                        format!("Failed to remove container {}: {}", container_id, e),
+                        format!("Failed to remove container {container_id}: {e}"),
                     );
                     let _ = self.tx_send(JobStatus::Completed, log_line).await;
                 }
@@ -815,10 +815,10 @@ impl DockerExecutor {
         for pattern in output_patterns {
             // Use shopt -s nullglob to handle cases where pattern doesn't match anything
             script.push_str("shopt -s nullglob\n");
-            script.push_str(&format!("matched_files=({})\n", pattern));
+            script.push_str(&format!("matched_files=({pattern})\n"));
             script.push_str("shopt -u nullglob\n");
             script.push_str("if [ ${#matched_files[@]} -eq 0 ]; then\n");
-            script.push_str(&format!("  echo 'Pattern \"{}\" matched no files'\n", pattern));
+            script.push_str(&format!("  echo 'Pattern \"{pattern}\" matched no files'\n"));
             script.push_str("else\n");
             script.push_str("  for file in \"${matched_files[@]}\"; do\n");
             script.push_str("    if [ -f \"$file\" ]; then\n");
