@@ -35,13 +35,120 @@ impl fmt::Display for ParamType {
 
 /// Represents a parameter definition in node.json.
 /// The format matches the spec: [type, default_value, hint, optional_enum_values]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Example: ["string", "4OHU", "The ID of the PDB file to download."]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(into = "ParamDefinitionArray")]
 pub struct ParamDefinition {
     pub param_type: ParamType,
     pub default_value: serde_json::Value,
     pub hint: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enum_values: Option<Vec<String>>,
+}
+
+/// Helper struct for serializing ParamDefinition as array
+#[derive(Serialize)]
+#[serde(untagged)]
+enum ParamDefinitionArray {
+    WithEnum(String, serde_json::Value, String, Vec<String>),
+    WithoutEnum(String, serde_json::Value, String),
+}
+
+impl From<ParamDefinition> for ParamDefinitionArray {
+    fn from(def: ParamDefinition) -> Self {
+        let type_str = def.param_type.to_string();
+        if let Some(enum_vals) = def.enum_values {
+            ParamDefinitionArray::WithEnum(type_str, def.default_value, def.hint, enum_vals)
+        } else {
+            ParamDefinitionArray::WithoutEnum(type_str, def.default_value, def.hint)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ParamDefinition {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        // Deserialize as a generic Value first
+        let value = serde_json::Value::deserialize(deserializer)?;
+
+        match value {
+            serde_json::Value::Array(arr) => {
+                // Array format: ["type", default_value, "hint"] or ["type", default_value, "hint", ["enum", "values"]]
+                if arr.len() < 3 {
+                    return Err(D::Error::custom(format!(
+                        "ParamDefinition array must have at least 3 elements, got {}",
+                        arr.len()
+                    )));
+                }
+
+                // Parse type (first element)
+                let param_type = arr[0]
+                    .as_str()
+                    .ok_or_else(|| D::Error::custom("First element must be a string (type)"))?;
+                let param_type: ParamType = serde_json::from_value(serde_json::Value::String(param_type.to_string()))
+                    .map_err(|e| D::Error::custom(format!("Invalid param type: {}", e)))?;
+
+                // Parse default value (second element)
+                let default_value = arr[1].clone();
+
+                // Parse hint (third element)
+                let hint = arr[2]
+                    .as_str()
+                    .ok_or_else(|| D::Error::custom("Third element must be a string (hint)"))?
+                    .to_string();
+
+                // Parse optional enum values (fourth element)
+                let enum_values = if arr.len() > 3 {
+                    let enum_arr = arr[3]
+                        .as_array()
+                        .ok_or_else(|| D::Error::custom("Fourth element must be an array (enum values)"))?;
+                    let values: Result<Vec<String>, _> = enum_arr
+                        .iter()
+                        .map(|v| {
+                            v.as_str()
+                                .ok_or_else(|| D::Error::custom("Enum values must be strings"))
+                                .map(|s| s.to_string())
+                        })
+                        .collect();
+                    Some(values?)
+                } else {
+                    None
+                };
+
+                Ok(ParamDefinition {
+                    param_type,
+                    default_value,
+                    hint,
+                    enum_values,
+                })
+            }
+            serde_json::Value::Object(_) => {
+                // Also support object format for compatibility
+                #[derive(Deserialize)]
+                struct ParamDefObject {
+                    param_type: ParamType,
+                    default_value: serde_json::Value,
+                    hint: String,
+                    enum_values: Option<Vec<String>>,
+                }
+
+                let obj: ParamDefObject = serde_json::from_value(value)
+                    .map_err(|e| D::Error::custom(format!("Invalid ParamDefinition object: {}", e)))?;
+
+                Ok(ParamDefinition {
+                    param_type: obj.param_type,
+                    default_value: obj.default_value,
+                    hint: obj.hint,
+                    enum_values: obj.enum_values,
+                })
+            }
+            _ => Err(D::Error::custom("ParamDefinition must be an array or object")),
+        }
+    }
 }
 
 impl ParamDefinition {
@@ -649,5 +756,110 @@ mod tests {
         assert!(config.inputs.is_empty());
         assert!(config.outputs.is_empty());
         assert!(config.depends_on.is_empty());
+    }
+
+    #[test]
+    fn test_param_definition_array_format() {
+        // Test the array format from the spec: ["type", default_value, "hint"]
+        let json_str = r#"["string", "4OHU", "The ID of the PDB file to download."]"#;
+        let param_def: ParamDefinition = serde_json::from_str(json_str).unwrap();
+
+        assert_eq!(param_def.param_type, ParamType::String);
+        assert_eq!(param_def.default_value, serde_json::Value::String("4OHU".to_string()));
+        assert_eq!(param_def.hint, "The ID of the PDB file to download.");
+        assert_eq!(param_def.enum_values, None);
+    }
+
+    #[test]
+    fn test_param_definition_array_format_with_enum() {
+        // Test array format with enum values
+        let json_str = r#"["enum", "pdb", "Output file format", ["pdb", "cif", "xml"]]"#;
+        let param_def: ParamDefinition = serde_json::from_str(json_str).unwrap();
+
+        assert_eq!(param_def.param_type, ParamType::Enum);
+        assert_eq!(param_def.default_value, serde_json::Value::String("pdb".to_string()));
+        assert_eq!(param_def.hint, "Output file format");
+        assert_eq!(param_def.enum_values, Some(vec!["pdb".to_string(), "cif".to_string(), "xml".to_string()]));
+    }
+
+    #[test]
+    fn test_node_metadata_with_array_format() {
+        // Test the full node.json format from the spec
+        let json_str = r#"{
+            "name": "1 Download PDB",
+            "description": "Download a PDB file from the RCSB Protein Data Bank.",
+            "params": {
+                "pdb_id": ["string", "4OHU", "The ID of the PDB file to download."]
+            }
+        }"#;
+
+        let metadata: NodeMetadata = serde_json::from_str(json_str).unwrap();
+
+        assert_eq!(metadata.name, "1 Download PDB");
+        assert_eq!(metadata.description, "Download a PDB file from the RCSB Protein Data Bank.");
+        assert_eq!(metadata.params.len(), 1);
+
+        let pdb_id_param = metadata.params.get("pdb_id").unwrap();
+        assert_eq!(pdb_id_param.param_type, ParamType::String);
+        assert_eq!(pdb_id_param.default_value, serde_json::Value::String("4OHU".to_string()));
+        assert_eq!(pdb_id_param.hint, "The ID of the PDB file to download.");
+    }
+
+    #[test]
+    fn test_param_definition_object_format_backward_compat() {
+        // Test that object format still works for backward compatibility
+        let json_str = r#"{
+            "param_type": "integer",
+            "default_value": 42,
+            "hint": "Answer to everything"
+        }"#;
+
+        let param_def: ParamDefinition = serde_json::from_str(json_str).unwrap();
+
+        assert_eq!(param_def.param_type, ParamType::Integer);
+        assert_eq!(param_def.default_value, serde_json::Value::Number(42.into()));
+        assert_eq!(param_def.hint, "Answer to everything");
+        assert_eq!(param_def.enum_values, None);
+    }
+
+    #[test]
+    fn test_param_definition_serialization_to_array() {
+        // Test that serialization produces array format
+        let param_def = ParamDefinition::new(
+            ParamType::String,
+            serde_json::Value::String("test".to_string()),
+            "Test parameter".to_string(),
+            None,
+        );
+
+        let json = serde_json::to_string(&param_def).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        // Should be an array
+        assert!(parsed.is_array());
+        let arr = parsed.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr[0], "string");
+        assert_eq!(arr[1], "test");
+        assert_eq!(arr[2], "Test parameter");
+    }
+
+    #[test]
+    fn test_node_metadata_roundtrip() {
+        // Test that we can deserialize and serialize correctly
+        let json_str = r#"{
+            "name": "Test Job",
+            "description": "A test job",
+            "params": {
+                "param1": ["string", "default", "A string parameter"],
+                "param2": ["integer", 100, "An integer parameter"]
+            }
+        }"#;
+
+        let metadata: NodeMetadata = serde_json::from_str(json_str).unwrap();
+        let serialized = serde_json::to_string_pretty(&metadata).unwrap();
+        let deserialized: NodeMetadata = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(metadata, deserialized);
     }
 }
