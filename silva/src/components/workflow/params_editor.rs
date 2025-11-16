@@ -34,7 +34,7 @@ impl ParamsEditorState {
     pub fn new(job: Job, node_metadata: NodeMetadata) -> Result<Self, String> {
         // Load current params or use defaults
         let current_params = job.load_params()
-            .map_err(|e| format!("Failed to load params: {}", e))?
+            .map_err(|e| format!("Failed to load params: {e}"))?
             .unwrap_or_else(|| node_metadata.generate_default_params());
 
         // Convert params to editable strings
@@ -139,17 +139,17 @@ impl ParamsEditorState {
         for (param_name, param_value_str) in &self.param_values {
             if let Some(param_def) = self.node_metadata.params.get(param_name) {
                 let json_value = string_to_param_value(param_value_str, &param_def.param_type)
-                    .map_err(|e| format!("Invalid value for {}: {}", param_name, e))?;
+                    .map_err(|e| format!("Invalid value for {param_name}: {e}"))?;
 
                 param_def.validate(&json_value)
-                    .map_err(|e| format!("Validation failed for {}: {}", param_name, e))?;
+                    .map_err(|e| format!("Validation failed for {param_name}: {e}"))?;
 
                 params.insert(param_name.clone(), json_value);
             }
         }
 
         self.job.save_params(&params)
-            .map_err(|e| format!("Failed to save params: {}", e))?;
+            .map_err(|e| format!("Failed to save params: {e}"))?;
 
         Ok(())
     }
@@ -243,7 +243,7 @@ fn render_params_list(f: &mut Frame, state: &ParamsEditorState, area: Rect) {
 
         // Build the display text
         let display_value = if is_editing {
-            format!("{}", state.input_buffer)
+            state.input_buffer.to_string()
         } else {
             value.clone()
         };
@@ -270,7 +270,7 @@ fn render_params_list(f: &mut Frame, state: &ParamsEditorState, area: Rect) {
         lines.push(Line::from(vec![
             Span::raw(cursor),
             Span::raw(" "),
-            Span::styled(format!("{} ", name), name_style),
+            Span::styled(format!("{name} "), name_style),
             Span::raw("("),
             Span::styled(type_str, Style::default().fg(Color::Magenta)),
             Span::raw("): "),
@@ -310,7 +310,7 @@ fn param_value_to_string(value: &serde_json::Value) -> String {
         serde_json::Value::Bool(b) => b.to_string(),
         serde_json::Value::Array(arr) => {
             let items: Vec<String> = arr.iter()
-                .map(|v| param_value_to_string(v))
+                .map(param_value_to_string)
                 .collect();
             format!("[{}]", items.join(", "))
         }
@@ -331,18 +331,18 @@ fn string_to_param_value(s: &str, param_type: &ParamType) -> Result<serde_json::
         ParamType::Integer => {
             trimmed.parse::<i64>()
                 .map(Value::from)
-                .map_err(|_| format!("Invalid integer: {}", trimmed))
+                .map_err(|_| format!("Invalid integer: {trimmed}"))
         }
         ParamType::Float => {
             trimmed.parse::<f64>()
-                .map(|f| Value::from(f))
-                .map_err(|_| format!("Invalid float: {}", trimmed))
+                .map(Value::from)
+                .map_err(|_| format!("Invalid float: {trimmed}"))
         }
         ParamType::Boolean => {
             match trimmed.to_lowercase().as_str() {
                 "true" | "yes" | "1" => Ok(Value::Bool(true)),
                 "false" | "no" | "0" => Ok(Value::Bool(false)),
-                _ => Err(format!("Invalid boolean: {} (use true/false)", trimmed))
+                _ => Err(format!("Invalid boolean: {trimmed} (use true/false)"))
             }
         }
         ParamType::Array => {

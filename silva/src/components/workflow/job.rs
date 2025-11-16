@@ -119,7 +119,7 @@ impl Job {
     /// Saves node metadata (node.json).
     pub fn save_node_metadata(&self, metadata: &NodeMetadata) -> Result<(), JobError> {
         self.ensure_chiral_dir()?;
-        metadata.save_to_file(&self.node_metadata_path())?;
+        metadata.save_to_file(self.node_metadata_path())?;
         Ok(())
     }
 
@@ -138,7 +138,7 @@ impl Job {
     /// Saves job parameters (params.json).
     pub fn save_params(&self, params: &JobParams) -> Result<(), JobError> {
         self.ensure_chiral_dir()?;
-        save_params(&self.params_path(), params)?;
+        save_params(self.params_path(), params)?;
         Ok(())
     }
 

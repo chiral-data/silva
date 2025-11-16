@@ -154,13 +154,13 @@ impl State {
                         match job.ensure_default_node_metadata() {
                             Ok(metadata) => metadata,
                             Err(e) => {
-                                eprintln!("Failed to create node metadata: {}", e);
+                                eprintln!("Failed to create node metadata: {e}");
                                 return;
                             }
                         }
                     }
                     Err(e) => {
-                        eprintln!("Failed to load node metadata: {}", e);
+                        eprintln!("Failed to load node metadata: {e}");
                         return;
                     }
                 };
@@ -172,7 +172,7 @@ impl State {
                         self.show_params_popup = true;
                     }
                     Err(e) => {
-                        eprintln!("Failed to create params editor: {}", e);
+                        eprintln!("Failed to create params editor: {e}");
                     }
                 }
             }
@@ -220,7 +220,7 @@ impl State {
                     KeyCode::Char('s') => {
                         // Save all params and close
                         if let Err(e) = editor_state.save_params() {
-                            eprintln!("Failed to save params: {}", e);
+                            eprintln!("Failed to save params: {e}");
                             editor_state.error_message = Some(e);
                         } else {
                             self.close_params_editor();

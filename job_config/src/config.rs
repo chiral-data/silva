@@ -90,7 +90,7 @@ impl<'de> Deserialize<'de> for ParamDefinition {
                     .as_str()
                     .ok_or_else(|| D::Error::custom("First element must be a string (type)"))?;
                 let param_type: ParamType = serde_json::from_value(serde_json::Value::String(param_type.to_string()))
-                    .map_err(|e| D::Error::custom(format!("Invalid param type: {}", e)))?;
+                    .map_err(|e| D::Error::custom(format!("Invalid param type: {e}")))?;
 
                 // Parse default value (second element)
                 let default_value = arr[1].clone();
@@ -137,7 +137,7 @@ impl<'de> Deserialize<'de> for ParamDefinition {
                 }
 
                 let obj: ParamDefObject = serde_json::from_value(value)
-                    .map_err(|e| D::Error::custom(format!("Invalid ParamDefinition object: {}", e)))?;
+                    .map_err(|e| D::Error::custom(format!("Invalid ParamDefinition object: {e}")))?;
 
                 Ok(ParamDefinition {
                     param_type: obj.param_type,
@@ -172,27 +172,27 @@ impl ParamDefinition {
         match self.param_type {
             ParamType::String => {
                 if !value.is_string() {
-                    return Err(format!("Expected string, got {}", value));
+                    return Err(format!("Expected string, got {value}"));
                 }
             }
             ParamType::Integer => {
                 if !value.is_i64() && !value.is_u64() {
-                    return Err(format!("Expected integer, got {}", value));
+                    return Err(format!("Expected integer, got {value}"));
                 }
             }
             ParamType::Float => {
                 if !value.is_f64() && !value.is_i64() && !value.is_u64() {
-                    return Err(format!("Expected float, got {}", value));
+                    return Err(format!("Expected float, got {value}"));
                 }
             }
             ParamType::Boolean => {
                 if !value.is_boolean() {
-                    return Err(format!("Expected boolean, got {}", value));
+                    return Err(format!("Expected boolean, got {value}"));
                 }
             }
             ParamType::File | ParamType::Directory => {
                 if !value.is_string() {
-                    return Err(format!("Expected path string, got {}", value));
+                    return Err(format!("Expected path string, got {value}"));
                 }
             }
             ParamType::Enum => {
@@ -200,12 +200,11 @@ impl ParamDefinition {
                     if let Some(val_str) = value.as_str() {
                         if !enum_vals.contains(&val_str.to_string()) {
                             return Err(format!(
-                                "Value '{}' not in allowed values: {:?}",
-                                val_str, enum_vals
+                                "Value '{val_str}' not in allowed values: {enum_vals:?}"
                             ));
                         }
                     } else {
-                        return Err(format!("Expected string for enum, got {}", value));
+                        return Err(format!("Expected string for enum, got {value}"));
                     }
                 } else {
                     return Err("Enum type requires enum_values to be specified".to_string());
@@ -213,7 +212,7 @@ impl ParamDefinition {
             }
             ParamType::Array => {
                 if !value.is_array() {
-                    return Err(format!("Expected array, got {}", value));
+                    return Err(format!("Expected array, got {value}"));
                 }
             }
         }
@@ -248,14 +247,14 @@ impl NodeMetadata {
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, JobConfigError> {
         let content = fs::read_to_string(path)?;
         let metadata: NodeMetadata = serde_json::from_str(&content)
-            .map_err(|e| JobConfigError::InvalidJson(e))?;
+            .map_err(JobConfigError::InvalidJson)?;
         Ok(metadata)
     }
 
     /// Saves node metadata to a JSON file.
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), JobConfigError> {
         let json = serde_json::to_string_pretty(self)
-            .map_err(|e| JobConfigError::InvalidJson(e))?;
+            .map_err(JobConfigError::InvalidJson)?;
         fs::write(path, json)?;
         Ok(())
     }
@@ -266,7 +265,7 @@ impl NodeMetadata {
             if let Some(param_def) = self.params.get(param_name) {
                 param_def.validate(param_value)?;
             } else {
-                return Err(format!("Unknown parameter: {}", param_name));
+                return Err(format!("Unknown parameter: {param_name}"));
             }
         }
         Ok(())
