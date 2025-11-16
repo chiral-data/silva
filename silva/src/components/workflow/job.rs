@@ -27,35 +27,19 @@ impl Job {
     }
 
     /// Checks if the job has a valid configuration file.
-    /// Also checks for legacy @job.toml for backward compatibility.
     pub fn has_config(&self) -> bool {
-        // Check new location
-        if self.config_path.exists() && self.config_path.is_file() {
-            return true;
-        }
-
-        // Check legacy location
-        let legacy_config = self.path.join("@job.toml");
-        legacy_config.exists() && legacy_config.is_file()
+        self.config_path.exists() && self.config_path.is_file()
     }
 
     /// Loads the job configuration.
-    /// Attempts to load from .chiral/job.toml first, falls back to @job.toml if not found.
     pub fn load_config(&self) -> Result<JobConfig, JobConfigError> {
         if self.config_path.exists() {
             JobConfig::load_from_file(&self.config_path)
         } else {
-            // Try legacy path
-            let legacy_config = self.path.join("@job.toml");
-            if legacy_config.exists() {
-                JobConfig::load_from_file(&legacy_config)
-            } else {
-                Err(JobConfigError::FileNotFound(format!(
-                    "No job configuration found at {} or {}",
-                    self.config_path.display(),
-                    legacy_config.display()
-                )))
-            }
+            Err(JobConfigError::FileNotFound(format!(
+                "No job configuration found at {}",
+                self.config_path.display(),
+            )))
         }
     }
 
@@ -67,33 +51,6 @@ impl Job {
         Ok(())
     }
 
-    /// Migrates the job configuration from @job.toml to .chiral/job.toml.
-    /// Returns true if migration was performed, false if already migrated or no legacy config exists.
-    pub fn migrate_to_chiral(&self) -> Result<bool, JobError> {
-        let legacy_config = self.path.join("@job.toml");
-
-        // If new config already exists, no need to migrate
-        if self.config_path.exists() {
-            return Ok(false);
-        }
-
-        // If legacy config doesn't exist, nothing to migrate
-        if !legacy_config.exists() {
-            return Ok(false);
-        }
-
-        // Create .chiral directory
-        self.ensure_chiral_dir()?;
-
-        // Copy the config file
-        fs::copy(&legacy_config, &self.config_path)?;
-
-        // Remove legacy file
-        fs::remove_file(&legacy_config)?;
-
-        Ok(true)
-    }
-
     /// Gets the path to node.json.
     pub fn node_metadata_path(&self) -> PathBuf {
         self.chiral_dir.join("node.json")
@@ -101,7 +58,7 @@ impl Job {
 
     /// Gets the path to params.json.
     pub fn params_path(&self) -> PathBuf {
-        self.chiral_dir.join("params.json")
+        self.path.join("params.json")
     }
 
     /// Loads node metadata (node.json).
@@ -257,8 +214,6 @@ impl JobScanner {
 
                         // Only include if it has a config file
                         if job.has_config() {
-                            // Automatically migrate legacy configs
-                            let _ = job.migrate_to_chiral();
                             jobs.push(job);
                         }
                     }
