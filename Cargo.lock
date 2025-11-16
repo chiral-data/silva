@@ -943,6 +943,7 @@ name = "job_config"
 version = "0.3.3"
 dependencies = [
  "serde",
+ "serde_json",
  "toml",
 ]
 

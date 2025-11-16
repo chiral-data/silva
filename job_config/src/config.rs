@@ -1,7 +1,178 @@
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
+use std::collections::HashMap;
 use std::fmt;
 use std::fs;
 use std::path::Path;
+
+/// Represents the type of a parameter.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ParamType {
+    String,
+    Integer,
+    Float,
+    Boolean,
+    File,
+    Directory,
+    Enum,
+    Array,
+}
+
+impl fmt::Display for ParamType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ParamType::String => write!(f, "string"),
+            ParamType::Integer => write!(f, "integer"),
+            ParamType::Float => write!(f, "float"),
+            ParamType::Boolean => write!(f, "boolean"),
+            ParamType::File => write!(f, "file"),
+            ParamType::Directory => write!(f, "directory"),
+            ParamType::Enum => write!(f, "enum"),
+            ParamType::Array => write!(f, "array"),
+        }
+    }
+}
+
+/// Represents a parameter definition in node.json.
+/// The format matches the spec: [type, default_value, hint, optional_enum_values]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ParamDefinition {
+    pub param_type: ParamType,
+    pub default_value: serde_json::Value,
+    pub hint: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enum_values: Option<Vec<String>>,
+}
+
+impl ParamDefinition {
+    /// Creates a new parameter definition.
+    pub fn new(
+        param_type: ParamType,
+        default_value: serde_json::Value,
+        hint: String,
+        enum_values: Option<Vec<String>>,
+    ) -> Self {
+        Self {
+            param_type,
+            default_value,
+            hint,
+            enum_values,
+        }
+    }
+
+    /// Validates a value against this parameter definition.
+    pub fn validate(&self, value: &serde_json::Value) -> Result<(), String> {
+        match self.param_type {
+            ParamType::String => {
+                if !value.is_string() {
+                    return Err(format!("Expected string, got {}", value));
+                }
+            }
+            ParamType::Integer => {
+                if !value.is_i64() && !value.is_u64() {
+                    return Err(format!("Expected integer, got {}", value));
+                }
+            }
+            ParamType::Float => {
+                if !value.is_f64() && !value.is_i64() && !value.is_u64() {
+                    return Err(format!("Expected float, got {}", value));
+                }
+            }
+            ParamType::Boolean => {
+                if !value.is_boolean() {
+                    return Err(format!("Expected boolean, got {}", value));
+                }
+            }
+            ParamType::File | ParamType::Directory => {
+                if !value.is_string() {
+                    return Err(format!("Expected path string, got {}", value));
+                }
+            }
+            ParamType::Enum => {
+                if let Some(enum_vals) = &self.enum_values {
+                    if let Some(val_str) = value.as_str() {
+                        if !enum_vals.contains(&val_str.to_string()) {
+                            return Err(format!(
+                                "Value '{}' not in allowed values: {:?}",
+                                val_str, enum_vals
+                            ));
+                        }
+                    } else {
+                        return Err(format!("Expected string for enum, got {}", value));
+                    }
+                } else {
+                    return Err("Enum type requires enum_values to be specified".to_string());
+                }
+            }
+            ParamType::Array => {
+                if !value.is_array() {
+                    return Err(format!("Expected array, got {}", value));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Represents the metadata for a job node (node.json).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NodeMetadata {
+    pub name: String,
+    pub description: String,
+    pub params: HashMap<String, ParamDefinition>,
+}
+
+impl NodeMetadata {
+    /// Creates a new node metadata with the given name and description.
+    pub fn new(name: String, description: String) -> Self {
+        Self {
+            name,
+            description,
+            params: HashMap::new(),
+        }
+    }
+
+    /// Adds a parameter definition to this node.
+    pub fn add_param(&mut self, name: String, definition: ParamDefinition) {
+        self.params.insert(name, definition);
+    }
+
+    /// Loads node metadata from a JSON file.
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, JobConfigError> {
+        let content = fs::read_to_string(path)?;
+        let metadata: NodeMetadata = serde_json::from_str(&content)
+            .map_err(|e| JobConfigError::InvalidJson(e))?;
+        Ok(metadata)
+    }
+
+    /// Saves node metadata to a JSON file.
+    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), JobConfigError> {
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| JobConfigError::InvalidJson(e))?;
+        fs::write(path, json)?;
+        Ok(())
+    }
+
+    /// Validates a params HashMap against this node's parameter definitions.
+    pub fn validate_params(&self, params: &HashMap<String, serde_json::Value>) -> Result<(), String> {
+        for (param_name, param_value) in params {
+            if let Some(param_def) = self.params.get(param_name) {
+                param_def.validate(param_value)?;
+            } else {
+                return Err(format!("Unknown parameter: {}", param_name));
+            }
+        }
+        Ok(())
+    }
+
+    /// Generates default parameters based on the parameter definitions.
+    pub fn generate_default_params(&self) -> HashMap<String, serde_json::Value> {
+        self.params
+            .iter()
+            .map(|(name, def)| (name.clone(), def.default_value.clone()))
+            .collect()
+    }
+}
 
 /// Represents the container configuration for a job.
 /// Can be either a Docker image URL or a path to a Dockerfile.
@@ -105,6 +276,7 @@ pub struct JobConfig {
 pub enum JobConfigError {
     FileNotFound(String),
     InvalidToml(toml::de::Error),
+    InvalidJson(serde_json::Error),
     IoError(std::io::Error),
 }
 
@@ -113,6 +285,7 @@ impl fmt::Display for JobConfigError {
         match self {
             JobConfigError::FileNotFound(path) => write!(f, "Configuration file not found: {path}"),
             JobConfigError::InvalidToml(err) => write!(f, "Invalid TOML syntax: {err}"),
+            JobConfigError::InvalidJson(err) => write!(f, "Invalid JSON syntax: {err}"),
             JobConfigError::IoError(err) => write!(f, "IO error: {err}"),
         }
     }
@@ -136,12 +309,18 @@ impl From<toml::de::Error> for JobConfigError {
     }
 }
 
+impl From<serde_json::Error> for JobConfigError {
+    fn from(err: serde_json::Error) -> Self {
+        JobConfigError::InvalidJson(err)
+    }
+}
+
 impl JobConfig {
     /// Loads a job configuration from a TOML file.
     ///
     /// # Arguments
     ///
-    /// * `path` - Path to the TOML configuration file (typically "@job.toml")
+    /// * `path` - Path to the TOML configuration file (typically ".chiral/job.toml")
     ///
     /// # Returns
     ///
@@ -153,13 +332,49 @@ impl JobConfig {
     /// ```no_run
     /// use job_config::config::JobConfig;
     ///
-    /// let config = JobConfig::load_from_file("@job.toml").unwrap();
+    /// let config = JobConfig::load_from_file(".chiral/job.toml").unwrap();
     /// ```
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, JobConfigError> {
         let content = fs::read_to_string(path)?;
         let config: JobConfig = toml::from_str(&content)?;
         Ok(config)
     }
+}
+
+/// Type alias for job parameters (params.json content).
+pub type JobParams = HashMap<String, serde_json::Value>;
+
+/// Loads job parameters from a JSON file.
+///
+/// # Arguments
+///
+/// * `path` - Path to the params.json file
+///
+/// # Returns
+///
+/// * `Ok(JobParams)` - Successfully parsed parameters
+/// * `Err(JobConfigError)` - Error reading file or parsing JSON
+pub fn load_params<P: AsRef<Path>>(path: P) -> Result<JobParams, JobConfigError> {
+    let content = fs::read_to_string(path)?;
+    let params: JobParams = serde_json::from_str(&content)?;
+    Ok(params)
+}
+
+/// Saves job parameters to a JSON file.
+///
+/// # Arguments
+///
+/// * `path` - Path to the params.json file
+/// * `params` - Parameters to save
+///
+/// # Returns
+///
+/// * `Ok(())` - Successfully saved parameters
+/// * `Err(JobConfigError)` - Error writing file or serializing JSON
+pub fn save_params<P: AsRef<Path>>(path: P, params: &JobParams) -> Result<(), JobConfigError> {
+    let json = serde_json::to_string_pretty(params)?;
+    fs::write(path, json)?;
+    Ok(())
 }
 
 #[cfg(test)]
