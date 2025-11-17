@@ -2,7 +2,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use job_config::config::{JobConfig, JobConfigError};
+use job_config::config::{JobConfig, JobConfigError, NodeMetadata, JobParams, load_params, save_params};
 
 /// Represents a job within a workflow.
 #[derive(Debug, Clone, PartialEq)]
@@ -10,16 +10,19 @@ pub struct Job {
     pub name: String,
     pub path: PathBuf,
     pub config_path: PathBuf,
+    pub chiral_dir: PathBuf,
 }
 
 impl Job {
     /// Creates a new Job.
     pub fn new(name: String, path: PathBuf) -> Self {
-        let config_path = path.join("@job.toml");
+        let chiral_dir = path.join(".chiral");
+        let config_path = chiral_dir.join("job.toml");
         Self {
             name,
             path,
             config_path,
+            chiral_dir,
         }
     }
 
@@ -30,7 +33,102 @@ impl Job {
 
     /// Loads the job configuration.
     pub fn load_config(&self) -> Result<JobConfig, JobConfigError> {
-        JobConfig::load_from_file(&self.config_path)
+        if self.config_path.exists() {
+            JobConfig::load_from_file(&self.config_path)
+        } else {
+            Err(JobConfigError::FileNotFound(format!(
+                "No job configuration found at {}",
+                self.config_path.display(),
+            )))
+        }
+    }
+
+    /// Ensures the .chiral directory exists.
+    pub fn ensure_chiral_dir(&self) -> Result<(), JobError> {
+        if !self.chiral_dir.exists() {
+            fs::create_dir_all(&self.chiral_dir)?;
+        }
+        Ok(())
+    }
+
+    /// Gets the path to node.json.
+    pub fn node_metadata_path(&self) -> PathBuf {
+        self.chiral_dir.join("node.json")
+    }
+
+    /// Gets the path to params.json.
+    pub fn params_path(&self) -> PathBuf {
+        self.path.join("params.json")
+    }
+
+    /// Loads node metadata (node.json).
+    /// Returns None if the file doesn't exist.
+    pub fn load_node_metadata(&self) -> Result<Option<NodeMetadata>, JobError> {
+        let node_path = self.node_metadata_path();
+        if !node_path.exists() {
+            return Ok(None);
+        }
+
+        let metadata = NodeMetadata::load_from_file(&node_path)?;
+        Ok(Some(metadata))
+    }
+
+    /// Saves node metadata (node.json).
+    pub fn save_node_metadata(&self, metadata: &NodeMetadata) -> Result<(), JobError> {
+        self.ensure_chiral_dir()?;
+        metadata.save_to_file(self.node_metadata_path())?;
+        Ok(())
+    }
+
+    /// Loads job parameters (params.json).
+    /// Returns None if the file doesn't exist.
+    pub fn load_params(&self) -> Result<Option<JobParams>, JobError> {
+        let params_path = self.params_path();
+        if !params_path.exists() {
+            return Ok(None);
+        }
+
+        let params = load_params(&params_path)?;
+        Ok(Some(params))
+    }
+
+    /// Saves job parameters (params.json).
+    pub fn save_params(&self, params: &JobParams) -> Result<(), JobError> {
+        self.ensure_chiral_dir()?;
+        save_params(self.params_path(), params)?;
+        Ok(())
+    }
+
+    /// Generates default node metadata if it doesn't exist.
+    pub fn ensure_default_node_metadata(&self) -> Result<NodeMetadata, JobError> {
+        if let Some(metadata) = self.load_node_metadata()? {
+            return Ok(metadata);
+        }
+
+        // Create default metadata
+        let metadata = NodeMetadata::new(
+            self.name.clone(),
+            format!("Job: {}", self.name),
+        );
+
+        self.save_node_metadata(&metadata)?;
+        Ok(metadata)
+    }
+
+    /// Ensures params.json exists with default values from node.json.
+    pub fn ensure_default_params(&self) -> Result<JobParams, JobError> {
+        if let Some(params) = self.load_params()? {
+            return Ok(params);
+        }
+
+        // Get or create node metadata
+        let metadata = self.ensure_default_node_metadata()?;
+
+        // Generate default params
+        let params = metadata.generate_default_params();
+
+        self.save_params(&params)?;
+        Ok(params)
     }
 }
 
@@ -72,7 +170,8 @@ pub struct JobScanner;
 impl JobScanner {
     /// Scans the workflow directory and returns all valid jobs.
     ///
-    /// A valid job is a subdirectory containing a @job.toml file.
+    /// A valid job is a subdirectory containing either .chiral/job.toml or @job.toml (legacy).
+    /// Automatically migrates legacy @job.toml to .chiral/job.toml when found.
     ///
     /// # Arguments
     ///
@@ -113,7 +212,7 @@ impl JobScanner {
                         let name_str = name.to_string_lossy().to_string();
                         let job = Job::new(name_str, path);
 
-                        // Only include if it has a @job.toml file
+                        // Only include if it has a config file
                         if job.has_config() {
                             jobs.push(job);
                         }
@@ -132,13 +231,21 @@ impl JobScanner {
     }
 
     /// Checks if a path is a valid job folder.
+    /// Checks for both .chiral/job.toml and @job.toml (legacy).
     pub fn is_job_folder(path: &Path) -> bool {
         if !path.is_dir() {
             return false;
         }
 
-        let config_path = path.join("@job.toml");
-        config_path.exists() && config_path.is_file()
+        // Check new location
+        let new_config = path.join(".chiral").join("job.toml");
+        if new_config.exists() && new_config.is_file() {
+            return true;
+        }
+
+        // Check legacy location
+        let legacy_config = path.join("@job.toml");
+        legacy_config.exists() && legacy_config.is_file()
     }
 }
 

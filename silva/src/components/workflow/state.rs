@@ -7,6 +7,8 @@ pub struct State {
     pub workflow_manager: super::WorkflowManager,
     pub docker_state: docker::state::State,
     pub show_docker_popup: bool,
+    pub show_params_popup: bool,
+    pub params_editor_state: Option<super::ParamsEditorState>,
 }
 
 impl Default for State {
@@ -28,14 +30,23 @@ impl Default for State {
             workflow_manager,
             docker_state: docker::state::State::default(),
             show_docker_popup: false,
+            show_params_popup: false,
+            params_editor_state: None,
         }
     }
 }
 
 impl State {
     pub async fn handle_input(&mut self, key: KeyEvent) {
+        // Handle params popup input first if it's open
+        if self.show_params_popup {
+            self.handle_params_editor_input(key);
+            return;
+        }
+
         match key.code {
             KeyCode::Char('d') => self.toggle_docker_popup(),
+            KeyCode::Char('p') => self.open_params_editor(),
             _ => {
                 if self.show_docker_popup {
                     self.docker_state.handle_input(key);
@@ -46,7 +57,7 @@ impl State {
                         KeyCode::Down | KeyCode::Char('k') => self.select_next_workflow(),
                         KeyCode::Enter => {
                             if let Some(workflow_folder) = self.get_selected_workflow() {
-                                self.docker_state.run_workflow(workflow_folder.to_owned());
+                                self.docker_state.pending_workflow = Some(workflow_folder.to_owned());
                                 self.toggle_docker_popup();
                             }
                         }
@@ -123,5 +134,104 @@ impl State {
         });
 
         self.scan_jobs();
+    }
+
+    /// Opens the parameter editor for the selected job.
+    pub fn open_params_editor(&mut self) {
+        // Need to have a selected workflow with jobs
+        if self.docker_state.jobs.is_empty() {
+            return;
+        }
+
+        // Get the selected job from docker_state
+        if let Some(selected_job_idx) = self.docker_state.selected_job_index {
+            if let Some(job) = self.docker_state.jobs.get(selected_job_idx) {
+                // Load or create node metadata
+                let node_metadata: job_config::config::NodeMetadata = match job.load_node_metadata() {
+                    Ok(Some(metadata)) => metadata,
+                    Ok(None) => {
+                        // Create default metadata
+                        match job.ensure_default_node_metadata() {
+                            Ok(metadata) => metadata,
+                            Err(e) => {
+                                eprintln!("Failed to create node metadata: {e}");
+                                return;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to load node metadata: {e}");
+                        return;
+                    }
+                };
+
+                // Create params editor state
+                match super::ParamsEditorState::new(job.clone(), node_metadata) {
+                    Ok(state) => {
+                        self.params_editor_state = Some(state);
+                        self.show_params_popup = true;
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to create params editor: {e}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// Closes the parameter editor.
+    pub fn close_params_editor(&mut self) {
+        self.show_params_popup = false;
+        self.params_editor_state = None;
+    }
+
+    /// Handles input for the parameter editor popup.
+    fn handle_params_editor_input(&mut self, key: KeyEvent) {
+        if let Some(editor_state) = &mut self.params_editor_state {
+            if editor_state.editing {
+                // In editing mode
+                match key.code {
+                    KeyCode::Char(c) => {
+                        editor_state.input_char(c);
+                    }
+                    KeyCode::Backspace => {
+                        editor_state.input_backspace();
+                    }
+                    KeyCode::Enter => {
+                        editor_state.save_current_edit();
+                    }
+                    KeyCode::Esc => {
+                        editor_state.cancel_editing();
+                    }
+                    _ => {}
+                }
+            } else {
+                // Navigation mode
+                match key.code {
+                    KeyCode::Up | KeyCode::Char('j') => {
+                        editor_state.move_up();
+                    }
+                    KeyCode::Down | KeyCode::Char('k') => {
+                        editor_state.move_down();
+                    }
+                    KeyCode::Enter => {
+                        editor_state.start_editing();
+                    }
+                    KeyCode::Char('s') => {
+                        // Save all params and close
+                        if let Err(e) = editor_state.save_params() {
+                            eprintln!("Failed to save params: {e}");
+                            editor_state.error_message = Some(e);
+                        } else {
+                            self.close_params_editor();
+                        }
+                    }
+                    KeyCode::Esc => {
+                        self.close_params_editor();
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
 }

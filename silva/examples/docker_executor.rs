@@ -10,15 +10,18 @@ use tokio::sync::mpsc;
 /// Example of running a Docker job programmatically.
 ///
 /// This example demonstrates:
-/// 1. Loading job configurations from @job.toml files
-/// 2. Creating a Docker executor with message channels
-/// 3. Running multiple jobs sequentially
-/// 4. Handling job status updates and logs via channels
-/// 5. Using cancellation signals to stop running jobs
+/// 1. Loading job configurations from .chiral/job.toml files (with legacy @job.toml fallback)
+/// 2. Loading job parameters from .chiral/params.json (if available)
+/// 3. Creating a Docker executor with message channels
+/// 4. Running multiple jobs sequentially with parameter injection
+/// 5. Handling job status updates and logs via channels
+/// 6. Using cancellation signals to stop running jobs
 ///
 /// The example runs two jobs:
 /// - job_1: Runs to completion without interruption
 /// - job_2: Demonstrates cancellation by sending a cancel signal during execution
+///
+/// Parameters are injected as environment variables with PARAM_ prefix.
 ///
 /// To run this example:
 /// Run: cargo run --example docker_executor
@@ -42,9 +45,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .to_str()
             .unwrap()
             .to_string();
-        let job_cfg = job_folder_path.join("@job.toml");
+        // Try new location first, then legacy location
+        let job_cfg = job_folder_path.join(".chiral/job.toml");
+
         println!("Loading job configuration from {job_cfg:?} ...");
-        let config = match config::JobConfig::load_from_file(job_cfg) {
+        let config = match config::JobConfig::load_from_file(&job_cfg) {
             Ok(cfg) => {
                 println!("✓ Configuration loaded successfully\n");
                 cfg
@@ -75,7 +80,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (tx, mut rx) = mpsc::channel::<(usize, JobStatus, LogLine)>(32);
         let (cancel_tx, mut cancel_rx) = mpsc::channel::<()>(1);
 
-        let job = workflow::Job::new(job_name, job_folder_path);
+        let job = workflow::Job::new(job_name.clone(), job_folder_path.clone());
+
+        // Load job parameters (if they exist)
+        let params = job.load_params()
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+
         tokio::spawn(async move {
             let executor = DockerExecutor::new(tx)
                 .map_err(|e| {
@@ -84,6 +96,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 })
                 .unwrap();
             println!("✓ Docker executor initialized\n");
+
+            if !params.is_empty() {
+                println!("Loaded {} parameter(s)", params.len());
+                for (name, value) in &params {
+                    println!("  {name} = {value}");
+                }
+                println!();
+            }
 
             println!("Starting job execution...");
             println!("─────────────────────────────\n");
@@ -95,6 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     &workflow_path,
                     &job,
                     &config,
+                    &params,
                     &mut container_registry,
                     &mut cancel_rx,
                 )
