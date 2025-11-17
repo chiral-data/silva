@@ -96,7 +96,7 @@ impl State {
             }
             KeyCode::PageDown => self.scroll_down(),
             KeyCode::Char('b') => self.scroll_to_bottom(),
-            KeyCode::Char('r') if !self.is_executing_workflow => self.run_workflow(),
+            KeyCode::Enter if !self.is_executing_workflow => self.run_workflow(),
             _ => {}
         }
     }
