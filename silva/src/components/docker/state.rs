@@ -29,6 +29,7 @@ pub struct State {
     pub auto_scroll_enabled: bool,
     pub last_viewport_width: usize,
     pub last_viewport_height: usize,
+    pub pending_workflow: Option<workflow::WorkflowFolder>,
 }
 
 impl Default for State {
@@ -45,6 +46,7 @@ impl Default for State {
             auto_scroll_enabled: true,
             last_viewport_width: 80,
             last_viewport_height: 20,
+            pending_workflow: None,
         }
     }
 }
@@ -94,6 +96,7 @@ impl State {
             }
             KeyCode::PageDown => self.scroll_down(),
             KeyCode::Char('b') => self.scroll_to_bottom(),
+            KeyCode::Char('r') if !self.is_executing_workflow => self.run_workflow(),
             _ => {}
         }
     }
@@ -117,7 +120,13 @@ impl State {
         }
     }
 
-    pub fn run_workflow(&mut self, workflow_folder: workflow::WorkflowFolder) {
+    pub fn run_workflow(&mut self) {
+        // Get the pending workflow, return early if none
+        let workflow_folder = match self.pending_workflow.take() {
+            Some(wf) => wf,
+            None => return,
+        };
+
         self.is_executing_workflow = true;
         self.select_next_job();
 
