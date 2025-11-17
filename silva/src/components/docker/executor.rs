@@ -558,7 +558,10 @@ impl DockerExecutor {
         if !env_vars.is_empty() {
             let log_line = LogLine::new(
                 LogSource::Stdout,
-                format!("Setting {} parameter environment variable(s)", env_vars.len()),
+                format!(
+                    "Setting {} parameter environment variable(s)",
+                    env_vars.len()
+                ),
             );
             self.tx_send(JobStatus::CreatingContainer, log_line).await?;
         }
@@ -755,7 +758,11 @@ impl DockerExecutor {
             attach_stderr: Some(true),
             cmd: Some(vec!["/bin/bash", "-c", script]),
             working_dir: Some(job_work_dir),
-            env: if env_vars.is_empty() { None } else { Some(env_vars.iter().map(|s| s.as_str()).collect()) },
+            env: if env_vars.is_empty() {
+                None
+            } else {
+                Some(env_vars.iter().map(|s| s.as_str()).collect())
+            },
             ..Default::default()
         };
 

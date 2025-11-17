@@ -33,14 +33,16 @@ impl ParamsEditorState {
     /// Creates a new parameter editor state for a job.
     pub fn new(job: Job, node_metadata: NodeMetadata) -> Result<Self, String> {
         // Load current params or use defaults
-        let current_params = job.load_params()
+        let current_params = job
+            .load_params()
             .map_err(|e| format!("Failed to load params: {e}"))?
             .unwrap_or_else(|| node_metadata.generate_default_params());
 
         // Convert params to editable strings
         let mut param_values = Vec::new();
         for (param_name, param_def) in &node_metadata.params {
-            let value = current_params.get(param_name)
+            let value = current_params
+                .get(param_name)
                 .unwrap_or(&param_def.default_value);
             let value_str = param_value_to_string(value);
             param_values.push((param_name.clone(), value_str));
@@ -141,14 +143,16 @@ impl ParamsEditorState {
                 let json_value = string_to_param_value(param_value_str, &param_def.param_type)
                     .map_err(|e| format!("Invalid value for {param_name}: {e}"))?;
 
-                param_def.validate(&json_value)
+                param_def
+                    .validate(&json_value)
                     .map_err(|e| format!("Validation failed for {param_name}: {e}"))?;
 
                 params.insert(param_name.clone(), json_value);
             }
         }
 
-        self.job.save_params(&params)
+        self.job
+            .save_params(&params)
             .map_err(|e| format!("Failed to save params: {e}"))?;
 
         Ok(())
@@ -199,10 +203,10 @@ pub fn render(f: &mut Frame, state: &mut ParamsEditorState, area: Rect) {
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(2),  // Description
-            Constraint::Min(5),     // Parameters list
-            Constraint::Length(3),  // Error message / help
-            Constraint::Length(1),  // Controls hint
+            Constraint::Length(2), // Description
+            Constraint::Min(5),    // Parameters list
+            Constraint::Length(3), // Error message / help
+            Constraint::Length(1), // Controls hint
         ])
         .split(inner_area);
 
@@ -233,71 +237,91 @@ pub fn render(f: &mut Frame, state: &mut ParamsEditorState, area: Rect) {
 }
 
 fn render_params_list(f: &mut Frame, state: &ParamsEditorState, area: Rect) {
-    let items: Vec<ListItem> = state.param_values.iter().enumerate().map(|(i, (name, value))| {
-        let param_def = state.node_metadata.params.get(name);
-        let type_str = param_def.map(|d| d.param_type.to_string()).unwrap_or_else(|| "?".to_string());
-        let hint = param_def.map(|d| d.hint.as_str()).unwrap_or("");
+    let items: Vec<ListItem> = state
+        .param_values
+        .iter()
+        .enumerate()
+        .map(|(i, (name, value))| {
+            let param_def = state.node_metadata.params.get(name);
+            let type_str = param_def
+                .map(|d| d.param_type.to_string())
+                .unwrap_or_else(|| "?".to_string());
+            let hint = param_def.map(|d| d.hint.as_str()).unwrap_or("");
 
-        let is_selected = i == state.selected_index;
-        let is_editing = is_selected && state.editing;
+            let is_selected = i == state.selected_index;
+            let is_editing = is_selected && state.editing;
 
-        // Build the display text
-        let display_value = if is_editing {
-            state.input_buffer.to_string()
-        } else {
-            value.clone()
-        };
-
-        let mut lines = vec![];
-
-        // First line: parameter name and value
-        let name_style = if is_selected {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::White)
-        };
-
-        let value_style = if is_editing {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::UNDERLINED)
-        } else if is_selected {
-            Style::default().fg(Color::Green)
-        } else {
-            Style::default().fg(Color::Gray)
-        };
-
-        let cursor = if is_editing { "▶" } else if is_selected { ">" } else { " " };
-
-        lines.push(Line::from(vec![
-            Span::raw(cursor),
-            Span::raw(" "),
-            Span::styled(format!("{name} "), name_style),
-            Span::raw("("),
-            Span::styled(type_str, Style::default().fg(Color::Magenta)),
-            Span::raw("): "),
-            Span::styled(display_value, value_style),
-        ]));
-
-        // Second line: hint (if not editing or selected)
-        if !hint.is_empty() && !is_editing {
-            let hint_style = if is_selected {
-                Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)
+            // Build the display text
+            let display_value = if is_editing {
+                state.input_buffer.to_string()
             } else {
-                Style::default().fg(Color::DarkGray)
+                value.clone()
             };
+
+            let mut lines = vec![];
+
+            // First line: parameter name and value
+            let name_style = if is_selected {
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+
+            let value_style = if is_editing {
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::UNDERLINED)
+            } else if is_selected {
+                Style::default().fg(Color::Green)
+            } else {
+                Style::default().fg(Color::Gray)
+            };
+
+            let cursor = if is_editing {
+                "▶"
+            } else if is_selected {
+                ">"
+            } else {
+                " "
+            };
+
             lines.push(Line::from(vec![
-                Span::raw("    "),
-                Span::styled(hint, hint_style),
+                Span::raw(cursor),
+                Span::raw(" "),
+                Span::styled(format!("{name} "), name_style),
+                Span::raw("("),
+                Span::styled(type_str, Style::default().fg(Color::Magenta)),
+                Span::raw("): "),
+                Span::styled(display_value, value_style),
             ]));
-        }
 
-        ListItem::new(lines)
-    }).collect();
+            // Second line: hint (if not editing or selected)
+            if !hint.is_empty() && !is_editing {
+                let hint_style = if is_selected {
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .add_modifier(Modifier::ITALIC)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
+                lines.push(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled(hint, hint_style),
+                ]));
+            }
 
-    let list = List::new(items)
-        .block(Block::default()
+            ListItem::new(lines)
+        })
+        .collect();
+
+    let list = List::new(items).block(
+        Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::White))
-            .title(" Parameters "));
+            .title(" Parameters "),
+    );
 
     f.render_widget(list, area);
 }
@@ -309,9 +333,7 @@ fn param_value_to_string(value: &serde_json::Value) -> String {
         serde_json::Value::Number(n) => n.to_string(),
         serde_json::Value::Bool(b) => b.to_string(),
         serde_json::Value::Array(arr) => {
-            let items: Vec<String> = arr.iter()
-                .map(param_value_to_string)
-                .collect();
+            let items: Vec<String> = arr.iter().map(param_value_to_string).collect();
             format!("[{}]", items.join(", "))
         }
         _ => value.to_string(),
@@ -328,34 +350,32 @@ fn string_to_param_value(s: &str, param_type: &ParamType) -> Result<serde_json::
         ParamType::String | ParamType::File | ParamType::Directory | ParamType::Enum => {
             Ok(Value::String(trimmed.to_string()))
         }
-        ParamType::Integer => {
-            trimmed.parse::<i64>()
-                .map(Value::from)
-                .map_err(|_| format!("Invalid integer: {trimmed}"))
-        }
-        ParamType::Float => {
-            trimmed.parse::<f64>()
-                .map(Value::from)
-                .map_err(|_| format!("Invalid float: {trimmed}"))
-        }
-        ParamType::Boolean => {
-            match trimmed.to_lowercase().as_str() {
-                "true" | "yes" | "1" => Ok(Value::Bool(true)),
-                "false" | "no" | "0" => Ok(Value::Bool(false)),
-                _ => Err(format!("Invalid boolean: {trimmed} (use true/false)"))
-            }
-        }
+        ParamType::Integer => trimmed
+            .parse::<i64>()
+            .map(Value::from)
+            .map_err(|_| format!("Invalid integer: {trimmed}")),
+        ParamType::Float => trimmed
+            .parse::<f64>()
+            .map(Value::from)
+            .map_err(|_| format!("Invalid float: {trimmed}")),
+        ParamType::Boolean => match trimmed.to_lowercase().as_str() {
+            "true" | "yes" | "1" => Ok(Value::Bool(true)),
+            "false" | "no" | "0" => Ok(Value::Bool(false)),
+            _ => Err(format!("Invalid boolean: {trimmed} (use true/false)")),
+        },
         ParamType::Array => {
             // Simple array parsing: split by comma
             if trimmed.starts_with('[') && trimmed.ends_with(']') {
-                let inner = &trimmed[1..trimmed.len()-1];
-                let items: Vec<Value> = inner.split(',')
+                let inner = &trimmed[1..trimmed.len() - 1];
+                let items: Vec<Value> = inner
+                    .split(',')
                     .map(|item| Value::String(item.trim().to_string()))
                     .collect();
                 Ok(Value::Array(items))
             } else {
                 // Also accept comma-separated without brackets
-                let items: Vec<Value> = trimmed.split(',')
+                let items: Vec<Value> = trimmed
+                    .split(',')
                     .map(|item| Value::String(item.trim().to_string()))
                     .collect();
                 Ok(Value::Array(items))
