@@ -38,6 +38,13 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
         components::docker::render::render(frame, app, frame.area());
     }
 
+    // Params popup (rendered on top if visible)
+    if app.workflow_state.show_params_popup {
+        if let Some(ref mut params_state) = app.workflow_state.params_editor_state {
+            components::workflow::params_editor::render(frame, params_state, frame.area());
+        }
+    }
+
     // Help popup (rendered on top if visible)
     if app.show_help {
         sidebar::render(frame, frame.area(), app);

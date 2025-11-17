@@ -390,6 +390,7 @@ impl DockerExecutor {
         workflow_folder: &Path, // tmp workflow folder
         job: &workflow::Job,
         config: &JobConfig,
+        params: &job_config::config::JobParams,
         container_registry: &mut std::collections::HashMap<String, String>,
         cancel_rx: &mut mpsc::Receiver<()>,
     ) -> Result<String, DockerError> {
@@ -481,6 +482,7 @@ impl DockerExecutor {
             let workflow_folder_str = workflow_folder.to_str().unwrap();
             let volume_binds = vec![format!("{workflow_folder_str}:{work_dir}")];
             host_config.binds = Some(volume_binds);
+
             let container_config = Config {
                 image: Some(image_name.clone()),
                 tty: Some(true),
@@ -539,6 +541,28 @@ impl DockerExecutor {
             container.id
         };
 
+        // Convert job parameters to environment variables
+        let mut env_vars: Vec<String> = Vec::new();
+        for (param_name, param_value) in params {
+            // Convert JSON value to string
+            let value_str = match param_value {
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => n.to_string(),
+                serde_json::Value::Bool(b) => b.to_string(),
+                v => v.to_string(),
+            };
+            // Add with PARAM_ prefix to avoid conflicts
+            env_vars.push(format!("PARAM_{}={}", param_name.to_uppercase(), value_str));
+        }
+
+        if !env_vars.is_empty() {
+            let log_line = LogLine::new(
+                LogSource::Stdout,
+                format!("Setting {} parameter environment variable(s)", env_vars.len()),
+            );
+            self.tx_send(JobStatus::CreatingContainer, log_line).await?;
+        }
+
         // Execute scripts sequentially
         let scripts = vec![
             ("pre_run.sh", &config.scripts.pre),
@@ -568,6 +592,7 @@ impl DockerExecutor {
                     &container_id,
                     job_workdir.to_str().unwrap(),
                     script,
+                    &env_vars,
                     cancel_rx,
                 )
                 .await
@@ -722,6 +747,7 @@ impl DockerExecutor {
         container_id: &str,
         job_work_dir: &str,
         script: &str,
+        env_vars: &[String],
         cancel_rx: &mut mpsc::Receiver<()>,
     ) -> Result<i64, DockerError> {
         let exec_config = CreateExecOptions {
@@ -729,6 +755,7 @@ impl DockerExecutor {
             attach_stderr: Some(true),
             cmd: Some(vec!["/bin/bash", "-c", script]),
             working_dir: Some(job_work_dir),
+            env: if env_vars.is_empty() { None } else { Some(env_vars.iter().map(|s| s.as_str()).collect()) },
             ..Default::default()
         };
 
