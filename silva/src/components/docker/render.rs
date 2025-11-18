@@ -270,12 +270,24 @@ fn render_job_logs_section(f: &mut Frame, app: &mut App, area: Rect) {
     } else {
         " [AUTO-SCROLL PAUSED]"
     };
+
+    // Get temp folder path for display
+    let temp_path_display: String = {
+        let temp_path_guard = docker_state.current_temp_workflow_path.lock().unwrap();
+        if let Some(ref path) = *temp_path_guard {
+            format!(" | Folder: {} | o-Open", path.display())
+        } else {
+            String::new()
+        }
+    };
+
     let title = format!(
-        "{} - Logs ({}/{}) - {}", 
+        "{} - Logs ({}/{}){}{}",
         job_name,
         docker_state.scroll_offset.min(log_count),
         log_count,
-        auto_scroll_indicator
+        auto_scroll_indicator,
+        temp_path_display
     );
 
     let logs_list = List::new(visible_items).block(

@@ -162,6 +162,15 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             ),
             Span::raw("Scroll to Bottom"),
         ]));
+        help_text.push(Line::from(vec![
+            Span::styled(
+                format!("{:>12}", "o "),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Open Temp Folder"),
+        ]));
     } else if app.selected_tab == 2 {
         help_text.push(Line::from(vec![
             Span::styled(
