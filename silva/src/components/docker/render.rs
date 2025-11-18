@@ -271,7 +271,7 @@ fn render_job_logs_section(f: &mut Frame, app: &mut App, area: Rect) {
         " [AUTO-SCROLL PAUSED]"
     };
     let title = format!(
-        "{} - Logs ({}/{}) - Use 'Enter' to run, 'j/k' or '↑↓' to select job, 'Shift+↑↓' to scroll, 'b' to bottom, 'd' to close{}",
+        "{} - Logs ({}/{}) - {}", 
         job_name,
         docker_state.scroll_offset.min(log_count),
         log_count,
