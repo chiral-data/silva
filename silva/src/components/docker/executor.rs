@@ -589,15 +589,9 @@ impl DockerExecutor {
             let log_line = LogLine::new(LogSource::Stdout, format!("Executing script: {script}"));
             self.tx_send(JobStatus::Running, log_line).await?;
 
-            let job_workdir = Path::new(work_dir).join(&job.name);
+            let job_workdir = format!("{}/{}", work_dir, job.name);
             match self
-                .exec_script(
-                    &container_id,
-                    job_workdir.to_str().unwrap(),
-                    script,
-                    &env_vars,
-                    cancel_rx,
-                )
+                .exec_script(&container_id, &job_workdir, script, &env_vars, cancel_rx)
                 .await
             {
                 Ok(exit_code) => {
@@ -632,14 +626,9 @@ impl DockerExecutor {
                 LogLine::new(LogSource::Stdout, "Collecting output files...".to_string());
             self.tx_send(JobStatus::Running, log_line).await?;
 
-            let job_workdir = Path::new(work_dir).join(&job.name);
+            let job_workdir = format!("{}/{}", work_dir, job.name);
             match self
-                .collect_output_files(
-                    &container_id,
-                    job_workdir.to_str().unwrap(),
-                    &config.outputs,
-                    cancel_rx,
-                )
+                .collect_output_files(&container_id, &job_workdir, &config.outputs, cancel_rx)
                 .await
             {
                 Ok(file_count) => {
@@ -753,10 +742,25 @@ impl DockerExecutor {
         env_vars: &[String],
         cancel_rx: &mut mpsc::Receiver<()>,
     ) -> Result<i64, DockerError> {
+        // Convert relative script path to absolute path for reliable execution
+        let script_path = if let Some(stripped) = script.strip_prefix("./") {
+            format!("{}/{}", job_work_dir, stripped)
+        } else if script.starts_with('/') {
+            // Already absolute
+            script.to_string()
+        } else {
+            // Relative without "./" prefix
+            format!("{}/{}", job_work_dir, script)
+        };
+
+        // Strip Windows CRLF line endings to ensure compatibility when scripts are created on Windows
+        // but executed in Linux containers. Uses sed to remove \r characters before piping to bash.
+        let script_cmd = format!("sed 's/\\r$//' '{}' | /bin/bash -s", script_path);
+
         let exec_config = CreateExecOptions {
             attach_stdout: Some(true),
             attach_stderr: Some(true),
-            cmd: Some(vec!["/bin/bash", "-c", script]),
+            cmd: Some(vec!["/bin/bash", "-c", &script_cmd]),
             working_dir: Some(job_work_dir),
             env: if env_vars.is_empty() {
                 None
