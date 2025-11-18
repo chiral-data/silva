@@ -16,6 +16,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.4]
 
+### Added
+
+- Job parameters support with interactive parameter editor UI
+- Parameter types: string, integer, float, boolean, file, directory, enum, and array
+- Parameter definitions in `.chiral/node.json` files
+- Parameters loaded from `params.json` and injected as environment variables with `PARAM_` prefix
+- Parameter editor accessible via 'p' hotkey with real-time validation
+
+### Changed
+
+- License changed from MIT to Mozilla Public License Version 2.0 (MPL-2.0)
+- Job configuration file location from `@job.toml` to `.chiral/job.toml` (legacy location still supported)
+- Job run hotkey changed from 'r' to 'Enter' for better usability
+
 ## [0.3.3]
 
 ### Added
