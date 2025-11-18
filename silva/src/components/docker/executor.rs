@@ -761,10 +761,14 @@ impl DockerExecutor {
             format!("{}/{}", job_work_dir, script)
         };
 
+        // Strip Windows CRLF line endings to ensure compatibility when scripts are created on Windows
+        // but executed in Linux containers. Uses sed to remove \r characters before piping to bash.
+        let script_cmd = format!("sed 's/\\r$//' '{}' | /bin/bash -s", script_path);
+
         let exec_config = CreateExecOptions {
             attach_stdout: Some(true),
             attach_stderr: Some(true),
-            cmd: Some(vec!["/bin/bash", &script_path]),
+            cmd: Some(vec!["/bin/bash", "-c", &script_cmd]),
             working_dir: Some(job_work_dir),
             env: if env_vars.is_empty() { None } else { Some(env_vars.iter().map(|s| s.as_str()).collect()) },
             ..Default::default()
