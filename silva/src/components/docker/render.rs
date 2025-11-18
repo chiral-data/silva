@@ -75,31 +75,27 @@ pub fn render(f: &mut Frame, app: &mut App, area: Rect) {
 
 fn render_status_section(f: &mut Frame, app: &mut App, area: Rect) {
     let docker_state = &app.workflow_state.docker_state;
-    let status = if let Some(job) = docker_state.get_selected_job_entry() {
-        job.status.clone()
+
+    // Get the workflow working path
+    let temp_path_guard = docker_state.current_temp_workflow_path.lock().unwrap();
+    let path_text = if let Some(ref path) = *temp_path_guard {
+        format!("{}", path.display())
     } else {
-        JobStatus::Idle
+        "No workflow path available".to_string()
     };
 
-    let status_color = match status {
-        JobStatus::Idle => Color::Gray,
-        JobStatus::Completed => Color::Green,
-        JobStatus::Failed => Color::Red,
-        _ => Color::Yellow,
-    };
+    let path_spans = vec![
+        Span::raw("Working Path: "),
+        Span::styled(
+            path_text,
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ];
 
-    // Build status text with workflow info if available
-    let mut status_spans = vec![Span::raw("Status: ")];
-
-    status_spans.push(Span::styled(
-        status.as_str(),
-        Style::default()
-            .fg(status_color)
-            .add_modifier(Modifier::BOLD),
-    ));
-
-    let status_text = vec![Line::from(status_spans)];
-    let title = "Docker Job Status";
+    let status_text = vec![Line::from(path_spans)];
+    let title = "Workflow Working Path";
 
     let status_paragraph = Paragraph::new(status_text).block(
         Block::default()
@@ -271,23 +267,12 @@ fn render_job_logs_section(f: &mut Frame, app: &mut App, area: Rect) {
         " [AUTO-SCROLL PAUSED]"
     };
 
-    // Get temp folder path for display
-    let temp_path_display: String = {
-        let temp_path_guard = docker_state.current_temp_workflow_path.lock().unwrap();
-        if let Some(ref path) = *temp_path_guard {
-            format!(" | Folder: {} | o-Open", path.display())
-        } else {
-            String::new()
-        }
-    };
-
     let title = format!(
-        "{} - Logs ({}/{}){}{}",
+        "{} - Logs ({}/{}){}",
         job_name,
         docker_state.scroll_offset.min(log_count),
         log_count,
         auto_scroll_indicator,
-        temp_path_display
     );
 
     let logs_list = List::new(visible_items).block(
