@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
@@ -30,6 +30,7 @@ pub struct State {
     pub last_viewport_width: usize,
     pub last_viewport_height: usize,
     pub pending_workflow: Option<workflow::WorkflowFolder>,
+    pub current_temp_workflow_path: Arc<Mutex<Option<PathBuf>>>,
 }
 
 impl Default for State {
@@ -47,6 +48,7 @@ impl Default for State {
             last_viewport_width: 80,
             last_viewport_height: 20,
             pending_workflow: None,
+            current_temp_workflow_path: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -96,6 +98,7 @@ impl State {
             }
             KeyCode::PageDown => self.scroll_down(),
             KeyCode::Char('b') => self.scroll_to_bottom(),
+            KeyCode::Char('o') => self.open_temp_folder(),
             KeyCode::Enter if !self.is_executing_workflow => self.run_workflow(),
             _ => {}
         }
@@ -130,12 +133,19 @@ impl State {
         self.is_executing_workflow = true;
         self.select_next_job();
 
+        // Clear previous temp path
+        {
+            let mut temp_path = self.current_temp_workflow_path.lock().unwrap();
+            *temp_path = None;
+        }
+
         let (tx, rx) = mpsc::channel::<(usize, JobStatus, LogLine)>(32);
         let (cancel_tx, mut cancel_rx) = mpsc::channel::<()>(1);
         self.rx = Some(rx);
         self.cancel_tx = Some(cancel_tx);
         let jobs = self.jobs.clone();
         let workflow_temp_dirs = self.workflow_temp_dirs.clone();
+        let temp_path_for_task = self.current_temp_workflow_path.clone();
 
         tokio::spawn(async move {
             let mut docker_executor = match DockerExecutor::new(tx.clone()) {
@@ -158,6 +168,13 @@ impl State {
             let temp_workflow_dir = match create_tmp_workflow_folder(&workflow_folder.path) {
                 Ok(temp_dir) => {
                     let temp_dir_path = temp_dir.path().to_path_buf();
+
+                    // Store the temp path in the Arc for main thread access
+                    {
+                        let mut temp_path = temp_path_for_task.lock().unwrap();
+                        *temp_path = Some(temp_dir_path.clone());
+                    }
+
                     let workflow_temp_dirs_arc = workflow_temp_dirs.clone();
                     let mut workflow_temp_dirs = workflow_temp_dirs_arc.lock().unwrap();
                     let workflow_dir_vec = workflow_temp_dirs
@@ -175,6 +192,24 @@ impl State {
                     return;
                 }
             };
+
+            // Load workflow parameters (global parameters)
+            let workflow_params = workflow_folder
+                .load_workflow_params()
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+
+            if !workflow_params.is_empty() {
+                let log_line = LogLine::new(
+                    LogSource::Stdout,
+                    format!(
+                        "Loaded {} global workflow parameter(s)",
+                        workflow_params.len()
+                    ),
+                );
+                tx.send((0, JobStatus::Idle, log_line)).await.unwrap();
+            }
 
             // Sort jobs in dependency order (topological sort)
             let sorted_jobs = match topological_sort_jobs(&jobs) {
@@ -226,7 +261,7 @@ impl State {
                         docker_executor.set_job_idx(idx);
 
                         // Load job parameters (if they exist)
-                        let params = job.load_params().ok().flatten().unwrap_or_default();
+                        let job_params = job.load_params().ok().flatten().unwrap_or_default();
 
                         // Copy input files from dependencies before running the job
                         copy_input_files_from_dependencies(
@@ -245,7 +280,8 @@ impl State {
                                 &temp_workflow_dir,
                                 job,
                                 &config,
-                                &params,
+                                &workflow_params,
+                                &job_params,
                                 &mut container_registry,
                                 &mut cancel_rx,
                             )
@@ -400,6 +436,55 @@ impl State {
         self.job_entries.clear();
         self.selected_job_index = None;
         self.scroll_offset = 0;
+    }
+
+    /// Opens the current temporary workflow folder in the system file explorer.
+    /// On Linux without GUI, copies the path to clipboard.
+    pub fn open_temp_folder(&self) {
+        let temp_path = {
+            let path_guard = self.current_temp_workflow_path.lock().unwrap();
+            path_guard.clone()
+        };
+
+        let Some(path) = temp_path else {
+            // No temp folder available - silently return
+            return;
+        };
+
+        // Try to open the folder with platform-specific command
+        let result = if cfg!(target_os = "windows") {
+            // Windows: use explorer
+            std::process::Command::new("explorer").arg(&path).spawn()
+        } else if cfg!(target_os = "macos") {
+            // macOS: use open
+            std::process::Command::new("open").arg(&path).spawn()
+        } else {
+            // Linux: check if GUI is available
+            let has_display =
+                std::env::var("DISPLAY").is_ok() || std::env::var("WAYLAND_DISPLAY").is_ok();
+
+            if has_display {
+                // Try xdg-open
+                std::process::Command::new("xdg-open").arg(&path).spawn()
+            } else {
+                // Server mode: copy to clipboard silently
+                let _ = Self::copy_to_clipboard(&path);
+                return;
+            }
+        };
+
+        // On failure, try to copy to clipboard as fallback
+        if result.is_err() {
+            let _ = Self::copy_to_clipboard(&path);
+        }
+    }
+
+    /// Helper function to copy path to clipboard
+    fn copy_to_clipboard(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+        use arboard::Clipboard;
+        let mut clipboard = Clipboard::new()?;
+        clipboard.set_text(path.to_string_lossy().to_string())?;
+        Ok(())
     }
 }
 

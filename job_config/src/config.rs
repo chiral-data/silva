@@ -456,6 +456,72 @@ impl JobConfig {
 /// Type alias for job parameters (params.json content).
 pub type JobParams = HashMap<String, serde_json::Value>;
 
+/// Type alias for workflow parameters (global_params.json content).
+pub type WorkflowParams = HashMap<String, serde_json::Value>;
+
+/// Represents the metadata for a workflow (workflow.json).
+/// Similar to NodeMetadata but for workflow-level global parameters.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkflowMetadata {
+    pub name: String,
+    pub description: String,
+    pub params: HashMap<String, ParamDefinition>,
+}
+
+impl WorkflowMetadata {
+    /// Creates a new workflow metadata with the given name and description.
+    pub fn new(name: String, description: String) -> Self {
+        Self {
+            name,
+            description,
+            params: HashMap::new(),
+        }
+    }
+
+    /// Adds a parameter definition to this workflow.
+    pub fn add_param(&mut self, name: String, definition: ParamDefinition) {
+        self.params.insert(name, definition);
+    }
+
+    /// Loads workflow metadata from a JSON file.
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, JobConfigError> {
+        let content = fs::read_to_string(path)?;
+        let metadata: WorkflowMetadata =
+            serde_json::from_str(&content).map_err(JobConfigError::InvalidJson)?;
+        Ok(metadata)
+    }
+
+    /// Saves workflow metadata to a JSON file.
+    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), JobConfigError> {
+        let json = serde_json::to_string_pretty(self).map_err(JobConfigError::InvalidJson)?;
+        fs::write(path, json)?;
+        Ok(())
+    }
+
+    /// Validates a params HashMap against this workflow's parameter definitions.
+    pub fn validate_params(
+        &self,
+        params: &HashMap<String, serde_json::Value>,
+    ) -> Result<(), String> {
+        for (param_name, param_value) in params {
+            if let Some(param_def) = self.params.get(param_name) {
+                param_def.validate(param_value)?;
+            } else {
+                return Err(format!("Unknown parameter: {param_name}"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Generates default parameters based on the parameter definitions.
+    pub fn generate_default_params(&self) -> HashMap<String, serde_json::Value> {
+        self.params
+            .iter()
+            .map(|(name, def)| (name.clone(), def.default_value.clone()))
+            .collect()
+    }
+}
+
 /// Loads job parameters from a JSON file.
 ///
 /// # Arguments
@@ -484,6 +550,42 @@ pub fn load_params<P: AsRef<Path>>(path: P) -> Result<JobParams, JobConfigError>
 /// * `Ok(())` - Successfully saved parameters
 /// * `Err(JobConfigError)` - Error writing file or serializing JSON
 pub fn save_params<P: AsRef<Path>>(path: P, params: &JobParams) -> Result<(), JobConfigError> {
+    let json = serde_json::to_string_pretty(params)?;
+    fs::write(path, json)?;
+    Ok(())
+}
+
+/// Loads workflow parameters from a JSON file (global_params.json).
+///
+/// # Arguments
+///
+/// * `path` - Path to the global_params.json file
+///
+/// # Returns
+///
+/// * `Ok(WorkflowParams)` - Successfully parsed parameters
+/// * `Err(JobConfigError)` - Error reading file or parsing JSON
+pub fn load_workflow_params<P: AsRef<Path>>(path: P) -> Result<WorkflowParams, JobConfigError> {
+    let content = fs::read_to_string(path)?;
+    let params: WorkflowParams = serde_json::from_str(&content)?;
+    Ok(params)
+}
+
+/// Saves workflow parameters to a JSON file (global_params.json).
+///
+/// # Arguments
+///
+/// * `path` - Path to the global_params.json file
+/// * `params` - Parameters to save
+///
+/// # Returns
+///
+/// * `Ok(())` - Successfully saved parameters
+/// * `Err(JobConfigError)` - Error writing file or serializing JSON
+pub fn save_workflow_params<P: AsRef<Path>>(
+    path: P,
+    params: &WorkflowParams,
+) -> Result<(), JobConfigError> {
     let json = serde_json::to_string_pretty(params)?;
     fs::write(path, json)?;
     Ok(())

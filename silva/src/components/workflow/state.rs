@@ -9,21 +9,20 @@ pub struct State {
     pub show_docker_popup: bool,
     pub show_params_popup: bool,
     pub params_editor_state: Option<super::ParamsEditorState>,
+    pub show_global_params_popup: bool,
+    pub global_params_editor_state: Option<super::GlobalParamsEditorState>,
 }
 
 impl Default for State {
     fn default() -> Self {
         // Initialize workflow manager
-        let home = super::WorkflowHome::new().unwrap_or_else(|e| {
-            eprintln!("Warning: Failed to initialize workflow home: {e}");
+        let home = super::WorkflowHome::new().unwrap_or_else(|_e| {
             // Fall back to a default path
             super::WorkflowHome::new().unwrap()
         });
 
         let mut workflow_manager = super::WorkflowManager::new(home);
-        if let Err(e) = workflow_manager.initialize() {
-            eprintln!("Warning: Failed to initialize workflow manager: {e}");
-        }
+        let _ = workflow_manager.initialize();
 
         Self {
             selected_workflow: None,
@@ -32,13 +31,21 @@ impl Default for State {
             show_docker_popup: false,
             show_params_popup: false,
             params_editor_state: None,
+            show_global_params_popup: false,
+            global_params_editor_state: None,
         }
     }
 }
 
 impl State {
     pub async fn handle_input(&mut self, key: KeyEvent) {
-        // Handle params popup input first if it's open
+        // Handle global params popup input first if it's open
+        if self.show_global_params_popup {
+            self.handle_global_params_editor_input(key);
+            return;
+        }
+
+        // Handle params popup input if it's open
         if self.show_params_popup {
             self.handle_params_editor_input(key);
             return;
@@ -47,6 +54,7 @@ impl State {
         match key.code {
             KeyCode::Char('d') => self.toggle_docker_popup(),
             KeyCode::Char('p') => self.open_params_editor(),
+            KeyCode::Char('g') => self.open_global_params_editor(),
             _ => {
                 if self.show_docker_popup {
                     self.docker_state.handle_input(key);
@@ -82,9 +90,7 @@ impl State {
     }
 
     pub fn refresh_workflows(&mut self) {
-        if let Err(e) = self.workflow_manager.refresh() {
-            eprintln!("Error refreshing workflows: {e}");
-        }
+        let _ = self.workflow_manager.refresh();
     }
 
     fn scan_jobs(&mut self) {
@@ -155,14 +161,12 @@ impl State {
                         // Create default metadata
                         match job.ensure_default_node_metadata() {
                             Ok(metadata) => metadata,
-                            Err(e) => {
-                                eprintln!("Failed to create node metadata: {e}");
+                            Err(_e) => {
                                 return;
                             }
                         }
                     }
-                    Err(e) => {
-                        eprintln!("Failed to load node metadata: {e}");
+                    Err(_e) => {
                         return;
                     }
                 };
@@ -173,9 +177,7 @@ impl State {
                         self.params_editor_state = Some(state);
                         self.show_params_popup = true;
                     }
-                    Err(e) => {
-                        eprintln!("Failed to create params editor: {e}");
-                    }
+                    Err(_e) => {}
                 }
             }
         }
@@ -222,7 +224,6 @@ impl State {
                     KeyCode::Char('s') => {
                         // Save all params and close
                         if let Err(e) = editor_state.save_params() {
-                            eprintln!("Failed to save params: {e}");
                             editor_state.error_message = Some(e);
                         } else {
                             self.close_params_editor();
@@ -230,6 +231,95 @@ impl State {
                     }
                     KeyCode::Esc => {
                         self.close_params_editor();
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    /// Opens the global parameter editor for the selected workflow.
+    pub fn open_global_params_editor(&mut self) {
+        // Need to have a selected workflow
+        if let Some(workflow_folder) = self.get_selected_workflow() {
+            // Load or create workflow metadata
+            let workflow_metadata: job_config::config::WorkflowMetadata =
+                match workflow_folder.load_workflow_metadata() {
+                    Ok(Some(metadata)) => metadata,
+                    Ok(None) => {
+                        // Create default metadata
+                        let metadata = job_config::config::WorkflowMetadata::new(
+                            workflow_folder.name.clone(),
+                            "Global workflow parameters".to_string(),
+                        );
+                        // Save it for future use
+                        let _ = workflow_folder.save_workflow_metadata(&metadata);
+                        metadata
+                    }
+                    Err(_e) => {
+                        return;
+                    }
+                };
+
+            // Create global params editor state
+            match super::GlobalParamsEditorState::new(workflow_folder.clone(), workflow_metadata) {
+                Ok(state) => {
+                    self.global_params_editor_state = Some(state);
+                    self.show_global_params_popup = true;
+                }
+                Err(_e) => {}
+            }
+        }
+    }
+
+    /// Closes the global parameter editor.
+    pub fn close_global_params_editor(&mut self) {
+        self.show_global_params_popup = false;
+        self.global_params_editor_state = None;
+    }
+
+    /// Handles input for the global parameter editor popup.
+    fn handle_global_params_editor_input(&mut self, key: KeyEvent) {
+        if let Some(editor_state) = &mut self.global_params_editor_state {
+            if editor_state.editing {
+                // In editing mode
+                match key.code {
+                    KeyCode::Char(c) => {
+                        editor_state.input_char(c);
+                    }
+                    KeyCode::Backspace => {
+                        editor_state.input_backspace();
+                    }
+                    KeyCode::Enter => {
+                        editor_state.save_current_edit();
+                    }
+                    KeyCode::Esc => {
+                        editor_state.cancel_editing();
+                    }
+                    _ => {}
+                }
+            } else {
+                // Navigation mode
+                match key.code {
+                    KeyCode::Up | KeyCode::Char('j') => {
+                        editor_state.move_up();
+                    }
+                    KeyCode::Down | KeyCode::Char('k') => {
+                        editor_state.move_down();
+                    }
+                    KeyCode::Enter => {
+                        editor_state.start_editing();
+                    }
+                    KeyCode::Char('s') => {
+                        // Save all params and close
+                        if let Err(e) = editor_state.save_params() {
+                            editor_state.error_message = Some(e);
+                        } else {
+                            self.close_global_params_editor();
+                        }
+                    }
+                    KeyCode::Esc => {
+                        self.close_global_params_editor();
                     }
                     _ => {}
                 }

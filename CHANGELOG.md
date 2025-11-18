@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.6]
+
+### Added
+
+- Global workflow parameters support for workflow-level configuration
+- Workflow metadata schema in `.chiral/workflow.json` (similar to job-level `node.json`)
+- Global parameter values stored in `global_params.json` at workflow root
+- Global parameter editor UI accessible via 'g' hotkey
+- Parameter merging: global parameters combined with job-level parameters
+- Environment variable injection for merged parameters with `PARAM_` prefix
+- Enhanced logging showing global, job, and total parameter counts during execution
+
+### Changed
+
+- `run_job()` function signature now accepts both workflow and job parameters
+- Parameters are merged with job-level parameters taking precedence over global parameters
+
 ## [0.3.5]
 
 ### Fixed
