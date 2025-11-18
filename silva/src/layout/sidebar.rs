@@ -11,7 +11,7 @@ use crate::app::App;
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     // Calculate popup size (centered, reasonable size)
     let popup_width = 40.min(area.width.saturating_sub(4));
-    let popup_height = 15.min(area.height.saturating_sub(4));
+    let popup_height = 20.min(area.height.saturating_sub(4));
     let popup_x = (area.width.saturating_sub(popup_width)) / 2;
     let popup_y = (area.height.saturating_sub(popup_height)) / 2;
 
@@ -76,6 +76,24 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     } else if app.selected_tab == 1 {
         help_text.push(Line::from(vec![
             Span::styled(
+                format!("{:>12}", "↑↓ or j/k "),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Navigate Workflows"),
+        ]));
+        help_text.push(Line::from(vec![
+            Span::styled(
+                format!("{:>12}", "r "),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Refresh Workflows"),
+        ]));
+        help_text.push(Line::from(vec![
+            Span::styled(
                 format!("{:>12}", "Enter "),
                 Style::default()
                     .fg(Color::Green)
@@ -91,6 +109,67 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw("Toggle Job Details"),
+        ]));
+        help_text.push(Line::from(vec![
+            Span::styled(
+                format!("{:>12}", "p "),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Edit Job Parameters"),
+        ]));
+        help_text.push(Line::from(vec![
+            Span::styled(
+                format!("{:>12}", "g "),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Edit Global Parameters"),
+        ]));
+        help_text.push(Line::from(""));
+        help_text.push(Line::from(vec![Span::styled(
+            "In Job Details:",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::ITALIC),
+        )]));
+        help_text.push(Line::from(vec![
+            Span::styled(
+                format!("{:>12}", "Shift+↑↓ "),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Scroll Logs"),
+        ]));
+        help_text.push(Line::from(vec![
+            Span::styled(
+                format!("{:>12}", "PgUp/PgDn "),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Page Scroll"),
+        ]));
+        help_text.push(Line::from(vec![
+            Span::styled(
+                format!("{:>12}", "b "),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Scroll to Bottom"),
+        ]));
+        help_text.push(Line::from(vec![
+            Span::styled(
+                format!("{:>12}", "o "),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("Open Temp Folder"),
         ]));
     } else if app.selected_tab == 2 {
         help_text.push(Line::from(vec![

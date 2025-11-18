@@ -390,7 +390,8 @@ impl DockerExecutor {
         workflow_folder: &Path, // tmp workflow folder
         job: &workflow::Job,
         config: &JobConfig,
-        params: &job_config::config::JobParams,
+        workflow_params: &job_config::config::WorkflowParams,
+        job_params: &job_config::config::JobParams,
         container_registry: &mut std::collections::HashMap<String, String>,
         cancel_rx: &mut mpsc::Receiver<()>,
     ) -> Result<String, DockerError> {
@@ -541,9 +542,16 @@ impl DockerExecutor {
             container.id
         };
 
-        // Convert job parameters to environment variables
+        // Merge workflow parameters with job parameters
+        // Start with workflow params, then overlay job params (job params take precedence)
+        let mut merged_params = workflow_params.clone();
+        for (param_name, param_value) in job_params {
+            merged_params.insert(param_name.clone(), param_value.clone());
+        }
+
+        // Convert merged parameters to environment variables
         let mut env_vars: Vec<String> = Vec::new();
-        for (param_name, param_value) in params {
+        for (param_name, param_value) in &merged_params {
             // Convert JSON value to string
             let value_str = match param_value {
                 serde_json::Value::String(s) => s.clone(),
@@ -556,11 +564,17 @@ impl DockerExecutor {
         }
 
         if !env_vars.is_empty() {
+            let global_count = workflow_params.len();
+            let job_count = job_params.len();
+            let total_count = merged_params.len();
             let log_line = LogLine::new(
                 LogSource::Stdout,
                 format!(
-                    "Setting {} parameter environment variable(s)",
-                    env_vars.len()
+                    "Setting {} parameter environment variable(s) ({} global + {} job = {} total)",
+                    env_vars.len(),
+                    global_count,
+                    job_count,
+                    total_count
                 ),
             );
             self.tx_send(JobStatus::CreatingContainer, log_line).await?;
@@ -744,18 +758,18 @@ impl DockerExecutor {
     ) -> Result<i64, DockerError> {
         // Convert relative script path to absolute path for reliable execution
         let script_path = if let Some(stripped) = script.strip_prefix("./") {
-            format!("{}/{}", job_work_dir, stripped)
+            format!("{job_work_dir}/{stripped}")
         } else if script.starts_with('/') {
             // Already absolute
             script.to_string()
         } else {
             // Relative without "./" prefix
-            format!("{}/{}", job_work_dir, script)
+            format!("{job_work_dir}/{script}")
         };
 
         // Strip Windows CRLF line endings to ensure compatibility when scripts are created on Windows
         // but executed in Linux containers. Uses sed to remove \r characters before piping to bash.
-        let script_cmd = format!("sed 's/\\r$//' '{}' | /bin/bash -s", script_path);
+        let script_cmd = format!("sed 's/\\r$//' '{script_path}' | /bin/bash -s");
 
         let exec_config = CreateExecOptions {
             attach_stdout: Some(true),
