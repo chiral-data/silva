@@ -16,16 +16,13 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         // Initialize workflow manager
-        let home = super::WorkflowHome::new().unwrap_or_else(|e| {
-            eprintln!("Warning: Failed to initialize workflow home: {e}");
+        let home = super::WorkflowHome::new().unwrap_or_else(|_e| {
             // Fall back to a default path
             super::WorkflowHome::new().unwrap()
         });
 
         let mut workflow_manager = super::WorkflowManager::new(home);
-        if let Err(e) = workflow_manager.initialize() {
-            eprintln!("Warning: Failed to initialize workflow manager: {e}");
-        }
+        let _ = workflow_manager.initialize();
 
         Self {
             selected_workflow: None,
@@ -93,9 +90,7 @@ impl State {
     }
 
     pub fn refresh_workflows(&mut self) {
-        if let Err(e) = self.workflow_manager.refresh() {
-            eprintln!("Error refreshing workflows: {e}");
-        }
+        let _ = self.workflow_manager.refresh();
     }
 
     fn scan_jobs(&mut self) {
@@ -166,14 +161,12 @@ impl State {
                         // Create default metadata
                         match job.ensure_default_node_metadata() {
                             Ok(metadata) => metadata,
-                            Err(e) => {
-                                eprintln!("Failed to create node metadata: {e}");
+                            Err(_e) => {
                                 return;
                             }
                         }
                     }
-                    Err(e) => {
-                        eprintln!("Failed to load node metadata: {e}");
+                    Err(_e) => {
                         return;
                     }
                 };
@@ -184,9 +177,7 @@ impl State {
                         self.params_editor_state = Some(state);
                         self.show_params_popup = true;
                     }
-                    Err(e) => {
-                        eprintln!("Failed to create params editor: {e}");
-                    }
+                    Err(_e) => {}
                 }
             }
         }
@@ -233,7 +224,6 @@ impl State {
                     KeyCode::Char('s') => {
                         // Save all params and close
                         if let Err(e) = editor_state.save_params() {
-                            eprintln!("Failed to save params: {e}");
                             editor_state.error_message = Some(e);
                         } else {
                             self.close_params_editor();
@@ -263,13 +253,10 @@ impl State {
                             "Global workflow parameters".to_string(),
                         );
                         // Save it for future use
-                        if let Err(e) = workflow_folder.save_workflow_metadata(&metadata) {
-                            eprintln!("Failed to save workflow metadata: {e}");
-                        }
+                        let _ = workflow_folder.save_workflow_metadata(&metadata);
                         metadata
                     }
-                    Err(e) => {
-                        eprintln!("Failed to load workflow metadata: {e}");
+                    Err(_e) => {
                         return;
                     }
                 };
@@ -280,9 +267,7 @@ impl State {
                     self.global_params_editor_state = Some(state);
                     self.show_global_params_popup = true;
                 }
-                Err(e) => {
-                    eprintln!("Failed to create global params editor: {e}");
-                }
+                Err(_e) => {}
             }
         }
     }
@@ -328,7 +313,6 @@ impl State {
                     KeyCode::Char('s') => {
                         // Save all params and close
                         if let Err(e) = editor_state.save_params() {
-                            eprintln!("Failed to save global params: {e}");
                             editor_state.error_message = Some(e);
                         } else {
                             self.close_global_params_editor();

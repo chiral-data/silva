@@ -217,8 +217,8 @@ impl JobScanner {
                         }
                     }
                 }
-                Err(e) => {
-                    eprintln!("Error reading entry: {e}");
+                Err(_e) => {
+                    // Skip entries that can't be read
                 }
             }
         }

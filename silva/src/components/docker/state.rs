@@ -439,7 +439,7 @@ impl State {
     }
 
     /// Opens the current temporary workflow folder in the system file explorer.
-    /// On Linux without GUI, copies the path to clipboard and shows a notification.
+    /// On Linux without GUI, copies the path to clipboard.
     pub fn open_temp_folder(&self) {
         let temp_path = {
             let path_guard = self.current_temp_workflow_path.lock().unwrap();
@@ -447,7 +447,7 @@ impl State {
         };
 
         let Some(path) = temp_path else {
-            eprintln!("No temporary workflow folder available");
+            // No temp folder available - silently return
             return;
         };
 
@@ -467,31 +467,15 @@ impl State {
                 // Try xdg-open
                 std::process::Command::new("xdg-open").arg(&path).spawn()
             } else {
-                // Server mode: copy to clipboard and print message
-                if let Err(e) = Self::copy_to_clipboard(&path) {
-                    eprintln!("Failed to copy path to clipboard: {}", e);
-                } else {
-                    println!("Path copied to clipboard: {}", path.display());
-                }
-                println!("Running in server mode (no GUI detected).");
-                println!("Temporary workflow folder: {}", path.display());
+                // Server mode: copy to clipboard silently
+                let _ = Self::copy_to_clipboard(&path);
                 return;
             }
         };
 
-        match result {
-            Ok(_) => {
-                println!("Opened folder: {}", path.display());
-            }
-            Err(e) => {
-                eprintln!("Failed to open folder: {}", e);
-                // Fallback: try to copy to clipboard
-                if let Err(e) = Self::copy_to_clipboard(&path) {
-                    eprintln!("Failed to copy path to clipboard: {}", e);
-                } else {
-                    println!("Path copied to clipboard: {}", path.display());
-                }
-            }
+        // On failure, try to copy to clipboard as fallback
+        if result.is_err() {
+            let _ = Self::copy_to_clipboard(&path);
         }
     }
 

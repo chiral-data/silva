@@ -201,9 +201,8 @@ impl WorkflowManager {
                         self.workflows.push(workflow);
                     }
                 }
-                Err(e) => {
-                    // Log error but continue scanning
-                    eprintln!("Error reading entry: {e}");
+                Err(_e) => {
+                    // Skip entries that can't be read, continue scanning
                 }
             }
         }
