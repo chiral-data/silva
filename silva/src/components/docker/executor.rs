@@ -390,6 +390,7 @@ impl DockerExecutor {
         workflow_folder: &Path, // tmp workflow folder
         job: &workflow::Job,
         config: &JobConfig,
+        workflow_params: &job_config::config::WorkflowParams,
         params: &job_config::config::JobParams,
         container_registry: &mut std::collections::HashMap<String, String>,
         cancel_rx: &mut mpsc::Receiver<()>,
@@ -541,9 +542,16 @@ impl DockerExecutor {
             container.id
         };
 
-        // Convert job parameters to environment variables
-        let mut env_vars: Vec<String> = Vec::new();
+        // Merge workflow parameters with job parameters
+        // Start with workflow params, then overlay job params (job params take precedence)
+        let mut merged_params = workflow_params.clone();
         for (param_name, param_value) in params {
+            merged_params.insert(param_name.clone(), param_value.clone());
+        }
+
+        // Convert merged parameters to environment variables
+        let mut env_vars: Vec<String> = Vec::new();
+        for (param_name, param_value) in &merged_params {
             // Convert JSON value to string
             let value_str = match param_value {
                 serde_json::Value::String(s) => s.clone(),
@@ -556,11 +564,17 @@ impl DockerExecutor {
         }
 
         if !env_vars.is_empty() {
+            let global_count = workflow_params.len();
+            let job_count = params.len();
+            let total_count = merged_params.len();
             let log_line = LogLine::new(
                 LogSource::Stdout,
                 format!(
-                    "Setting {} parameter environment variable(s)",
-                    env_vars.len()
+                    "Setting {} parameter environment variable(s) ({} global + {} job = {} total)",
+                    env_vars.len(),
+                    global_count,
+                    job_count,
+                    total_count
                 ),
             );
             self.tx_send(JobStatus::CreatingContainer, log_line).await?;

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 use super::home::{WorkflowHome, WorkflowHomeError};
+use job_config::config::{JobConfigError, WorkflowMetadata, WorkflowParams};
 
 /// Represents a single workflow folder.
 #[derive(Debug, Clone, PartialEq)]
@@ -44,6 +45,61 @@ impl WorkflowFolder {
             }
             None => "Unknown".to_string(),
         }
+    }
+
+    /// Returns the path to the workflow's .chiral directory.
+    pub fn chiral_dir(&self) -> PathBuf {
+        self.path.join(".chiral")
+    }
+
+    /// Returns the path to the workflow.json metadata file.
+    pub fn workflow_metadata_path(&self) -> PathBuf {
+        self.chiral_dir().join("workflow.json")
+    }
+
+    /// Returns the path to the global_params.json file.
+    pub fn workflow_params_path(&self) -> PathBuf {
+        self.path.join("global_params.json")
+    }
+
+    /// Loads workflow metadata from workflow.json.
+    /// Returns None if the file doesn't exist.
+    pub fn load_workflow_metadata(&self) -> Result<Option<WorkflowMetadata>, JobConfigError> {
+        let path = self.workflow_metadata_path();
+        if !path.exists() {
+            return Ok(None);
+        }
+        WorkflowMetadata::load_from_file(path).map(Some)
+    }
+
+    /// Loads workflow parameters from global_params.json.
+    /// Returns None if the file doesn't exist.
+    pub fn load_workflow_params(&self) -> Result<Option<WorkflowParams>, JobConfigError> {
+        let path = self.workflow_params_path();
+        if !path.exists() {
+            return Ok(None);
+        }
+        job_config::config::load_workflow_params(path).map(Some)
+    }
+
+    /// Saves workflow parameters to global_params.json.
+    pub fn save_workflow_params(&self, params: &WorkflowParams) -> Result<(), JobConfigError> {
+        let path = self.workflow_params_path();
+        job_config::config::save_workflow_params(path, params)
+    }
+
+    /// Saves workflow metadata to workflow.json.
+    /// Creates the .chiral directory if it doesn't exist.
+    pub fn save_workflow_metadata(
+        &self,
+        metadata: &WorkflowMetadata,
+    ) -> Result<(), JobConfigError> {
+        let chiral_dir = self.chiral_dir();
+        if !chiral_dir.exists() {
+            fs::create_dir_all(&chiral_dir)?;
+        }
+        let path = self.workflow_metadata_path();
+        metadata.save_to_file(path)
     }
 }
 

@@ -176,6 +176,24 @@ impl State {
                 }
             };
 
+            // Load workflow parameters (global parameters)
+            let workflow_params = workflow_folder
+                .load_workflow_params()
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+
+            if !workflow_params.is_empty() {
+                let log_line = LogLine::new(
+                    LogSource::Stdout,
+                    format!(
+                        "Loaded {} global workflow parameter(s)",
+                        workflow_params.len()
+                    ),
+                );
+                tx.send((0, JobStatus::Idle, log_line)).await.unwrap();
+            }
+
             // Sort jobs in dependency order (topological sort)
             let sorted_jobs = match topological_sort_jobs(&jobs) {
                 Ok(sorted) => {
@@ -245,6 +263,7 @@ impl State {
                                 &temp_workflow_dir,
                                 job,
                                 &config,
+                                &workflow_params,
                                 &params,
                                 &mut container_registry,
                                 &mut cancel_rx,
