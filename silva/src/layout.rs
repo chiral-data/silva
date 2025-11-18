@@ -39,21 +39,21 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
     }
 
     // Params popup (rendered on top if visible)
-    if app.workflow_state.show_params_popup {
-        if let Some(ref mut params_state) = app.workflow_state.params_editor_state {
-            components::workflow::params_editor::render(frame, params_state, frame.area());
-        }
+    if app.workflow_state.show_params_popup
+        && let Some(ref mut params_state) = app.workflow_state.params_editor_state
+    {
+        components::workflow::params_editor::render(frame, params_state, frame.area());
     }
 
     // Global params popup (rendered on top if visible)
-    if app.workflow_state.show_global_params_popup {
-        if let Some(ref mut global_params_state) = app.workflow_state.global_params_editor_state {
-            components::workflow::global_params_editor::render(
-                frame,
-                global_params_state,
-                frame.area(),
-            );
-        }
+    if app.workflow_state.show_global_params_popup
+        && let Some(ref mut global_params_state) = app.workflow_state.global_params_editor_state
+    {
+        components::workflow::global_params_editor::render(
+            frame,
+            global_params_state,
+            frame.area(),
+        );
     }
 
     // Help popup (rendered on top if visible)
