@@ -2,7 +2,9 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use job_config::config::{JobConfig, JobConfigError, NodeMetadata, JobParams, load_params, save_params};
+use job_config::config::{
+    JobConfig, JobConfigError, JobParams, NodeMetadata, load_params, save_params,
+};
 
 /// Represents a job within a workflow.
 #[derive(Debug, Clone, PartialEq)]
@@ -106,10 +108,7 @@ impl Job {
         }
 
         // Create default metadata
-        let metadata = NodeMetadata::new(
-            self.name.clone(),
-            format!("Job: {}", self.name),
-        );
+        let metadata = NodeMetadata::new(self.name.clone(), format!("Job: {}", self.name));
 
         self.save_node_metadata(&metadata)?;
         Ok(metadata)

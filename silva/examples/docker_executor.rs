@@ -83,10 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let job = workflow::Job::new(job_name.clone(), job_folder_path.clone());
 
         // Load job parameters (if they exist)
-        let params = job.load_params()
-            .ok()
-            .flatten()
-            .unwrap_or_default();
+        let params = job.load_params().ok().flatten().unwrap_or_default();
 
         tokio::spawn(async move {
             let executor = DockerExecutor::new(tx)

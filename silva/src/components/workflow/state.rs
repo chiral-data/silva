@@ -57,7 +57,8 @@ impl State {
                         KeyCode::Down | KeyCode::Char('k') => self.select_next_workflow(),
                         KeyCode::Enter => {
                             if let Some(workflow_folder) = self.get_selected_workflow() {
-                                self.docker_state.pending_workflow = Some(workflow_folder.to_owned());
+                                self.docker_state.pending_workflow =
+                                    Some(workflow_folder.to_owned());
                                 self.toggle_docker_popup();
                             }
                         }
@@ -147,7 +148,8 @@ impl State {
         if let Some(selected_job_idx) = self.docker_state.selected_job_index {
             if let Some(job) = self.docker_state.jobs.get(selected_job_idx) {
                 // Load or create node metadata
-                let node_metadata: job_config::config::NodeMetadata = match job.load_node_metadata() {
+                let node_metadata: job_config::config::NodeMetadata = match job.load_node_metadata()
+                {
                     Ok(Some(metadata)) => metadata,
                     Ok(None) => {
                         // Create default metadata

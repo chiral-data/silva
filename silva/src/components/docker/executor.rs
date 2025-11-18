@@ -558,7 +558,10 @@ impl DockerExecutor {
         if !env_vars.is_empty() {
             let log_line = LogLine::new(
                 LogSource::Stdout,
-                format!("Setting {} parameter environment variable(s)", env_vars.len()),
+                format!(
+                    "Setting {} parameter environment variable(s)",
+                    env_vars.len()
+                ),
             );
             self.tx_send(JobStatus::CreatingContainer, log_line).await?;
         }
@@ -588,13 +591,7 @@ impl DockerExecutor {
 
             let job_workdir = format!("{}/{}", work_dir, job.name);
             match self
-                .exec_script(
-                    &container_id,
-                    &job_workdir,
-                    script,
-                    &env_vars,
-                    cancel_rx,
-                )
+                .exec_script(&container_id, &job_workdir, script, &env_vars, cancel_rx)
                 .await
             {
                 Ok(exit_code) => {
@@ -631,12 +628,7 @@ impl DockerExecutor {
 
             let job_workdir = format!("{}/{}", work_dir, job.name);
             match self
-                .collect_output_files(
-                    &container_id,
-                    &job_workdir,
-                    &config.outputs,
-                    cancel_rx,
-                )
+                .collect_output_files(&container_id, &job_workdir, &config.outputs, cancel_rx)
                 .await
             {
                 Ok(file_count) => {
@@ -770,7 +762,11 @@ impl DockerExecutor {
             attach_stderr: Some(true),
             cmd: Some(vec!["/bin/bash", "-c", &script_cmd]),
             working_dir: Some(job_work_dir),
-            env: if env_vars.is_empty() { None } else { Some(env_vars.iter().map(|s| s.as_str()).collect()) },
+            env: if env_vars.is_empty() {
+                None
+            } else {
+                Some(env_vars.iter().map(|s| s.as_str()).collect())
+            },
             ..Default::default()
         };
 
