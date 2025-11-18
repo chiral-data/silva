@@ -244,7 +244,7 @@ impl State {
                         docker_executor.set_job_idx(idx);
 
                         // Load job parameters (if they exist)
-                        let params = job.load_params().ok().flatten().unwrap_or_default();
+                        let job_params = job.load_params().ok().flatten().unwrap_or_default();
 
                         // Copy input files from dependencies before running the job
                         copy_input_files_from_dependencies(
@@ -264,7 +264,7 @@ impl State {
                                 job,
                                 &config,
                                 &workflow_params,
-                                &params,
+                                &job_params,
                                 &mut container_registry,
                                 &mut cancel_rx,
                             )

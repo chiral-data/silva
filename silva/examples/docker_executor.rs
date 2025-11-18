@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use job_config::config;
+use job_config::config::{self, WorkflowParams};
 use silva::components::{
     docker::{executor::DockerExecutor, job::JobStatus, logs::LogLine},
     workflow,
@@ -80,10 +80,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (tx, mut rx) = mpsc::channel::<(usize, JobStatus, LogLine)>(32);
         let (cancel_tx, mut cancel_rx) = mpsc::channel::<()>(1);
 
+        let workflow_params = WorkflowParams::new();
         let job = workflow::Job::new(job_name.clone(), job_folder_path.clone());
-
-        // Load job parameters (if they exist)
-        let params = job.load_params().ok().flatten().unwrap_or_default();
+        let job_params = job.load_params().ok().flatten().unwrap_or_default();
 
         tokio::spawn(async move {
             let executor = DockerExecutor::new(tx)
@@ -94,9 +93,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap();
             println!("✓ Docker executor initialized\n");
 
-            if !params.is_empty() {
-                println!("Loaded {} parameter(s)", params.len());
-                for (name, value) in &params {
+            if !job_params.is_empty() {
+                println!("Loaded {} parameter(s)", job_params.len());
+                for (name, value) in &job_params {
                     println!("  {name} = {value}");
                 }
                 println!();
@@ -112,7 +111,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     &workflow_path,
                     &job,
                     &config,
-                    &params,
+                    &workflow_params,
+                    &job_params,
                     &mut container_registry,
                     &mut cancel_rx,
                 )

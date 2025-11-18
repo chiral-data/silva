@@ -391,7 +391,7 @@ impl DockerExecutor {
         job: &workflow::Job,
         config: &JobConfig,
         workflow_params: &job_config::config::WorkflowParams,
-        params: &job_config::config::JobParams,
+        job_params: &job_config::config::JobParams,
         container_registry: &mut std::collections::HashMap<String, String>,
         cancel_rx: &mut mpsc::Receiver<()>,
     ) -> Result<String, DockerError> {
@@ -545,7 +545,7 @@ impl DockerExecutor {
         // Merge workflow parameters with job parameters
         // Start with workflow params, then overlay job params (job params take precedence)
         let mut merged_params = workflow_params.clone();
-        for (param_name, param_value) in params {
+        for (param_name, param_value) in job_params {
             merged_params.insert(param_name.clone(), param_value.clone());
         }
 
@@ -565,7 +565,7 @@ impl DockerExecutor {
 
         if !env_vars.is_empty() {
             let global_count = workflow_params.len();
-            let job_count = params.len();
+            let job_count = job_params.len();
             let total_count = merged_params.len();
             let log_line = LogLine::new(
                 LogSource::Stdout,
