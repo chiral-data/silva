@@ -750,10 +750,21 @@ impl DockerExecutor {
         env_vars: &[String],
         cancel_rx: &mut mpsc::Receiver<()>,
     ) -> Result<i64, DockerError> {
+        // Convert relative script path to absolute path for reliable execution
+        let script_path = if let Some(stripped) = script.strip_prefix("./") {
+            format!("{}/{}", job_work_dir, stripped)
+        } else if script.starts_with('/') {
+            // Already absolute
+            script.to_string()
+        } else {
+            // Relative without "./" prefix
+            format!("{}/{}", job_work_dir, script)
+        };
+
         let exec_config = CreateExecOptions {
             attach_stdout: Some(true),
             attach_stderr: Some(true),
-            cmd: Some(vec!["/bin/bash", "-c", script]),
+            cmd: Some(vec!["/bin/bash", &script_path]),
             working_dir: Some(job_work_dir),
             env: if env_vars.is_empty() { None } else { Some(env_vars.iter().map(|s| s.as_str()).collect()) },
             ..Default::default()
