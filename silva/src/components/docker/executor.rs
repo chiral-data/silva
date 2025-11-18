@@ -586,11 +586,11 @@ impl DockerExecutor {
             let log_line = LogLine::new(LogSource::Stdout, format!("Executing script: {script}"));
             self.tx_send(JobStatus::Running, log_line).await?;
 
-            let job_workdir = Path::new(work_dir).join(&job.name);
+            let job_workdir = format!("{}/{}", work_dir, job.name);
             match self
                 .exec_script(
                     &container_id,
-                    job_workdir.to_str().unwrap(),
+                    &job_workdir,
                     script,
                     &env_vars,
                     cancel_rx,
@@ -629,11 +629,11 @@ impl DockerExecutor {
                 LogLine::new(LogSource::Stdout, "Collecting output files...".to_string());
             self.tx_send(JobStatus::Running, log_line).await?;
 
-            let job_workdir = Path::new(work_dir).join(&job.name);
+            let job_workdir = format!("{}/{}", work_dir, job.name);
             match self
                 .collect_output_files(
                     &container_id,
-                    job_workdir.to_str().unwrap(),
+                    &job_workdir,
                     &config.outputs,
                     cancel_rx,
                 )
