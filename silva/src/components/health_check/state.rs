@@ -64,8 +64,15 @@ impl State {
     pub fn check_software_installations(&mut self) {
         let software = vec!["docker"];
 
+        // Use "where" on Windows, "which" on Unix-like systems
+        let command = if cfg!(target_os = "windows") {
+            "where"
+        } else {
+            "which"
+        };
+
         for sw in software {
-            let output = std::process::Command::new("which").arg(sw).output();
+            let output = std::process::Command::new(command).arg(sw).output();
 
             let (status, details) = match output {
                 Ok(result) if result.status.success() => {
