@@ -5,15 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5]
+
+### Fixed
+
+- Windows: Fixed CRLF line endings in shell scripts causing execution failures in Linux containers
+- Windows: Fixed script path resolution for relative paths (./run.sh patterns)
+- Windows: Fixed path operations to use forward slashes for container compatibility
+- Windows: Fixed Docker detection using `where` command instead of `which`
+
+## [0.3.4]
+
 ## [0.3.3]
 
 ### Added
+
 - Job dependencies with `depends_on` field and topological sorting
 - Input/output file patterns with glob support (`*.csv`, `data/*`)
 - Recursive directory copying for input files
 - Container reuse by image for improved performance
 
 ### Changed
+
 - Extracted `job_config` as standalone publishable crate
 - Restructured project as Cargo workspace
 
