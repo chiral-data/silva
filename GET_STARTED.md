@@ -238,6 +238,7 @@ my-workflow/
 
 ### Workflow-003 Dependency Chain Example
 
+```
 1-download-pdb
 ↓ (outputs: _.pdb)
 2-protein-preparation
@@ -250,6 +251,7 @@ my-workflow/
 ↓ (inputs: \*.pdb + ligand_library, outputs: docking_results)
 6-report
 (inputs: docking_results, outputs: results)
+```
 
 ## Running Your Workflow
 
