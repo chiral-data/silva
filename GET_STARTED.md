@@ -188,27 +188,34 @@ Important:
 
 ## Complete Example Structure
 
+```
 my-workflow/
-├── .chiral/
-│ └── workflow.json # Workflow metadata and parameter definitions
-├── global_params.json # Parameters applied to ALL jobs
-├── 1-download-data/
-│ ├── .chiral/
-│ │ ├── node.json # Job metadata
-│ │ └── job.toml # Job configuration
-│ ├── run.sh # Main script
-│ ├── download.py # Python script
-│ └── params.json # Optional: parameters for this job ONLY
-├── 2-process-data/
-│ ├── .chiral/
-│ │ ├── node.json
-│ │ └── job.toml
-│ └── run.sh
-└── 3-generate-report/
-├── .chiral/
-│ ├── node.json
-│ └── job.toml
-└── run.sh
+  │
+  ├── .chiral/
+  │   └── workflow.json          # Workflow metadata and parameter definitions
+  │
+  ├── global_params.json         # Parameters applied to ALL jobs
+  │
+  ├── 1-download-data/
+  │   ├── .chiral/
+  │   │   ├── node.json         # Job metadata
+  │   │   └── job.toml          # Job configuration
+  │   ├── run.sh                # Main script
+  │   ├── download.py           # Python script
+  │   └── params.json           # Optional: parameters for this job ONLY
+  │
+  ├── 2-process-data/
+  │   ├── .chiral/
+  │   │   ├── node.json
+  │   │   └── job.toml
+  │   └── run.sh
+  │
+  └── 3-generate-report/
+      ├── .chiral/
+      │   ├── node.json
+      │   └── job.toml
+      └── run.sh
+```
 
 ## Parameter Scope Example
 
