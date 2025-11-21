@@ -246,11 +246,11 @@ my-workflow/
 ├→ 3-ligand-extraction
 │ ↓ (inputs: _.pdb, outputs: _.sdf)
 │ 4-ligand-modification
-│ ↓ (inputs: _.sdf, outputs: ligand_library)
+│    ↓ (inputs: _.sdf, outputs: ligand_library)
 └──→ 5-in-silico-screening
-↓ (inputs: \*.pdb + ligand_library, outputs: docking_results)
-6-report
-(inputs: docking_results, outputs: results)
+     ↓ (inputs: \*.pdb + ligand_library, outputs: docking_results)
+     6-report
+     (inputs: docking_results, outputs: results)
 ```
 
 ## Running Your Workflow
