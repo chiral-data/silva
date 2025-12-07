@@ -1,4 +1,4 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::fs;
@@ -114,36 +114,30 @@ impl ParamDefinition {
 }
 
 /// Represents the container configuration for a job.
-/// Can be either a Docker image URL or a path to a Dockerfile.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(untagged)]
-pub enum Container {
-    DockerImage(String),
-    DockerFile(String),
+/// Contains the Docker image URL and optional GPU support flag.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Container {
+    /// Docker image URL (e.g., "ubuntu:22.04", "python:3.11")
+    pub image: String,
+    /// Enable GPU support for this job (requires NVIDIA Container Toolkit).
+    #[serde(default)]
+    pub use_gpu: bool,
 }
 
-impl<'de> Deserialize<'de> for Container {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct ContainerHelper {
-            docker_image: Option<String>,
-            docker_file: Option<String>,
+impl Container {
+    /// Creates a new container configuration with the given image.
+    pub fn new(image: String) -> Self {
+        Self {
+            image,
+            use_gpu: false,
         }
+    }
 
-        let helper = ContainerHelper::deserialize(deserializer)?;
-
-        match (helper.docker_image, helper.docker_file) {
-            (Some(image), None) => Ok(Container::DockerImage(image)),
-            (None, Some(dockerfile)) => Ok(Container::DockerFile(dockerfile)),
-            (Some(_), Some(_)) => Err(serde::de::Error::custom(
-                "container section cannot have both 'docker_image' and 'docker_file'",
-            )),
-            (None, None) => Err(serde::de::Error::custom(
-                "container section must have either 'docker_image' or 'docker_file'",
-            )),
+    /// Creates a new container configuration with GPU support.
+    pub fn with_gpu(image: String) -> Self {
+        Self {
+            image,
+            use_gpu: true,
         }
     }
 }
@@ -231,14 +225,11 @@ pub struct JobMeta {
     pub name: String,
     /// Job description.
     pub description: String,
-    /// Container configuration.
+    /// Container configuration (includes image and GPU settings).
     pub container: Container,
     /// Scripts to execute.
     #[serde(default)]
     pub scripts: Scripts,
-    /// Enable GPU support for this job (requires NVIDIA Container Toolkit).
-    #[serde(default)]
-    pub use_gpu: bool,
     /// List of input file patterns to copy from dependent jobs.
     #[serde(default)]
     pub inputs: Vec<String>,
@@ -261,7 +252,6 @@ impl JobMeta {
             description,
             container,
             scripts: Scripts::default(),
-            use_gpu: false,
             inputs: Vec::new(),
             outputs: Vec::new(),
             depends_on: Vec::new(),
@@ -336,13 +326,14 @@ mod tests {
             description = "A test job"
 
             [container]
-            docker_image = "ubuntu:22.04"
+            image = "ubuntu:22.04"
         "#;
 
         let meta: JobMeta = toml::from_str(toml_str).unwrap();
         assert_eq!(meta.name, "Test Job");
         assert_eq!(meta.description, "A test job");
-        assert_eq!(meta.container, Container::DockerImage("ubuntu:22.04".to_string()));
+        assert_eq!(meta.container.image, "ubuntu:22.04");
+        assert!(!meta.container.use_gpu);
     }
 
     #[test]
@@ -352,7 +343,7 @@ mod tests {
             description = "A test job"
 
             [container]
-            docker_image = "ubuntu:22.04"
+            image = "ubuntu:22.04"
 
             [scripts]
             pre = "setup.sh"
@@ -367,27 +358,13 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_job_meta_with_dockerfile() {
-        let toml_str = r#"
-            name = "Test Job"
-            description = "A test job"
-
-            [container]
-            docker_file = "./Dockerfile"
-        "#;
-
-        let meta: JobMeta = toml::from_str(toml_str).unwrap();
-        assert_eq!(meta.container, Container::DockerFile("./Dockerfile".to_string()));
-    }
-
-    #[test]
     fn test_parse_job_meta_with_params() {
         let toml_str = r#"
             name = "Test Job"
             description = "A test job"
 
             [container]
-            docker_image = "ubuntu:22.04"
+            image = "ubuntu:22.04"
 
             [params.pdb_id]
             type = "string"
@@ -419,7 +396,7 @@ mod tests {
             description = "A test job"
 
             [container]
-            docker_image = "ubuntu:22.04"
+            image = "ubuntu:22.04"
 
             [params.format]
             type = "enum"
@@ -447,7 +424,7 @@ mod tests {
             outputs = ["results/*.json"]
 
             [container]
-            docker_image = "ubuntu:22.04"
+            image = "ubuntu:22.04"
         "#;
 
         let meta: JobMeta = toml::from_str(toml_str).unwrap();
@@ -463,7 +440,7 @@ mod tests {
             description = "A test job"
 
             [container]
-            docker_image = "ubuntu:22.04"
+            image = "ubuntu:22.04"
 
             [params.count]
             type = "integer"
@@ -489,7 +466,7 @@ mod tests {
             description = "A test job"
 
             [container]
-            docker_image = "ubuntu:22.04"
+            image = "ubuntu:22.04"
 
             [params.name]
             type = "string"
@@ -511,32 +488,32 @@ mod tests {
     }
 
     #[test]
-    fn test_error_both_container_types() {
-        let toml_str = r#"
-            name = "Test Job"
-            description = "A test job"
-
-            [container]
-            docker_image = "ubuntu:22.04"
-            docker_file = "./Dockerfile"
-        "#;
-
-        let result: Result<JobMeta, _> = toml::from_str(toml_str);
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn test_gpu_support() {
         let toml_str = r#"
             name = "GPU Job"
             description = "A GPU job"
-            use_gpu = true
 
             [container]
-            docker_image = "nvidia/cuda:11.8.0-base-ubuntu22.04"
+            image = "nvidia/cuda:11.8.0-base-ubuntu22.04"
+            use_gpu = true
         "#;
 
         let meta: JobMeta = toml::from_str(toml_str).unwrap();
-        assert!(meta.use_gpu);
+        assert!(meta.container.use_gpu);
+        assert_eq!(meta.container.image, "nvidia/cuda:11.8.0-base-ubuntu22.04");
+    }
+
+    #[test]
+    fn test_container_new() {
+        let container = Container::new("ubuntu:22.04".to_string());
+        assert_eq!(container.image, "ubuntu:22.04");
+        assert!(!container.use_gpu);
+    }
+
+    #[test]
+    fn test_container_with_gpu() {
+        let container = Container::with_gpu("nvidia/cuda:11.8.0".to_string());
+        assert_eq!(container.image, "nvidia/cuda:11.8.0");
+        assert!(container.use_gpu);
     }
 }

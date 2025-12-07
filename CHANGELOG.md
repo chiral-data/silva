@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `JobParams` and `WorkflowParams` now use `serde_json::Value` (JSON format)
   - Parameter files: `params.json` for job params, `global_params.json` for workflow params
   - Added `toml_to_json()` and `json_to_toml()` conversion utilities
+  - Simplified `Container` struct: now has `image` and `use_gpu` fields (removed DockerFile support)
+  - Moved `use_gpu` from `JobMeta` into `Container` struct
 
 ## [0.3.6]
 

@@ -40,10 +40,20 @@
   - silva/examples/docker_executor.rs - Updated imports
   - CHANGELOG.md - Updated with configuration unification changes
   - job_config/README.md - Updated documentation
-
-- [] update "JobMeata"
-  - [] move "use_gpu" into "container"
-  - [] remove the option docker file, only use docker image.
+- [x] update "JobMeta"
+  - [x] move "use_gpu" into "container"; remove the option docker file, only use docker image.
+    - Changes to Container:
+      - Changed from an enum (DockerImage/DockerFile) to a struct with image and use_gpu fields
+      - Added Container::new() and Container::with_gpu() constructor methods
+      - Removed Dockerfile support (only Docker images are now supported)
+    - Changes to JobMeta:
+      - Removed use_gpu field (now part of Container)
+  - [x] update callers and doc
+    - job_config/src/job.rs - Simplified Container struct, updated JobMeta, updated tests
+    - silva/src/components/docker/executor.rs - Updated to use new Container structure
+    - silva/examples/docker_executor.rs - Updated to use new Container structure
+    - CHANGELOG.md - Added documentation for the changes
+    - job_config/README.md - Updated documentation with new TOML format
 - [] add more tests.
 - [] merge params_editor and global_params_editor.rs
 
@@ -61,6 +71,6 @@
 
 ## Rules for each step
 
-- some steps will be done manally and they will be marked and highlighted.
+- Some steps will be done manally and they will be marked and highlighted.
 - [x] means it has been done.
-- after the completion of each step, update "CHANGELOG.md" and the "doc/\*.md" and also "job_config/README.md"
+- After the completion of each step, update "CHANGELOG.md" and the "doc/\*.md" and also "job_config/README.md"

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use job_config::job::{Container, JobMeta};
+use job_config::job::JobMeta;
 use job_config::params::WorkflowParams;
 use silva::components::{
     docker::{executor::DockerExecutor, job::JobStatus, logs::LogLine},
@@ -66,14 +66,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Job Configuration:");
         println!("  Name: {}", config.name);
         println!("  Description: {}", config.description);
-        match &config.container {
-            Container::DockerImage(img) => {
-                println!("  Container: Docker Image '{img}'");
-            }
-            Container::DockerFile(path) => {
-                println!("  Container: Dockerfile at '{path}'");
-            }
-        }
+        println!("  Container: Docker Image '{}'", config.container.image);
+        println!("  GPU Enabled: {}", config.container.use_gpu);
         println!("  Pre-script: {}", config.scripts.pre);
         println!("  Run-script: {}", config.scripts.run);
         println!("  Post-script: {}\n", config.scripts.post);

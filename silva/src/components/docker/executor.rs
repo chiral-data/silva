@@ -140,7 +140,7 @@ use std::path::Path;
 use tokio::sync::mpsc;
 
 use crate::components::workflow;
-use job_config::job::{Container, JobMeta};
+use job_config::job::JobMeta;
 
 use super::error::DockerError;
 use super::job::JobStatus;
@@ -386,7 +386,7 @@ impl DockerExecutor {
     /// **Note**: The container is left running. Call `cleanup_containers()` after all jobs complete.
     pub async fn run_job(
         &self,
-        workflow_name: &str,
+        _workflow_name: &str,
         workflow_folder: &Path, // tmp workflow folder
         job: &workflow::Job,
         config: &JobMeta,
@@ -397,50 +397,12 @@ impl DockerExecutor {
     ) -> Result<String, DockerError> {
         let work_dir = "/workspace";
 
-        let image_name = match &config.container {
-            Container::DockerImage(url) => {
-                self.pull_image(url).await?;
-                url.clone()
-            }
-            Container::DockerFile(path) => {
-                let job_folder = workflow_folder.join(&job.name);
-                let docker_file_path = job_folder.join(path);
-                let image_name = format!("{workflow_name}_{}", job.name);
-                match self
-                    .client
-                    .inspect_image(format!("{image_name}:latest").as_str())
-                    .await
-                {
-                    Ok(_) => {
-                        // If inspect_image succeeds, the image exists
-                        let log_line = LogLine::new(
-                            LogSource::Stdout,
-                            format!(
-                                "docker image {image_name} exists, skip building, remove the image to rebuild ..."
-                            ),
-                        );
-                        self.tx_send(JobStatus::BuildingImage, log_line).await?;
-                        format!("{image_name}:latest")
-                    }
-                    Err(bollard::errors::Error::DockerResponseServerError {
-                        status_code: 404,
-                        ..
-                    }) => {
-                        // A 404 status code from the Docker API means "no such image"
-                        self.build_image(&image_name, &docker_file_path).await?
-                    }
-                    Err(e) => {
-                        // Handle other errors (e.g., connection, authentication)
-                        return Err(DockerError::ImageBuildFailed(format!(
-                            "inspect image {image_name} error: {e}"
-                        )));
-                    }
-                }
-            }
-        };
+        // Pull the Docker image
+        let image_name = &config.container.image;
+        self.pull_image(image_name).await?;
 
         // Check if we already have a container for this image
-        let container_id = if let Some(existing_id) = container_registry.get(&image_name) {
+        let container_id = if let Some(existing_id) = container_registry.get(image_name) {
             let log_line = LogLine::new(
                 LogSource::Stdout,
                 format!("Reusing existing container {existing_id} for image {image_name}"),
@@ -456,7 +418,7 @@ impl DockerExecutor {
             self.tx_send(JobStatus::CreatingContainer, log_line).await?;
 
             // Build host config based on GPU requirement
-            let mut host_config = if config.use_gpu {
+            let mut host_config = if config.container.use_gpu {
                 let log_line = LogLine::new(
                     LogSource::Stdout,
                     "GPU support enabled for this container".to_string(),

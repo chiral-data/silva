@@ -66,7 +66,7 @@ name = "My Job"
 description = "A simple job"
 
 [container]
-docker_image = "ubuntu:22.04"
+image = "ubuntu:22.04"
 ```
 
 #### Full Configuration with Parameters
@@ -76,14 +76,13 @@ name = "Training Job"
 description = "Train a machine learning model"
 
 [container]
-docker_image = "python:3.11"
+image = "python:3.11"
+use_gpu = true
 
 [scripts]
 pre = "setup.sh"
 run = "train.sh"
 post = "cleanup.sh"
-
-use_gpu = true
 
 # Job dependencies
 depends_on = ["prepare_data", "download_model"]
@@ -116,15 +115,12 @@ enum_values = ["resnet", "vgg", "transformer"]
 
 ### Container Section (Required)
 
-Specify either a Docker image or Dockerfile:
+Specify the Docker image and optional GPU support:
 
 ```toml
 [container]
-# Option 1: Docker image
-docker_image = "ubuntu:22.04"
-
-# Option 2: Dockerfile path (mutually exclusive with docker_image)
-dockerfile = "./Dockerfile"
+image = "ubuntu:22.04"
+use_gpu = false  # Default: false, set to true for GPU support
 ```
 
 ### Scripts Section (Optional)
@@ -136,12 +132,6 @@ Customize script names (defaults shown):
 pre = "pre_run.sh"   # Default: "pre_run.sh"
 run = "run.sh"       # Default: "run.sh"
 post = "post_run.sh" # Default: "post_run.sh"
-```
-
-### GPU Support (Optional)
-
-```toml
-use_gpu = true  # Default: false
 ```
 
 ### Job Dependencies (Optional)
@@ -172,6 +162,17 @@ outputs = ["results/*.json", "*.csv", "models/"]
 
 ## API Documentation
 
+### `Container`
+
+Container configuration:
+
+```rust
+pub struct Container {
+    pub image: String,     // Docker image URL
+    pub use_gpu: bool,     // Enable GPU support (default: false)
+}
+```
+
 ### `JobMeta`
 
 Main configuration structure:
@@ -182,7 +183,6 @@ pub struct JobMeta {
     pub description: String,
     pub container: Container,
     pub scripts: Scripts,
-    pub use_gpu: bool,
     pub inputs: Vec<String>,
     pub outputs: Vec<String>,
     pub depends_on: Vec<String>,
