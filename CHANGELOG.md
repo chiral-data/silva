@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extracted navigation and key bindings documentation to `doc/navigation.md`
 - Extracted requirements, installation, and FAQ to `doc/get_started.md`
 - Extracted workflow documentation to `doc/workflows.md`
+- Moved release guide to `doc/releasing.md`
 
 ## [0.3.6]
 
