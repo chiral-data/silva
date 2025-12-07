@@ -2,6 +2,10 @@
 
 A terminal interface for managing and running workflows.
 
+## Documentation
+
+- [Key Bindings and Navigation](doc/navigation.md)
+
 ## Requirements
 
 - Docker (for containerized workflows)
@@ -48,40 +52,9 @@ cargo build --release
 
 ## Navigation
 
-### Switching Tabs
-
-- `←` / `→` or `h` `l` - Switch between Applications, Workflows, and Settings
-- `i` - Toggle help popup
-- `q` - Quit
-
-### Applications Tab
-
-Browse available bioinformatics applications:
-
-- `↑` `↓` or `j` `k` - Navigate list
-- `Enter` or `d` - View details
-- `Esc` or `d` - Close details
-
-### Workflows Tab
-
-Run and manage workflows:
-
-- `↑` `↓` or `j` `k` - Select workflow
-- `Enter` - Execute workflow
-- `d` - View/Close job logs
-
-### Settings Tab
-
-Configure health checks:
-
-- `r` - Refresh health checking status
+See [doc/navigation.md](doc/navigation.md) for key bindings and navigation instructions.
 
 ## Running Workflows
-
-1. Navigate to the **Workflows** tab using `→`
-2. Select a workflow with `↑` / `↓`
-3. Press `Enter` to execute
-4. Press `d` to view logs while running
 
 ### Usage Overview
 
@@ -229,6 +202,7 @@ ml_pipeline/
 ```
 
 **01_data_prep/@job.toml:**
+
 ```toml
 outputs = ["train.csv", "test.csv"]
 
@@ -240,6 +214,7 @@ run = "prepare.sh"
 ```
 
 **02_feature_eng/@job.toml:**
+
 ```toml
 depends_on = ["01_data_prep"]
 inputs = ["*.csv"]
@@ -253,6 +228,7 @@ run = "features.sh"
 ```
 
 **03_train_model/@job.toml:**
+
 ```toml
 depends_on = ["02_feature_eng"]
 inputs = ["features.json"]
@@ -319,46 +295,6 @@ EOF
 
 chmod +x $SILVA_HOME_DIR/my_workflow/01_preprocessing/preprocess.sh
 ```
-
-### Running Workflows
-
-#### UI Navigation
-
-1. **Launch the Application**
-
-2. **Navigate to Workflows Tab**
-   - Press `Left or h` or `Right or l` arrow keys to switch tabs
-   - Navigate to the "Files" tab (shows workflow list)
-
-3. **Select a Workflow**
-   - Use `Up` and `Down` arrow keys to select a workflow
-   - The selected workflow is highlighted
-
-4. **Launch Workflow Execution**
-   - Press `Enter` on a selected workflow
-   - The Docker logs popup opens automatically
-   - Workflow execution begins in the background
-
-5. **Monitor Progress**
-   - The Docker logs popup shows real-time execution logs
-   - Status section displays workflow name and execution status
-   - Job progress section shows visual indicators:
-     - **✓** (green) - Completed job
-     - **⟳** (yellow) - Currently running job
-     - **⬜** (gray) - Pending job
-   - Progress counter shows (current/total) jobs
-
-#### Keyboard Shortcuts
-
-| Key       | Action                         |
-| --------- | ------------------------------ |
-| `Enter`   | Launch selected workflow       |
-| `↑` / `↓` | Navigate workflows/scroll logs |
-| `d`       | Toggle Docker logs popup       |
-| `b`       | Scroll logs to bottom          |
-| `r`       | Refresh workflow list          |
-| `i`       | Toggle help popup              |
-| `q`       | Quit application               |
 
 ### Workflow Execution Behavior
 
