@@ -13,11 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extracted requirements, installation, and FAQ to `doc/get_started.md`
 - Extracted workflow documentation to `doc/workflows.md`
 - Moved release guide to `doc/releasing.md`
-- **Configuration unification (WIP):**
+- **Configuration unification:**
   - Added new `JobMeta` struct in `job_config/src/job.rs` merging `JobConfig` and `NodeMetadata`
   - Moved `WorkflowMetadata` to separate `job_config/src/workflow.rs` module
   - Job definitions now use TOML format (`job.toml`) with `ParamDefinition` using `toml::Value`
   - Updated callers: `load_config()` → `load_meta()` across workflow and docker components
+  - Added new `job_config/src/params.rs` module for JSON-based parameter storage
+  - `JobParams` and `WorkflowParams` now use `serde_json::Value` (JSON format)
+  - Parameter files: `params.json` for job params, `global_params.json` for workflow params
+  - Added `toml_to_json()` and `json_to_toml()` conversion utilities
 
 ## [0.3.6]
 

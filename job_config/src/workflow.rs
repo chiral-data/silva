@@ -4,9 +4,10 @@ use std::fs;
 use std::path::Path;
 
 use crate::job::{JobError, ParamDefinition};
+use crate::params::{WorkflowParams, toml_to_json, json_to_toml};
 
-/// Type alias for workflow parameters (global_params.toml content).
-pub type WorkflowParams = HashMap<String, toml::Value>;
+// Re-export WorkflowParams from params module for convenience
+pub use crate::params::WorkflowParams as WorkflowParamsType;
 
 /// Represents the metadata for a workflow (workflow.toml).
 /// Similar to JobMeta but for workflow-level global parameters.
@@ -50,13 +51,16 @@ impl WorkflowMetadata {
     }
 
     /// Validates a params HashMap against this workflow's parameter definitions.
+    /// Accepts JSON-based WorkflowParams and converts values for validation against TOML definitions.
     pub fn validate_params(
         &self,
         params: &WorkflowParams,
     ) -> Result<(), String> {
         for (param_name, param_value) in params {
             if let Some(param_def) = self.params.get(param_name) {
-                param_def.validate(param_value)?;
+                // Convert JSON value to TOML for validation
+                let toml_value = json_to_toml(param_value);
+                param_def.validate(&toml_value)?;
             } else {
                 return Err(format!("Unknown parameter: {param_name}"));
             }
@@ -65,51 +69,18 @@ impl WorkflowMetadata {
     }
 
     /// Generates default parameters based on the parameter definitions.
+    /// Returns JSON-based WorkflowParams converted from TOML defaults.
     pub fn generate_default_params(&self) -> WorkflowParams {
         self.params
             .iter()
-            .map(|(name, def)| (name.clone(), def.default.clone()))
+            .map(|(name, def)| (name.clone(), toml_to_json(&def.default)))
             .collect()
     }
 }
 
-/// Loads workflow parameters from a TOML file (global_params.toml).
-///
-/// # Arguments
-///
-/// * `path` - Path to the global_params.toml file
-///
-/// # Returns
-///
-/// * `Ok(WorkflowParams)` - Successfully parsed parameters
-/// * `Err(JobError)` - Error reading file or parsing TOML
-pub fn load_workflow_params<P: AsRef<Path>>(path: P) -> Result<WorkflowParams, JobError> {
-    let content = fs::read_to_string(path)?;
-    let params: WorkflowParams = toml::from_str(&content)?;
-    Ok(params)
-}
-
-/// Saves workflow parameters to a TOML file (global_params.toml).
-///
-/// # Arguments
-///
-/// * `path` - Path to the global_params.toml file
-/// * `params` - Parameters to save
-///
-/// # Returns
-///
-/// * `Ok(())` - Successfully saved parameters
-/// * `Err(JobError)` - Error writing file or serializing TOML
-pub fn save_workflow_params<P: AsRef<Path>>(
-    path: P,
-    params: &WorkflowParams,
-) -> Result<(), JobError> {
-    let toml_str = toml::to_string_pretty(params).map_err(|e| {
-        JobError::SerializeError(e.to_string())
-    })?;
-    fs::write(path, toml_str)?;
-    Ok(())
-}
+// Note: load_workflow_params and save_workflow_params have been moved to params.rs
+// Use crate::params::load_workflow_params and crate::params::save_workflow_params instead.
+// They now use JSON format (global_params.json) instead of TOML.
 
 #[cfg(test)]
 mod tests {
@@ -136,15 +107,15 @@ mod tests {
     }
 
     #[test]
-    fn test_workflow_params_parse_toml() {
-        let toml_str = r#"
-            input_path = "/data/input"
-            batch_size = 32
-            learning_rate = 0.001
-        "#;
+    fn test_workflow_params_parse_json() {
+        let json_str = r#"{
+            "input_path": "/data/input",
+            "batch_size": 32,
+            "learning_rate": 0.001
+        }"#;
 
-        let params: WorkflowParams = toml::from_str(toml_str).unwrap();
+        let params: WorkflowParams = serde_json::from_str(json_str).unwrap();
         assert_eq!(params.get("input_path").unwrap().as_str().unwrap(), "/data/input");
-        assert_eq!(params.get("batch_size").unwrap().as_integer().unwrap(), 32);
+        assert_eq!(params.get("batch_size").unwrap().as_i64().unwrap(), 32);
     }
 }

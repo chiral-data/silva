@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use job_config::job::{Container, JobMeta};
-use job_config::workflow::WorkflowParams;
+use job_config::params::WorkflowParams;
 use silva::components::{
     docker::{executor::DockerExecutor, job::JobStatus, logs::LogLine},
     workflow,

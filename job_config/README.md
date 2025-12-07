@@ -18,8 +18,9 @@ Configuration parser for Silva workflow jobs with TOML support.
 
 ## Modules
 
-- `job` - Unified `JobMeta` struct combining job configuration and metadata
-- `workflow` - Workflow-level metadata and parameters
+- `job` - Unified `JobMeta` struct combining job configuration and metadata (TOML)
+- `workflow` - Workflow-level metadata with `WorkflowMetadata` struct (TOML)
+- `params` - JSON-based parameter storage with `JobParams` and `WorkflowParams` types
 
 ## Installation
 
@@ -193,8 +194,25 @@ pub struct JobMeta {
 
 - `JobMeta::load_from_file(path)` - Load configuration from a TOML file
 - `JobMeta::save_to_file(path)` - Save configuration to a TOML file
-- `JobMeta::validate_params(params)` - Validate parameters against definitions
-- `JobMeta::generate_default_params()` - Generate default parameter values
+- `JobMeta::validate_params(params)` - Validate JSON parameters against TOML definitions
+- `JobMeta::generate_default_params()` - Generate default parameter values as JSON
+
+### Parameter Storage
+
+Parameter *definitions* are stored in TOML format (in `job.toml`), while parameter *values* are stored in JSON format:
+
+- Job parameters: `params.json`
+- Workflow parameters: `global_params.json`
+
+```rust
+use job_config::params::{JobParams, load_job_params, save_job_params};
+
+// Load job parameters from JSON
+let params = load_job_params("params.json")?;
+
+// Save job parameters to JSON
+save_job_params("params.json", &params)?;
+```
 
 ## Error Handling
 

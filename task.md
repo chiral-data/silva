@@ -16,15 +16,36 @@
   - silva/src/components/docker/executor.rs - Uses JobMeta, updated param value matching to toml::Value
   - silva/src/components/docker/state.rs - Updated load_config() calls to load_meta()
   - silva/examples/docker_executor.rs - Uses JobMeta
-- [] move the JobParams and WorkflowParams (if any) from job_config/src/job.rs into a seperated file job_config/src/params.rs, please be aware that ParamDefinition uses toml; WorkflowParams and JobParams will use json. File paths changes will be: params.json → params.json, node.json → integrated into job.toml, global_params.json → global_params.json.
-  - [] continue to update callers: update the following files according to this design
-    1. silva/src/components/workflow/global_params_editor.rs
-    2. silva/src/components/workflow/manager.rs
-       from job.rs
-    3. silva/src/components/workflow/state.rs
+- [x] move the JobParams and WorkflowParams (if any) from job_config/src/job.rs into a seperated file job_config/src/params.rs, please be aware that ParamDefinition uses toml; WorkflowParams and JobParams will use json. File paths changes will be: params.json → params.json, node.json → integrated into job.toml, global_params.json → global_params.json.
+  - job_config/src/params.rs - New module for JSON-based parameter storage with:
+    - JobParams type alias (HashMap<String, serde_json::Value>)
+    - WorkflowParams type alias (HashMap<String, serde_json::Value>)
+    - ParamsError enum for error handling
+    - load_job_params() / save_job_params() - JSON file I/O for job params
+    - load_workflow_params() / save_workflow_params() - JSON file I/O for workflow params
+    - toml_to_json() / json_to_toml() - Value conversion utilities
+  - Design:
+    - Parameter definitions (ParamDefinition) use TOML format (stored in job.toml)
+    - Parameter values (JobParams, WorkflowParams) use JSON format (stored in params.json, global_params.json)
+- [x] continue to update callers: update the following files according to this design
+  - job_config/src/job.rs - Removed JobParams, updated validate_params() and generate_default_params() to work with
+    JSON values
+  - job_config/src/workflow.rs - Updated to use params from params.rs
+  - job_config/src/lib.rs - Added params module export
+  - silva/src/components/workflow/job.rs - Updated to use params.json (JSON format)
+  - silva/src/components/workflow/manager.rs - Updated to use global_params.json (JSON format)
+  - silva/src/components/workflow/params_editor.rs - Updated to use JSON values
+  - silva/src/components/workflow/global_params_editor.rs - Updated to use JSON values
+  - silva/src/components/docker/executor.rs - Updated to use JSON params
+  - silva/examples/docker_executor.rs - Updated imports
+  - CHANGELOG.md - Updated with configuration unification changes
+  - job_config/README.md - Updated documentation
+
 - [] update "JobMeata"
   - [] move "use_gpu" into "container"
   - [] remove the option docker file, only use docker image.
+- [] add more tests.
+- [] merge params_editor and global_params_editor.rs
 
 - [] move the struct "WorkflowMetadata" from "job_config/config.rs" to a sperate file "job_config/workflow.rs", change it from json to toml.
   - this step is partially done with the status:
@@ -40,6 +61,6 @@
 
 ## Rules for each step
 
-- some steps will be done by me manally and I will mark those steps.
+- some steps will be done manally and they will be marked and highlighted.
 - [x] means it has been done.
 - after the completion of each step, update "CHANGELOG.md" and the "doc/\*.md" and also "job_config/README.md"

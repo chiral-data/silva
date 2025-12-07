@@ -2,7 +2,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use job_config::job::{JobError as JobConfigError, JobMeta, JobParams, load_params, save_params};
+use job_config::job::{JobError as JobConfigError, JobMeta};
+use job_config::params::{JobParams, ParamsError, load_job_params, save_job_params};
 
 /// Represents a job within a workflow.
 #[derive(Debug, Clone, PartialEq)]
@@ -58,12 +59,12 @@ impl Job {
         Ok(())
     }
 
-    /// Gets the path to params.toml.
+    /// Gets the path to params.json.
     pub fn params_path(&self) -> PathBuf {
-        self.path.join("params.toml")
+        self.path.join("params.json")
     }
 
-    /// Loads job parameters (params.toml).
+    /// Loads job parameters (params.json).
     /// Returns None if the file doesn't exist.
     pub fn load_params(&self) -> Result<Option<JobParams>, JobError> {
         let params_path = self.params_path();
@@ -71,13 +72,13 @@ impl Job {
             return Ok(None);
         }
 
-        let params = load_params(&params_path)?;
+        let params = load_job_params(&params_path)?;
         Ok(Some(params))
     }
 
-    /// Saves job parameters (params.toml).
+    /// Saves job parameters (params.json).
     pub fn save_params(&self, params: &JobParams) -> Result<(), JobError> {
-        save_params(self.params_path(), params)?;
+        save_job_params(self.params_path(), params)?;
         Ok(())
     }
 
@@ -104,6 +105,7 @@ pub enum JobError {
     IoError(io::Error),
     InvalidJob(String),
     ConfigError(JobConfigError),
+    ParamsError(ParamsError),
 }
 
 impl std::fmt::Display for JobError {
@@ -112,6 +114,7 @@ impl std::fmt::Display for JobError {
             JobError::IoError(err) => write!(f, "IO error: {err}"),
             JobError::InvalidJob(msg) => write!(f, "Invalid job: {msg}"),
             JobError::ConfigError(err) => write!(f, "Configuration error: {err}"),
+            JobError::ParamsError(err) => write!(f, "Parameters error: {err}"),
         }
     }
 }
@@ -127,6 +130,12 @@ impl From<io::Error> for JobError {
 impl From<JobConfigError> for JobError {
     fn from(err: JobConfigError) -> Self {
         JobError::ConfigError(err)
+    }
+}
+
+impl From<ParamsError> for JobError {
+    fn from(err: ParamsError) -> Self {
+        JobError::ParamsError(err)
     }
 }
 

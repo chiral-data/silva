@@ -220,8 +220,8 @@ impl From<toml::de::Error> for JobError {
     }
 }
 
-/// Type alias for job parameters (params.toml content).
-pub type JobParams = HashMap<String, toml::Value>;
+// Note: JobParams type has been moved to params.rs and now uses serde_json::Value.
+// Import from crate::params::JobParams for parameter value storage.
 
 /// Main configuration structure for a computation job.
 /// Merges the former JobConfig and NodeMetadata into a single TOML file.
@@ -290,10 +290,13 @@ impl JobMeta {
     }
 
     /// Validates a params HashMap against this job's parameter definitions.
-    pub fn validate_params(&self, params: &JobParams) -> Result<(), String> {
+    /// Accepts JSON-based JobParams and converts values for validation against TOML definitions.
+    pub fn validate_params(&self, params: &crate::params::JobParams) -> Result<(), String> {
         for (param_name, param_value) in params {
             if let Some(param_def) = self.params.get(param_name) {
-                param_def.validate(param_value)?;
+                // Convert JSON value to TOML for validation
+                let toml_value = crate::params::json_to_toml(param_value);
+                param_def.validate(&toml_value)?;
             } else {
                 return Err(format!("Unknown parameter: {param_name}"));
             }
@@ -302,28 +305,17 @@ impl JobMeta {
     }
 
     /// Generates default parameters based on the parameter definitions.
-    pub fn generate_default_params(&self) -> JobParams {
+    /// Returns JSON-based JobParams converted from TOML defaults.
+    pub fn generate_default_params(&self) -> crate::params::JobParams {
         self.params
             .iter()
-            .map(|(name, def)| (name.clone(), def.default.clone()))
+            .map(|(name, def)| (name.clone(), crate::params::toml_to_json(&def.default)))
             .collect()
     }
 }
 
-/// Loads job parameters from a TOML file.
-pub fn load_params<P: AsRef<Path>>(path: P) -> Result<JobParams, JobError> {
-    let content = fs::read_to_string(path)?;
-    let params: JobParams = toml::from_str(&content)?;
-    Ok(params)
-}
-
-/// Saves job parameters to a TOML file.
-pub fn save_params<P: AsRef<Path>>(path: P, params: &JobParams) -> Result<(), JobError> {
-    let toml_str = toml::to_string_pretty(params)
-        .map_err(|e| JobError::SerializeError(e.to_string()))?;
-    fs::write(path, toml_str)?;
-    Ok(())
-}
+// Note: load_params and save_params have been moved to params.rs
+// Use crate::params::load_job_params and crate::params::save_job_params instead.
 
 #[cfg(test)]
 mod tests {
@@ -481,11 +473,12 @@ mod tests {
 
         let meta: JobMeta = toml::from_str(toml_str).unwrap();
 
-        let mut params = JobParams::new();
-        params.insert("count".to_string(), toml::Value::Integer(42));
+        // Use JSON-based params (from params.rs)
+        let mut params = crate::params::JobParams::new();
+        params.insert("count".to_string(), serde_json::json!(42));
         assert!(meta.validate_params(&params).is_ok());
 
-        params.insert("count".to_string(), toml::Value::String("not a number".to_string()));
+        params.insert("count".to_string(), serde_json::json!("not a number"));
         assert!(meta.validate_params(&params).is_err());
     }
 
@@ -512,8 +505,9 @@ mod tests {
         let meta: JobMeta = toml::from_str(toml_str).unwrap();
         let defaults = meta.generate_default_params();
 
+        // Now returns JSON values
         assert_eq!(defaults.get("name").unwrap().as_str().unwrap(), "test");
-        assert_eq!(defaults.get("count").unwrap().as_integer().unwrap(), 10);
+        assert_eq!(defaults.get("count").unwrap().as_i64().unwrap(), 10);
     }
 
     #[test]

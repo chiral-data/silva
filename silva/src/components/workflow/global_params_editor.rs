@@ -6,7 +6,8 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 
-use job_config::config::ParamType;
+use job_config::job::ParamType;
+use job_config::params::{json_to_toml, toml_to_json};
 use job_config::workflow::WorkflowMetadata;
 
 use super::manager::WorkflowFolder;
@@ -45,9 +46,11 @@ impl GlobalParamsEditorState {
         // Convert params to editable strings
         let mut param_values = Vec::new();
         for (param_name, param_def) in &workflow_metadata.params {
+            // Get value from current params or convert default from TOML to JSON
+            let default_json = toml_to_json(&param_def.default);
             let value = current_params
                 .get(param_name)
-                .unwrap_or(&param_def.default_value);
+                .unwrap_or(&default_json);
             let value_str = param_value_to_string(value);
             param_values.push((param_name.clone(), value_str));
         }
@@ -105,8 +108,9 @@ impl GlobalParamsEditorState {
             if let Some(param_def) = self.workflow_metadata.params.get(param_name) {
                 match string_to_param_value(&self.input_buffer, &param_def.param_type) {
                     Ok(json_value) => {
-                        // Validate against the parameter definition
-                        if let Err(e) = param_def.validate(&json_value) {
+                        // Convert JSON to TOML for validation against TOML-based ParamDefinition
+                        let toml_value = json_to_toml(&json_value);
+                        if let Err(e) = param_def.validate(&toml_value) {
                             self.error_message = Some(e);
                             return;
                         }
@@ -147,8 +151,10 @@ impl GlobalParamsEditorState {
                 let json_value = string_to_param_value(param_value_str, &param_def.param_type)
                     .map_err(|e| format!("Invalid value for {param_name}: {e}"))?;
 
+                // Convert JSON to TOML for validation against TOML-based ParamDefinition
+                let toml_value = json_to_toml(&json_value);
                 param_def
-                    .validate(&json_value)
+                    .validate(&toml_value)
                     .map_err(|e| format!("Validation failed for {param_name}: {e}"))?;
 
                 params.insert(param_name.clone(), json_value);

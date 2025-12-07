@@ -390,8 +390,8 @@ impl DockerExecutor {
         workflow_folder: &Path, // tmp workflow folder
         job: &workflow::Job,
         config: &JobMeta,
-        workflow_params: &job_config::workflow::WorkflowParams,
-        job_params: &job_config::job::JobParams,
+        workflow_params: &job_config::params::WorkflowParams,
+        job_params: &job_config::params::JobParams,
         container_registry: &mut std::collections::HashMap<String, String>,
         cancel_rx: &mut mpsc::Receiver<()>,
     ) -> Result<String, DockerError> {
@@ -552,12 +552,12 @@ impl DockerExecutor {
         // Convert merged parameters to environment variables
         let mut env_vars: Vec<String> = Vec::new();
         for (param_name, param_value) in &merged_params {
-            // Convert TOML value to string
+            // Convert JSON value to string
             let value_str = match param_value {
-                toml::Value::String(s) => s.clone(),
-                toml::Value::Integer(n) => n.to_string(),
-                toml::Value::Float(f) => f.to_string(),
-                toml::Value::Boolean(b) => b.to_string(),
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => n.to_string(),
+                serde_json::Value::Bool(b) => b.to_string(),
+                serde_json::Value::Null => "null".to_string(),
                 v => v.to_string(),
             };
             // Add with PARAM_ prefix to avoid conflicts

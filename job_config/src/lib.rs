@@ -21,4 +21,5 @@
 
 pub mod config;
 pub mod job;
+pub mod params;
 pub mod workflow;
