@@ -219,6 +219,9 @@ impl From<toml::de::Error> for JobError {
 
 /// Main configuration structure for a computation job.
 /// Merges the former JobConfig and NodeMetadata into a single TOML file.
+///
+/// Note: Job dependencies are now defined at the workflow level in WorkflowMetadata,
+/// not in individual job configurations.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JobMeta {
     /// Job name for display purposes.
@@ -236,9 +239,6 @@ pub struct JobMeta {
     /// List of output file patterns to collect from the job.
     #[serde(default)]
     pub outputs: Vec<String>,
-    /// List of job names that this job depends on.
-    #[serde(default)]
-    pub depends_on: Vec<String>,
     /// Parameter definitions for this job.
     #[serde(default)]
     pub params: HashMap<String, ParamDefinition>,
@@ -254,7 +254,6 @@ impl JobMeta {
             scripts: Scripts::default(),
             inputs: Vec::new(),
             outputs: Vec::new(),
-            depends_on: Vec::new(),
             params: HashMap::new(),
         }
     }
@@ -415,11 +414,10 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_job_meta_with_dependencies() {
+    fn test_parse_job_meta_with_io_patterns() {
         let toml_str = r#"
             name = "Test Job"
             description = "A test job"
-            depends_on = ["job1", "job2"]
             inputs = ["*.csv"]
             outputs = ["results/*.json"]
 
@@ -428,7 +426,6 @@ mod tests {
         "#;
 
         let meta: JobMeta = toml::from_str(toml_str).unwrap();
-        assert_eq!(meta.depends_on, vec!["job1", "job2"]);
         assert_eq!(meta.inputs, vec!["*.csv"]);
         assert_eq!(meta.outputs, vec!["results/*.json"]);
     }

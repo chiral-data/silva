@@ -2,6 +2,17 @@
 
 ## Steps
 
+- [x] move the struct "WorkflowMetadata" from "job_config/config.rs" to a sperate file "job_config/workflow.rs", change it from json to toml.
+  - this step is partially done with the status:
+    - Created job_config/src/workflow.rs with WorkflowMetadata struct using TOML format
+    - Removed WorkflowMetadata and related functions from config.rs
+    - Updated lib.rs to export the workflow module
+    - Updated imports in silva/src/components/workflow/ files
+    - However, the code doesn't compile yet because:
+      1. WorkflowParams now uses toml::Value instead of serde_json::Value
+      2. Several places in the codebase expect serde_json::Value for parameter handling
+      3. The generate_default_params() and validate_params() methods need updating
+    - The main design decision needed: how to handle the conversion between serde_json::Value (used by ParamDefinition for defaults/validation) and toml::Value (used by WorkflowParams for TOML file storage).
 - [x] merge the struct "JobConfig" and the struct "NodeMetadata" from "job_config/config.rs" to a new struct "JobMeta", save the new struct to a sperate file "job_config/job.rs", use TOML.
   1. Created job_config/src/job.rs with the new JobMeta struct that merges:
      - JobConfig fields: container, scripts, use_gpu, inputs, outputs, depends_on
@@ -54,20 +65,26 @@
     - silva/examples/docker_executor.rs - Updated to use new Container structure
     - CHANGELOG.md - Added documentation for the changes
     - job_config/README.md - Updated documentation with new TOML format
+- [x] Moved Job Dependencies to WorkflowMetadata
+  - Changes to job_config/src/workflow.rs:
+    - Added dependencies: HashMap<String, Vec<String>> field to WorkflowMetadata
+    - Added get_job_dependencies() and set_job_dependencies() helper methods
+    - Added tests for the new dependencies feature
+  - Changes to job_config/src/job.rs:
+    - Removed depends_on field from JobMeta
+    - Updated JobMeta::new() constructor
+    - Renamed test from test_parse_job_meta_with_dependencies to test_parse_job_meta_with_io_patterns
+  - Changes to silva/src/components/docker/state.rs:
+    - Updated topological_sort_jobs() to accept WorkflowMetadata and get dependencies from it
+    - Updated copy_input_files_from_dependencies() to accept dependencies as a separate parameter
+    - Added loading of workflow_metadata in run_workflow()
+  - Benefits:
+    - Dependencies are now a workflow-level concern, not a job-level concern
+    - Cleaner separation: job.toml defines what a job does, workflow.toml defines how jobs relate
+    - Parameters stay in global_params.json (runtime data), dependencies stay in workflow.toml (configuration)
+- [] rename `WorkflowMetadata` to `WorkflowMeta`
 - [] add more tests.
 - [] merge params_editor and global_params_editor.rs
-
-- [] move the struct "WorkflowMetadata" from "job_config/config.rs" to a sperate file "job_config/workflow.rs", change it from json to toml.
-  - this step is partially done with the status:
-    - Created job_config/src/workflow.rs with WorkflowMetadata struct using TOML format
-    - Removed WorkflowMetadata and related functions from config.rs
-    - Updated lib.rs to export the workflow module
-    - Updated imports in silva/src/components/workflow/ files
-    - However, the code doesn't compile yet because:
-      1. WorkflowParams now uses toml::Value instead of serde_json::Value
-      2. Several places in the codebase expect serde_json::Value for parameter handling
-      3. The generate_default_params() and validate_params() methods need updating
-    - The main design decision needed: how to handle the conversion between serde_json::Value (used by ParamDefinition for defaults/validation) and toml::Value (used by WorkflowParams for TOML file storage).
 
 ## Rules for each step
 

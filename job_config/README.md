@@ -19,7 +19,7 @@ Configuration parser for Silva workflow jobs with TOML support.
 ## Modules
 
 - `job` - Unified `JobMeta` struct combining job configuration and metadata (TOML)
-- `workflow` - Workflow-level metadata with `WorkflowMetadata` struct (TOML)
+- `workflow` - Workflow-level metadata with `WorkflowMetadata` struct (TOML), including job dependencies
 - `params` - JSON-based parameter storage with `JobParams` and `WorkflowParams` types
 
 ## Installation
@@ -84,9 +84,6 @@ pre = "setup.sh"
 run = "train.sh"
 post = "cleanup.sh"
 
-# Job dependencies
-depends_on = ["prepare_data", "download_model"]
-
 # Input files from dependency outputs (supports glob patterns)
 inputs = ["*.csv", "models/*.pt"]
 
@@ -111,6 +108,8 @@ hint = "Model architecture to use"
 enum_values = ["resnet", "vgg", "transformer"]
 ```
 
+Note: Job dependencies are now defined at the workflow level in `workflow.toml`, not in individual job configurations.
+
 ## Configuration Reference
 
 ### Container Section (Required)
@@ -132,12 +131,6 @@ Customize script names (defaults shown):
 pre = "pre_run.sh"   # Default: "pre_run.sh"
 run = "run.sh"       # Default: "run.sh"
 post = "post_run.sh" # Default: "post_run.sh"
-```
-
-### Job Dependencies (Optional)
-
-```toml
-depends_on = ["job1", "job2"]
 ```
 
 ### Input Files (Optional)
@@ -185,9 +178,37 @@ pub struct JobMeta {
     pub scripts: Scripts,
     pub inputs: Vec<String>,
     pub outputs: Vec<String>,
-    pub depends_on: Vec<String>,
     pub params: HashMap<String, ParamDefinition>,
 }
+```
+
+### `WorkflowMetadata`
+
+Workflow-level configuration (workflow.toml):
+
+```rust
+pub struct WorkflowMetadata {
+    pub name: String,
+    pub description: String,
+    pub dependencies: HashMap<String, Vec<String>>,  // job_name -> [dep1, dep2, ...]
+    pub params: HashMap<String, ParamDefinition>,
+}
+```
+
+Example workflow.toml:
+
+```toml
+name = "ML Pipeline"
+description = "A machine learning pipeline"
+
+[dependencies]
+job_2 = ["job_1"]
+job_3 = ["job_1", "job_2"]
+
+[params.batch_size]
+type = "integer"
+default = 32
+hint = "Batch size for training"
 ```
 
 ### Methods

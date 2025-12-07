@@ -193,6 +193,18 @@ impl State {
                 }
             };
 
+            // Load workflow metadata (contains dependencies and param definitions)
+            let workflow_metadata = workflow_folder
+                .load_workflow_metadata()
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| {
+                    job_config::workflow::WorkflowMetadata::new(
+                        workflow_folder.name.clone(),
+                        String::new(),
+                    )
+                });
+
             // Load workflow parameters (global parameters)
             let workflow_params = workflow_folder
                 .load_workflow_params()
@@ -212,7 +224,7 @@ impl State {
             }
 
             // Sort jobs in dependency order (topological sort)
-            let sorted_jobs = match topological_sort_jobs(&jobs) {
+            let sorted_jobs = match topological_sort_jobs(&jobs, &workflow_metadata) {
                 Ok(sorted) => {
                     let log_line = LogLine::new(
                         LogSource::Stdout,
@@ -264,11 +276,13 @@ impl State {
                         let job_params = job.load_params().ok().flatten().unwrap_or_default();
 
                         // Copy input files from dependencies before running the job
+                        let job_deps = workflow_metadata.get_job_dependencies(&job.name);
                         copy_input_files_from_dependencies(
                             &temp_workflow_dir,
                             job,
                             &jobs,
                             &config,
+                            job_deps,
                             &tx,
                             idx,
                         )
@@ -506,7 +520,10 @@ impl State {
 /// 2. Start with jobs that have no dependencies (in-degree = 0)
 /// 3. Process jobs in order, removing edges as we go
 /// 4. If we can't process all jobs, there's a cycle
-fn topological_sort_jobs(jobs: &[Job]) -> Result<Vec<Job>, String> {
+fn topological_sort_jobs(
+    jobs: &[Job],
+    workflow_metadata: &job_config::workflow::WorkflowMetadata,
+) -> Result<Vec<Job>, String> {
     use std::collections::{HashMap, VecDeque};
 
     if jobs.is_empty() {
@@ -526,19 +543,11 @@ fn topological_sort_jobs(jobs: &[Job]) -> Result<Vec<Job>, String> {
         dependents.entry(job.name.clone()).or_default();
     }
 
-    // Build the graph
+    // Build the graph using dependencies from workflow metadata
     for job in jobs {
-        let config = match job.load_meta() {
-            Ok(cfg) => cfg,
-            Err(e) => {
-                return Err(format!(
-                    "Failed to load config for job '{}': {}",
-                    job.name, e
-                ));
-            }
-        };
+        let job_deps = workflow_metadata.get_job_dependencies(&job.name);
 
-        for dep_name in &config.depends_on {
+        for dep_name in job_deps {
             // Validate that the dependency exists
             if !job_map.contains_key(dep_name) {
                 return Err(format!(
@@ -653,13 +662,14 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<usize> {
 /// * `temp_workflow_dir` - The temporary workflow directory containing all job folders
 /// * `current_job` - The current job that needs input files
 /// * `all_jobs` - List of all jobs in the workflow (to look up dependencies by name)
-/// * `config` - The job configuration containing dependencies and input patterns
+/// * `config` - The job configuration containing input patterns
+/// * `dependencies` - List of job names this job depends on (from WorkflowMetadata)
 /// * `tx` - Message channel for logging
 /// * `job_idx` - Current job index for message tagging
 ///
 /// # Behavior
 ///
-/// For each dependency specified in config.depends_on:
+/// For each dependency:
 /// - Looks for the dependency's outputs/ folder
 /// - If config.inputs is specified: copies only matching files (supports globs)
 /// - If config.inputs is empty: copies all files from dependency outputs
@@ -669,6 +679,7 @@ async fn copy_input_files_from_dependencies(
     current_job: &Job,
     all_jobs: &[Job],
     config: &job_config::job::JobMeta,
+    dependencies: &[String],
     tx: &mpsc::Sender<(usize, JobStatus, LogLine)>,
     job_idx: usize,
 ) {
@@ -676,14 +687,14 @@ async fn copy_input_files_from_dependencies(
     use std::fs;
     use std::path::PathBuf;
 
-    if config.depends_on.is_empty() {
+    if dependencies.is_empty() {
         return;
     }
 
     let current_job_dir = temp_workflow_dir.join(&current_job.name);
     let mut copied_files: HashSet<String> = HashSet::new();
 
-    for dep_job_name in &config.depends_on {
+    for dep_job_name in dependencies {
         // Find the dependency job
         let dep_job = all_jobs.iter().find(|j| &j.name == dep_job_name);
         if dep_job.is_none() {

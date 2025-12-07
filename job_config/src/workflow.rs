@@ -10,11 +10,16 @@ use crate::params::{WorkflowParams, toml_to_json, json_to_toml};
 pub use crate::params::WorkflowParams as WorkflowParamsType;
 
 /// Represents the metadata for a workflow (workflow.toml).
-/// Similar to JobMeta but for workflow-level global parameters.
+/// Contains workflow-level configuration including global parameters and job dependencies.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkflowMetadata {
     pub name: String,
     pub description: String,
+    /// Job dependencies mapping: job_name -> list of jobs it depends on.
+    /// Example: { "job_2": ["job_1"], "job_3": ["job_1", "job_2"] }
+    #[serde(default)]
+    pub dependencies: HashMap<String, Vec<String>>,
+    /// Global parameter definitions for this workflow.
     #[serde(default)]
     pub params: HashMap<String, ParamDefinition>,
 }
@@ -25,8 +30,23 @@ impl WorkflowMetadata {
         Self {
             name,
             description,
+            dependencies: HashMap::new(),
             params: HashMap::new(),
         }
+    }
+
+    /// Gets the dependencies for a specific job.
+    /// Returns an empty slice if the job has no dependencies.
+    pub fn get_job_dependencies(&self, job_name: &str) -> &[String] {
+        self.dependencies
+            .get(job_name)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// Sets the dependencies for a specific job.
+    pub fn set_job_dependencies(&mut self, job_name: String, deps: Vec<String>) {
+        self.dependencies.insert(job_name, deps);
     }
 
     /// Adds a parameter definition to this workflow.
@@ -92,6 +112,7 @@ mod tests {
         assert_eq!(metadata.name, "Test Workflow");
         assert_eq!(metadata.description, "A test workflow");
         assert!(metadata.params.is_empty());
+        assert!(metadata.dependencies.is_empty());
     }
 
     #[test]
@@ -104,6 +125,34 @@ mod tests {
         let metadata: WorkflowMetadata = toml::from_str(toml_str).unwrap();
         assert_eq!(metadata.name, "ML Pipeline");
         assert_eq!(metadata.description, "A machine learning pipeline");
+    }
+
+    #[test]
+    fn test_workflow_metadata_with_dependencies() {
+        let toml_str = r#"
+            name = "ML Pipeline"
+            description = "A machine learning pipeline"
+
+            [dependencies]
+            job_2 = ["job_1"]
+            job_3 = ["job_1", "job_2"]
+        "#;
+
+        let metadata: WorkflowMetadata = toml::from_str(toml_str).unwrap();
+        assert_eq!(metadata.name, "ML Pipeline");
+
+        // Check dependencies
+        assert_eq!(metadata.get_job_dependencies("job_1"), &[] as &[String]);
+        assert_eq!(metadata.get_job_dependencies("job_2"), &["job_1".to_string()]);
+        assert_eq!(metadata.get_job_dependencies("job_3"), &["job_1".to_string(), "job_2".to_string()]);
+    }
+
+    #[test]
+    fn test_workflow_metadata_set_dependencies() {
+        let mut metadata = WorkflowMetadata::new("Test".to_string(), "Test workflow".to_string());
+
+        metadata.set_job_dependencies("job_2".to_string(), vec!["job_1".to_string()]);
+        assert_eq!(metadata.get_job_dependencies("job_2"), &["job_1".to_string()]);
     }
 
     #[test]

@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `toml_to_json()` and `json_to_toml()` conversion utilities
   - Simplified `Container` struct: now has `image` and `use_gpu` fields (removed DockerFile support)
   - Moved `use_gpu` from `JobMeta` into `Container` struct
+  - Moved job dependencies from `JobMeta.depends_on` to `WorkflowMetadata.dependencies`
+  - Job dependencies are now defined at workflow level in `workflow.toml`
 
 ## [0.3.6]
 
