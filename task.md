@@ -2,6 +2,13 @@
 
 ## Steps
 
+- [x] safely remove job_config/src/config.rs
+  1. Removed pub mod config; from job_config/src/lib.rs
+  2. Deleted job_config/src/config.rs (893 lines of legacy code)
+  3. Updated CHANGELOG.md to document the removal of the legacy config module
+  4. Updated job_config/README.md to:
+  - Fix outdated example code that referenced Container::DockerImage/Container::DockerFile enum variants
+  - Update Features section to reflect current architecture (Docker image with GPU support, not Dockerfiles)
 - [] add more tests for `WorkflowMeta` and `JobMeta`.
 - [] merge params_editor and global_params_editor.rs
 - [] publish the crate `job_config` to crate.io

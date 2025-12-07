@@ -8,10 +8,9 @@ Configuration parser for Silva workflow jobs with TOML support.
 
 ## Features
 
-- **Container Configuration**: Support for both Docker images and Dockerfiles
+- **Container Configuration**: Docker image with optional GPU support
 - **Custom Scripts**: Configure pre-run, run, and post-run scripts
-- **GPU Support**: Optional GPU usage flag
-- **Job Dependencies**: Specify dependencies on other jobs with `depends_on`
+- **Job Dependencies**: Specify job dependencies at the workflow level
 - **File I/O**: Define input and output file patterns with glob support
 - **Parameter Definitions**: Define typed parameters with defaults and validation
 - **TOML Format**: Easy-to-read and write configuration format
@@ -44,13 +43,9 @@ let meta = JobMeta::load_from_file("job.toml")?;
 println!("Job: {} - {}", meta.name, meta.description);
 
 // Access container configuration
-match &meta.container {
-    job_config::job::Container::DockerImage(image) => {
-        println!("Using Docker image: {}", image);
-    }
-    job_config::job::Container::DockerFile(path) => {
-        println!("Using Dockerfile: {}", path);
-    }
+println!("Using Docker image: {}", meta.container.image);
+if meta.container.use_gpu {
+    println!("GPU support enabled");
 }
 
 // Generate default parameters

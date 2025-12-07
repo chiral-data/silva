@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Moved job dependencies from `JobMeta.depends_on` to `WorkflowMeta.dependencies`
   - Job dependencies are now defined at workflow level in `workflow.toml`
   - Renamed `WorkflowMetadata` to `WorkflowMeta` for consistency with `JobMeta`
+  - Removed legacy `config` module (`job_config::config`) - use `job_config::job`, `job_config::params`, and `job_config::workflow` instead
 
 ## [0.3.6]
 
