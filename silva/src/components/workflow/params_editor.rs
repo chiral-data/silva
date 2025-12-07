@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 
-use job_config::config::{NodeMetadata, ParamType};
+use job_config::job::{JobMeta, ParamType};
 
 use super::job::Job;
 
@@ -15,9 +15,9 @@ use super::job::Job;
 pub struct ParamsEditorState {
     /// The job being edited
     pub job: Job,
-    /// Node metadata with parameter definitions
-    pub node_metadata: NodeMetadata,
-    /// Current parameter values (as JSON strings for editing)
+    /// Job metadata with parameter definitions
+    pub job_meta: JobMeta,
+    /// Current parameter values (as strings for editing)
     pub param_values: Vec<(String, String)>,
     /// Currently selected parameter index
     pub selected_index: usize,
@@ -31,19 +31,19 @@ pub struct ParamsEditorState {
 
 impl ParamsEditorState {
     /// Creates a new parameter editor state for a job.
-    pub fn new(job: Job, node_metadata: NodeMetadata) -> Result<Self, String> {
+    pub fn new(job: Job, job_meta: JobMeta) -> Result<Self, String> {
         // Load current params or use defaults
         let current_params = job
             .load_params()
             .map_err(|e| format!("Failed to load params: {e}"))?
-            .unwrap_or_else(|| node_metadata.generate_default_params());
+            .unwrap_or_else(|| job_meta.generate_default_params());
 
         // Convert params to editable strings
         let mut param_values = Vec::new();
-        for (param_name, param_def) in &node_metadata.params {
+        for (param_name, param_def) in &job_meta.params {
             let value = current_params
                 .get(param_name)
-                .unwrap_or(&param_def.default_value);
+                .unwrap_or(&param_def.default);
             let value_str = param_value_to_string(value);
             param_values.push((param_name.clone(), value_str));
         }
@@ -53,7 +53,7 @@ impl ParamsEditorState {
 
         Ok(Self {
             job,
-            node_metadata,
+            job_meta,
             param_values,
             selected_index: 0,
             editing: false,
@@ -98,11 +98,11 @@ impl ParamsEditorState {
             let param_name = &self.param_values[self.selected_index].0;
 
             // Validate the input
-            if let Some(param_def) = self.node_metadata.params.get(param_name) {
+            if let Some(param_def) = self.job_meta.params.get(param_name) {
                 match string_to_param_value(&self.input_buffer, &param_def.param_type) {
-                    Ok(json_value) => {
+                    Ok(toml_value) => {
                         // Validate against the parameter definition
-                        if let Err(e) = param_def.validate(&json_value) {
+                        if let Err(e) = param_def.validate(&toml_value) {
                             self.error_message = Some(e);
                             return;
                         }
@@ -131,23 +131,22 @@ impl ParamsEditorState {
         self.input_buffer.pop();
     }
 
-    /// Saves all parameters to the job's params.json file.
+    /// Saves all parameters to the job's params.toml file.
     pub fn save_params(&mut self) -> Result<(), String> {
-        use serde_json::Value;
         use std::collections::HashMap;
 
-        let mut params: HashMap<String, Value> = HashMap::new();
+        let mut params: HashMap<String, toml::Value> = HashMap::new();
 
         for (param_name, param_value_str) in &self.param_values {
-            if let Some(param_def) = self.node_metadata.params.get(param_name) {
-                let json_value = string_to_param_value(param_value_str, &param_def.param_type)
+            if let Some(param_def) = self.job_meta.params.get(param_name) {
+                let toml_value = string_to_param_value(param_value_str, &param_def.param_type)
                     .map_err(|e| format!("Invalid value for {param_name}: {e}"))?;
 
                 param_def
-                    .validate(&json_value)
+                    .validate(&toml_value)
                     .map_err(|e| format!("Validation failed for {param_name}: {e}"))?;
 
-                params.insert(param_name.clone(), json_value);
+                params.insert(param_name.clone(), toml_value);
             }
         }
 
@@ -211,7 +210,7 @@ pub fn render(f: &mut Frame, state: &mut ParamsEditorState, area: Rect) {
         .split(inner_area);
 
     // Render description
-    let description = Paragraph::new(state.node_metadata.description.as_str())
+    let description = Paragraph::new(state.job_meta.description.as_str())
         .style(Style::default().fg(Color::Gray))
         .wrap(Wrap { trim: true });
     f.render_widget(description, sections[0]);
@@ -242,7 +241,7 @@ fn render_params_list(f: &mut Frame, state: &ParamsEditorState, area: Rect) {
         .iter()
         .enumerate()
         .map(|(i, (name, value))| {
-            let param_def = state.node_metadata.params.get(name);
+            let param_def = state.job_meta.params.get(name);
             let type_str = param_def
                 .map(|d| d.param_type.to_string())
                 .unwrap_or_else(|| "?".to_string());
@@ -326,59 +325,59 @@ fn render_params_list(f: &mut Frame, state: &ParamsEditorState, area: Rect) {
     f.render_widget(list, area);
 }
 
-/// Converts a JSON value to a displayable string.
-fn param_value_to_string(value: &serde_json::Value) -> String {
+/// Converts a TOML value to a displayable string.
+fn param_value_to_string(value: &toml::Value) -> String {
     match value {
-        serde_json::Value::String(s) => s.clone(),
-        serde_json::Value::Number(n) => n.to_string(),
-        serde_json::Value::Bool(b) => b.to_string(),
-        serde_json::Value::Array(arr) => {
+        toml::Value::String(s) => s.clone(),
+        toml::Value::Integer(n) => n.to_string(),
+        toml::Value::Float(f) => f.to_string(),
+        toml::Value::Boolean(b) => b.to_string(),
+        toml::Value::Array(arr) => {
             let items: Vec<String> = arr.iter().map(param_value_to_string).collect();
             format!("[{}]", items.join(", "))
         }
-        _ => value.to_string(),
+        toml::Value::Table(t) => format!("{:?}", t),
+        toml::Value::Datetime(dt) => dt.to_string(),
     }
 }
 
-/// Converts a string to a JSON value based on the parameter type.
-fn string_to_param_value(s: &str, param_type: &ParamType) -> Result<serde_json::Value, String> {
-    use serde_json::Value;
-
+/// Converts a string to a TOML value based on the parameter type.
+fn string_to_param_value(s: &str, param_type: &ParamType) -> Result<toml::Value, String> {
     let trimmed = s.trim();
 
     match param_type {
         ParamType::String | ParamType::File | ParamType::Directory | ParamType::Enum => {
-            Ok(Value::String(trimmed.to_string()))
+            Ok(toml::Value::String(trimmed.to_string()))
         }
         ParamType::Integer => trimmed
             .parse::<i64>()
-            .map(Value::from)
+            .map(toml::Value::Integer)
             .map_err(|_| format!("Invalid integer: {trimmed}")),
         ParamType::Float => trimmed
             .parse::<f64>()
-            .map(Value::from)
+            .map(toml::Value::Float)
             .map_err(|_| format!("Invalid float: {trimmed}")),
         ParamType::Boolean => match trimmed.to_lowercase().as_str() {
-            "true" | "yes" | "1" => Ok(Value::Bool(true)),
-            "false" | "no" | "0" => Ok(Value::Bool(false)),
+            "true" | "yes" | "1" => Ok(toml::Value::Boolean(true)),
+            "false" | "no" | "0" => Ok(toml::Value::Boolean(false)),
             _ => Err(format!("Invalid boolean: {trimmed} (use true/false)")),
         },
         ParamType::Array => {
             // Simple array parsing: split by comma
             if trimmed.starts_with('[') && trimmed.ends_with(']') {
                 let inner = &trimmed[1..trimmed.len() - 1];
-                let items: Vec<Value> = inner
+                let items: Vec<toml::Value> = inner
                     .split(',')
-                    .map(|item| Value::String(item.trim().to_string()))
+                    .map(|item| toml::Value::String(item.trim().to_string()))
                     .collect();
-                Ok(Value::Array(items))
+                Ok(toml::Value::Array(items))
             } else {
                 // Also accept comma-separated without brackets
-                let items: Vec<Value> = trimmed
+                let items: Vec<toml::Value> = trimmed
                     .split(',')
-                    .map(|item| Value::String(item.trim().to_string()))
+                    .map(|item| toml::Value::String(item.trim().to_string()))
                     .collect();
-                Ok(Value::Array(items))
+                Ok(toml::Value::Array(items))
             }
         }
     }

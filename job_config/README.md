@@ -4,7 +4,7 @@ Configuration parser for Silva workflow jobs with TOML support.
 
 ## Overview
 
-`job_config` provides a simple and type-safe way to parse job configuration files for workflow systems. It supports Docker containers, custom scripts, GPU usage, job dependencies, and file input/output specifications.
+`job_config` provides a simple and type-safe way to parse job configuration files for workflow systems. It supports Docker containers, custom scripts, GPU usage, job dependencies, file input/output specifications, and parameter definitions.
 
 ## Features
 
@@ -13,7 +13,13 @@ Configuration parser for Silva workflow jobs with TOML support.
 - **GPU Support**: Optional GPU usage flag
 - **Job Dependencies**: Specify dependencies on other jobs with `depends_on`
 - **File I/O**: Define input and output file patterns with glob support
+- **Parameter Definitions**: Define typed parameters with defaults and validation
 - **TOML Format**: Easy-to-read and write configuration format
+
+## Modules
+
+- `job` - Unified `JobMeta` struct combining job configuration and metadata
+- `workflow` - Workflow-level metadata and parameters
 
 ## Installation
 
@@ -29,22 +35,25 @@ job_config = "0.3.3"
 ### Basic Example
 
 ```rust
-use job_config::config::JobConfig;
+use job_config::job::JobMeta;
 
-// Load configuration from a TOML file
-let config = JobConfig::load_from_file("@job.toml")?;
+// Load job metadata from a TOML file
+let meta = JobMeta::load_from_file("job.toml")?;
 
-// Access configuration fields
-match &config.container {
-    job_config::config::Container::DockerImage(image) => {
+println!("Job: {} - {}", meta.name, meta.description);
+
+// Access container configuration
+match &meta.container {
+    job_config::job::Container::DockerImage(image) => {
         println!("Using Docker image: {}", image);
     }
-    job_config::config::Container::DockerFile(path) => {
+    job_config::job::Container::DockerFile(path) => {
         println!("Using Dockerfile: {}", path);
     }
 }
 
-println!("Run script: {}", config.scripts.run);
+// Generate default parameters
+let defaults = meta.generate_default_params();
 ```
 
 ### TOML Configuration Format
@@ -52,13 +61,19 @@ println!("Run script: {}", config.scripts.run);
 #### Minimal Configuration
 
 ```toml
+name = "My Job"
+description = "A simple job"
+
 [container]
 docker_image = "ubuntu:22.04"
 ```
 
-#### Full Configuration with Dependencies
+#### Full Configuration with Parameters
 
 ```toml
+name = "Training Job"
+description = "Train a machine learning model"
+
 [container]
 docker_image = "python:3.11"
 
@@ -77,6 +92,23 @@ inputs = ["*.csv", "models/*.pt"]
 
 # Output files to collect (supports glob patterns)
 outputs = ["results/*.json", "trained_model.pt"]
+
+# Parameter definitions
+[params.learning_rate]
+type = "float"
+default = 0.001
+hint = "Learning rate for training"
+
+[params.epochs]
+type = "integer"
+default = 100
+hint = "Number of training epochs"
+
+[params.model_type]
+type = "enum"
+default = "resnet"
+hint = "Model architecture to use"
+enum_values = ["resnet", "vgg", "transformer"]
 ```
 
 ## Configuration Reference
@@ -139,40 +171,45 @@ outputs = ["results/*.json", "*.csv", "models/"]
 
 ## API Documentation
 
-### `JobConfig`
+### `JobMeta`
 
 Main configuration structure:
 
 ```rust
-pub struct JobConfig {
+pub struct JobMeta {
+    pub name: String,
+    pub description: String,
     pub container: Container,
     pub scripts: Scripts,
     pub use_gpu: bool,
     pub inputs: Vec<String>,
     pub outputs: Vec<String>,
     pub depends_on: Vec<String>,
+    pub params: HashMap<String, ParamDefinition>,
 }
 ```
 
 ### Methods
 
-- `JobConfig::load_from_file(path)` - Load configuration from a TOML file
-- Returns `Result<JobConfig, ConfigError>`
+- `JobMeta::load_from_file(path)` - Load configuration from a TOML file
+- `JobMeta::save_to_file(path)` - Save configuration to a TOML file
+- `JobMeta::validate_params(params)` - Validate parameters against definitions
+- `JobMeta::generate_default_params()` - Generate default parameter values
 
 ## Error Handling
 
 ```rust
-use job_config::config::{JobConfig, ConfigError};
+use job_config::job::{JobMeta, JobError};
 
-match JobConfig::load_from_file("@job.toml") {
-    Ok(config) => {
-        // Use config
+match JobMeta::load_from_file("job.toml") {
+    Ok(meta) => {
+        // Use meta
     }
-    Err(ConfigError::FileNotFound(path)) => {
+    Err(JobError::FileNotFound(path)) => {
         eprintln!("Config file not found: {}", path);
     }
-    Err(ConfigError::ParseError(msg)) => {
-        eprintln!("Failed to parse config: {}", msg);
+    Err(JobError::InvalidToml(err)) => {
+        eprintln!("Failed to parse config: {}", err);
     }
     Err(e) => {
         eprintln!("Error: {}", e);

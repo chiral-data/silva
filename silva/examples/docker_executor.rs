@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use job_config::config::{self, WorkflowParams};
+use job_config::job::{Container, JobMeta};
+use job_config::workflow::WorkflowParams;
 use silva::components::{
     docker::{executor::DockerExecutor, job::JobStatus, logs::LogLine},
     workflow,
@@ -10,8 +11,8 @@ use tokio::sync::mpsc;
 /// Example of running a Docker job programmatically.
 ///
 /// This example demonstrates:
-/// 1. Loading job configurations from .chiral/job.toml files (with legacy @job.toml fallback)
-/// 2. Loading job parameters from .chiral/params.json (if available)
+/// 1. Loading job configurations from .chiral/job.toml files
+/// 2. Loading job parameters from params.toml (if available)
 /// 3. Creating a Docker executor with message channels
 /// 4. Running multiple jobs sequentially with parameter injection
 /// 5. Handling job status updates and logs via channels
@@ -45,11 +46,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .to_str()
             .unwrap()
             .to_string();
-        // Try new location first, then legacy location
+        // Load from .chiral/job.toml
         let job_cfg = job_folder_path.join(".chiral/job.toml");
 
         println!("Loading job configuration from {job_cfg:?} ...");
-        let config = match config::JobConfig::load_from_file(&job_cfg) {
+        let config = match JobMeta::load_from_file(&job_cfg) {
             Ok(cfg) => {
                 println!("✓ Configuration loaded successfully\n");
                 cfg
@@ -63,11 +64,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Display configuration
         println!("Job Configuration:");
+        println!("  Name: {}", config.name);
+        println!("  Description: {}", config.description);
         match &config.container {
-            config::Container::DockerImage(img) => {
+            Container::DockerImage(img) => {
                 println!("  Container: Docker Image '{img}'");
             }
-            config::Container::DockerFile(path) => {
+            Container::DockerFile(path) => {
                 println!("  Container: Dockerfile at '{path}'");
             }
         }

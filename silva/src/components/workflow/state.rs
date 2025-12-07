@@ -154,25 +154,16 @@ impl State {
         if let Some(selected_job_idx) = self.docker_state.selected_job_index
             && let Some(job) = self.docker_state.jobs.get(selected_job_idx)
         {
-            // Load or create node metadata
-            let node_metadata: job_config::config::NodeMetadata = match job.load_node_metadata() {
-                Ok(Some(metadata)) => metadata,
-                Ok(None) => {
-                    // Create default metadata
-                    match job.ensure_default_node_metadata() {
-                        Ok(metadata) => metadata,
-                        Err(_e) => {
-                            return;
-                        }
-                    }
-                }
+            // Load job metadata
+            let job_meta: job_config::job::JobMeta = match job.load_meta() {
+                Ok(meta) => meta,
                 Err(_e) => {
                     return;
                 }
             };
 
             // Create params editor state
-            match super::ParamsEditorState::new(job.clone(), node_metadata) {
+            match super::ParamsEditorState::new(job.clone(), job_meta) {
                 Ok(state) => {
                     self.params_editor_state = Some(state);
                     self.show_params_popup = true;

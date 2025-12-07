@@ -140,7 +140,7 @@ use std::path::Path;
 use tokio::sync::mpsc;
 
 use crate::components::workflow;
-use job_config::config::{Container, JobConfig};
+use job_config::job::{Container, JobMeta};
 
 use super::error::DockerError;
 use super::job::JobStatus;
@@ -389,9 +389,9 @@ impl DockerExecutor {
         workflow_name: &str,
         workflow_folder: &Path, // tmp workflow folder
         job: &workflow::Job,
-        config: &JobConfig,
-        workflow_params: &job_config::config::WorkflowParams,
-        job_params: &job_config::config::JobParams,
+        config: &JobMeta,
+        workflow_params: &job_config::workflow::WorkflowParams,
+        job_params: &job_config::job::JobParams,
         container_registry: &mut std::collections::HashMap<String, String>,
         cancel_rx: &mut mpsc::Receiver<()>,
     ) -> Result<String, DockerError> {
@@ -552,11 +552,12 @@ impl DockerExecutor {
         // Convert merged parameters to environment variables
         let mut env_vars: Vec<String> = Vec::new();
         for (param_name, param_value) in &merged_params {
-            // Convert JSON value to string
+            // Convert TOML value to string
             let value_str = match param_value {
-                serde_json::Value::String(s) => s.clone(),
-                serde_json::Value::Number(n) => n.to_string(),
-                serde_json::Value::Bool(b) => b.to_string(),
+                toml::Value::String(s) => s.clone(),
+                toml::Value::Integer(n) => n.to_string(),
+                toml::Value::Float(f) => f.to_string(),
+                toml::Value::Boolean(b) => b.to_string(),
                 v => v.to_string(),
             };
             // Add with PARAM_ prefix to avoid conflicts

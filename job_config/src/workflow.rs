@@ -3,13 +3,13 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use crate::config::{JobConfigError, ParamDefinition};
+use crate::job::{JobError, ParamDefinition};
 
 /// Type alias for workflow parameters (global_params.toml content).
 pub type WorkflowParams = HashMap<String, toml::Value>;
 
 /// Represents the metadata for a workflow (workflow.toml).
-/// Similar to NodeMetadata but for workflow-level global parameters.
+/// Similar to JobMeta but for workflow-level global parameters.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkflowMetadata {
     pub name: String,
@@ -34,19 +34,16 @@ impl WorkflowMetadata {
     }
 
     /// Loads workflow metadata from a TOML file.
-    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, JobConfigError> {
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, JobError> {
         let content = fs::read_to_string(path)?;
         let metadata: WorkflowMetadata = toml::from_str(&content)?;
         Ok(metadata)
     }
 
     /// Saves workflow metadata to a TOML file.
-    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), JobConfigError> {
+    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), JobError> {
         let toml_str = toml::to_string_pretty(self).map_err(|e| {
-            JobConfigError::IoError(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                e.to_string(),
-            ))
+            JobError::SerializeError(e.to_string())
         })?;
         fs::write(path, toml_str)?;
         Ok(())
@@ -55,7 +52,7 @@ impl WorkflowMetadata {
     /// Validates a params HashMap against this workflow's parameter definitions.
     pub fn validate_params(
         &self,
-        params: &HashMap<String, serde_json::Value>,
+        params: &WorkflowParams,
     ) -> Result<(), String> {
         for (param_name, param_value) in params {
             if let Some(param_def) = self.params.get(param_name) {
@@ -68,10 +65,10 @@ impl WorkflowMetadata {
     }
 
     /// Generates default parameters based on the parameter definitions.
-    pub fn generate_default_params(&self) -> HashMap<String, serde_json::Value> {
+    pub fn generate_default_params(&self) -> WorkflowParams {
         self.params
             .iter()
-            .map(|(name, def)| (name.clone(), def.default_value.clone()))
+            .map(|(name, def)| (name.clone(), def.default.clone()))
             .collect()
     }
 }
@@ -85,8 +82,8 @@ impl WorkflowMetadata {
 /// # Returns
 ///
 /// * `Ok(WorkflowParams)` - Successfully parsed parameters
-/// * `Err(JobConfigError)` - Error reading file or parsing TOML
-pub fn load_workflow_params<P: AsRef<Path>>(path: P) -> Result<WorkflowParams, JobConfigError> {
+/// * `Err(JobError)` - Error reading file or parsing TOML
+pub fn load_workflow_params<P: AsRef<Path>>(path: P) -> Result<WorkflowParams, JobError> {
     let content = fs::read_to_string(path)?;
     let params: WorkflowParams = toml::from_str(&content)?;
     Ok(params)
@@ -102,16 +99,13 @@ pub fn load_workflow_params<P: AsRef<Path>>(path: P) -> Result<WorkflowParams, J
 /// # Returns
 ///
 /// * `Ok(())` - Successfully saved parameters
-/// * `Err(JobConfigError)` - Error writing file or serializing TOML
+/// * `Err(JobError)` - Error writing file or serializing TOML
 pub fn save_workflow_params<P: AsRef<Path>>(
     path: P,
     params: &WorkflowParams,
-) -> Result<(), JobConfigError> {
+) -> Result<(), JobError> {
     let toml_str = toml::to_string_pretty(params).map_err(|e| {
-        JobConfigError::IoError(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            e.to_string(),
-        ))
+        JobError::SerializeError(e.to_string())
     })?;
     fs::write(path, toml_str)?;
     Ok(())

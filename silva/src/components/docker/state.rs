@@ -256,7 +256,7 @@ impl State {
                 // Get the original index for this job (for UI updates)
                 let idx = *job_name_to_idx.get(&job.name).unwrap();
 
-                match job.load_config() {
+                match job.load_meta() {
                     Ok(config) => {
                         docker_executor.set_job_idx(idx);
 
@@ -528,7 +528,7 @@ fn topological_sort_jobs(jobs: &[Job]) -> Result<Vec<Job>, String> {
 
     // Build the graph
     for job in jobs {
-        let config = match job.load_config() {
+        let config = match job.load_meta() {
             Ok(cfg) => cfg,
             Err(e) => {
                 return Err(format!(
@@ -668,7 +668,7 @@ async fn copy_input_files_from_dependencies(
     temp_workflow_dir: &Path,
     current_job: &Job,
     all_jobs: &[Job],
-    config: &job_config::config::JobConfig,
+    config: &job_config::job::JobMeta,
     tx: &mpsc::Sender<(usize, JobStatus, LogLine)>,
     job_idx: usize,
 ) {
