@@ -19,7 +19,7 @@ Configuration parser for Silva workflow jobs with TOML support.
 ## Modules
 
 - `job` - Unified `JobMeta` struct combining job configuration and metadata (TOML)
-- `workflow` - Workflow-level metadata with `WorkflowMetadata` struct (TOML), including job dependencies
+- `workflow` - Workflow-level metadata with `WorkflowMeta` struct (TOML), including job dependencies
 - `params` - JSON-based parameter storage with `JobParams` and `WorkflowParams` types
 
 ## Installation
@@ -182,12 +182,12 @@ pub struct JobMeta {
 }
 ```
 
-### `WorkflowMetadata`
+### `WorkflowMeta`
 
 Workflow-level configuration (workflow.toml):
 
 ```rust
-pub struct WorkflowMetadata {
+pub struct WorkflowMeta {
     pub name: String,
     pub description: String,
     pub dependencies: HashMap<String, Vec<String>>,  // job_name -> [dep1, dep2, ...]

@@ -8,7 +8,7 @@ use ratatui::{
 
 use job_config::job::ParamType;
 use job_config::params::{json_to_toml, toml_to_json};
-use job_config::workflow::WorkflowMetadata;
+use job_config::workflow::WorkflowMeta;
 
 use super::manager::WorkflowFolder;
 
@@ -18,7 +18,7 @@ pub struct GlobalParamsEditorState {
     /// The workflow being edited
     pub workflow: WorkflowFolder,
     /// Workflow metadata with parameter definitions
-    pub workflow_metadata: WorkflowMetadata,
+    pub workflow_metadata: WorkflowMeta,
     /// Current parameter values (as JSON strings for editing)
     pub param_values: Vec<(String, String)>,
     /// Currently selected parameter index
@@ -35,7 +35,7 @@ impl GlobalParamsEditorState {
     /// Creates a new global parameter editor state for a workflow.
     pub fn new(
         workflow: WorkflowFolder,
-        workflow_metadata: WorkflowMetadata,
+        workflow_metadata: WorkflowMeta,
     ) -> Result<Self, String> {
         // Load current params or use defaults
         let current_params = workflow

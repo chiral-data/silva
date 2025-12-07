@@ -199,7 +199,7 @@ impl State {
                 .ok()
                 .flatten()
                 .unwrap_or_else(|| {
-                    job_config::workflow::WorkflowMetadata::new(
+                    job_config::workflow::WorkflowMeta::new(
                         workflow_folder.name.clone(),
                         String::new(),
                     )
@@ -522,7 +522,7 @@ impl State {
 /// 4. If we can't process all jobs, there's a cycle
 fn topological_sort_jobs(
     jobs: &[Job],
-    workflow_metadata: &job_config::workflow::WorkflowMetadata,
+    workflow_metadata: &job_config::workflow::WorkflowMeta,
 ) -> Result<Vec<Job>, String> {
     use std::collections::{HashMap, VecDeque};
 
@@ -663,7 +663,7 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<usize> {
 /// * `current_job` - The current job that needs input files
 /// * `all_jobs` - List of all jobs in the workflow (to look up dependencies by name)
 /// * `config` - The job configuration containing input patterns
-/// * `dependencies` - List of job names this job depends on (from WorkflowMetadata)
+/// * `dependencies` - List of job names this job depends on (from WorkflowMeta)
 /// * `tx` - Message channel for logging
 /// * `job_idx` - Current job index for message tagging
 ///

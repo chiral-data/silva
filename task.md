@@ -82,9 +82,13 @@
     - Dependencies are now a workflow-level concern, not a job-level concern
     - Cleaner separation: job.toml defines what a job does, workflow.toml defines how jobs relate
     - Parameters stay in global_params.json (runtime data), dependencies stay in workflow.toml (configuration)
-- [] rename `WorkflowMetadata` to `WorkflowMeta`
-- [] add more tests.
+- [x] rename `WorkflowMetadata` to `WorkflowMeta`
+  - Renamed struct in job_config/src/workflow.rs
+  - Updated all callers: manager.rs, global_params_editor.rs, state.rs (workflow and docker)
+  - Updated documentation: README.md, CHANGELOG.md
+- [] add more tests for `WorkflowMeta` and `JobMeta`.
 - [] merge params_editor and global_params_editor.rs
+- [] publish the crate `job_config` to crate.io
 
 ## Rules for each step
 

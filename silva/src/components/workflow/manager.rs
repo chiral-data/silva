@@ -6,7 +6,7 @@ use std::time::SystemTime;
 use super::home::{WorkflowHome, WorkflowHomeError};
 use job_config::job::JobError;
 use job_config::params::{ParamsError, WorkflowParams, load_workflow_params, save_workflow_params};
-use job_config::workflow::WorkflowMetadata;
+use job_config::workflow::WorkflowMeta;
 
 /// Represents a single workflow folder.
 #[derive(Debug, Clone, PartialEq)]
@@ -66,12 +66,12 @@ impl WorkflowFolder {
 
     /// Loads workflow metadata from workflow.toml.
     /// Returns None if the file doesn't exist.
-    pub fn load_workflow_metadata(&self) -> Result<Option<WorkflowMetadata>, JobError> {
+    pub fn load_workflow_metadata(&self) -> Result<Option<WorkflowMeta>, JobError> {
         let path = self.workflow_metadata_path();
         if !path.exists() {
             return Ok(None);
         }
-        WorkflowMetadata::load_from_file(path).map(Some)
+        WorkflowMeta::load_from_file(path).map(Some)
     }
 
     /// Loads workflow parameters from global_params.json.
@@ -94,7 +94,7 @@ impl WorkflowFolder {
     /// Creates the .chiral directory if it doesn't exist.
     pub fn save_workflow_metadata(
         &self,
-        metadata: &WorkflowMetadata,
+        metadata: &WorkflowMeta,
     ) -> Result<(), JobError> {
         let chiral_dir = self.chiral_dir();
         if !chiral_dir.exists() {

@@ -12,7 +12,7 @@ pub use crate::params::WorkflowParams as WorkflowParamsType;
 /// Represents the metadata for a workflow (workflow.toml).
 /// Contains workflow-level configuration including global parameters and job dependencies.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WorkflowMetadata {
+pub struct WorkflowMeta {
     pub name: String,
     pub description: String,
     /// Job dependencies mapping: job_name -> list of jobs it depends on.
@@ -24,7 +24,7 @@ pub struct WorkflowMetadata {
     pub params: HashMap<String, ParamDefinition>,
 }
 
-impl WorkflowMetadata {
+impl WorkflowMeta {
     /// Creates a new workflow metadata with the given name and description.
     pub fn new(name: String, description: String) -> Self {
         Self {
@@ -57,7 +57,7 @@ impl WorkflowMetadata {
     /// Loads workflow metadata from a TOML file.
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, JobError> {
         let content = fs::read_to_string(path)?;
-        let metadata: WorkflowMetadata = toml::from_str(&content)?;
+        let metadata: WorkflowMeta = toml::from_str(&content)?;
         Ok(metadata)
     }
 
@@ -107,8 +107,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_workflow_metadata_new() {
-        let metadata = WorkflowMetadata::new("Test Workflow".to_string(), "A test workflow".to_string());
+    fn test_workflow_meta_new() {
+        let metadata = WorkflowMeta::new("Test Workflow".to_string(), "A test workflow".to_string());
         assert_eq!(metadata.name, "Test Workflow");
         assert_eq!(metadata.description, "A test workflow");
         assert!(metadata.params.is_empty());
@@ -116,19 +116,19 @@ mod tests {
     }
 
     #[test]
-    fn test_workflow_metadata_parse_toml() {
+    fn test_workflow_meta_parse_toml() {
         let toml_str = r#"
             name = "ML Pipeline"
             description = "A machine learning pipeline"
         "#;
 
-        let metadata: WorkflowMetadata = toml::from_str(toml_str).unwrap();
+        let metadata: WorkflowMeta = toml::from_str(toml_str).unwrap();
         assert_eq!(metadata.name, "ML Pipeline");
         assert_eq!(metadata.description, "A machine learning pipeline");
     }
 
     #[test]
-    fn test_workflow_metadata_with_dependencies() {
+    fn test_workflow_meta_with_dependencies() {
         let toml_str = r#"
             name = "ML Pipeline"
             description = "A machine learning pipeline"
@@ -138,7 +138,7 @@ mod tests {
             job_3 = ["job_1", "job_2"]
         "#;
 
-        let metadata: WorkflowMetadata = toml::from_str(toml_str).unwrap();
+        let metadata: WorkflowMeta = toml::from_str(toml_str).unwrap();
         assert_eq!(metadata.name, "ML Pipeline");
 
         // Check dependencies
@@ -148,8 +148,8 @@ mod tests {
     }
 
     #[test]
-    fn test_workflow_metadata_set_dependencies() {
-        let mut metadata = WorkflowMetadata::new("Test".to_string(), "Test workflow".to_string());
+    fn test_workflow_meta_set_dependencies() {
+        let mut metadata = WorkflowMeta::new("Test".to_string(), "Test workflow".to_string());
 
         metadata.set_job_dependencies("job_2".to_string(), vec!["job_1".to_string()]);
         assert_eq!(metadata.get_job_dependencies("job_2"), &["job_1".to_string()]);
