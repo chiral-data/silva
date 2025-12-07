@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extracted requirements, installation, and FAQ to `doc/get_started.md`
 - Extracted workflow documentation to `doc/workflows.md`
 - Moved release guide to `doc/releasing.md`
+- Moved `WorkflowMetadata` to separate `job_config/src/workflow.rs` module (WIP: TOML migration)
 
 ## [0.3.6]
 

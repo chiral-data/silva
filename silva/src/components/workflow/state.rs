@@ -242,12 +242,12 @@ impl State {
         // Need to have a selected workflow
         if let Some(workflow_folder) = self.get_selected_workflow() {
             // Load or create workflow metadata
-            let workflow_metadata: job_config::config::WorkflowMetadata =
+            let workflow_metadata: job_config::workflow::WorkflowMetadata =
                 match workflow_folder.load_workflow_metadata() {
                     Ok(Some(metadata)) => metadata,
                     Ok(None) => {
                         // Create default metadata
-                        let metadata = job_config::config::WorkflowMetadata::new(
+                        let metadata = job_config::workflow::WorkflowMetadata::new(
                             workflow_folder.name.clone(),
                             "Global workflow parameters".to_string(),
                         );

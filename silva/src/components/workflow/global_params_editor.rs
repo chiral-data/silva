@@ -6,7 +6,8 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 
-use job_config::config::{ParamType, WorkflowMetadata};
+use job_config::config::ParamType;
+use job_config::workflow::WorkflowMetadata;
 
 use super::manager::WorkflowFolder;
 

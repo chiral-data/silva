@@ -20,3 +20,4 @@
 // post = "cleanup.sh"
 
 pub mod config;
+pub mod workflow;

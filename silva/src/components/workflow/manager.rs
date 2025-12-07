@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 use super::home::{WorkflowHome, WorkflowHomeError};
-use job_config::config::{JobConfigError, WorkflowMetadata, WorkflowParams};
+use job_config::config::JobConfigError;
+use job_config::workflow::{WorkflowMetadata, WorkflowParams};
 
 /// Represents a single workflow folder.
 #[derive(Debug, Clone, PartialEq)]
@@ -52,17 +53,17 @@ impl WorkflowFolder {
         self.path.join(".chiral")
     }
 
-    /// Returns the path to the workflow.json metadata file.
+    /// Returns the path to the workflow.toml metadata file.
     pub fn workflow_metadata_path(&self) -> PathBuf {
-        self.chiral_dir().join("workflow.json")
+        self.chiral_dir().join("workflow.toml")
     }
 
-    /// Returns the path to the global_params.json file.
+    /// Returns the path to the global_params.toml file.
     pub fn workflow_params_path(&self) -> PathBuf {
-        self.path.join("global_params.json")
+        self.path.join("global_params.toml")
     }
 
-    /// Loads workflow metadata from workflow.json.
+    /// Loads workflow metadata from workflow.toml.
     /// Returns None if the file doesn't exist.
     pub fn load_workflow_metadata(&self) -> Result<Option<WorkflowMetadata>, JobConfigError> {
         let path = self.workflow_metadata_path();
@@ -72,23 +73,23 @@ impl WorkflowFolder {
         WorkflowMetadata::load_from_file(path).map(Some)
     }
 
-    /// Loads workflow parameters from global_params.json.
+    /// Loads workflow parameters from global_params.toml.
     /// Returns None if the file doesn't exist.
     pub fn load_workflow_params(&self) -> Result<Option<WorkflowParams>, JobConfigError> {
         let path = self.workflow_params_path();
         if !path.exists() {
             return Ok(None);
         }
-        job_config::config::load_workflow_params(path).map(Some)
+        job_config::workflow::load_workflow_params(path).map(Some)
     }
 
-    /// Saves workflow parameters to global_params.json.
+    /// Saves workflow parameters to global_params.toml.
     pub fn save_workflow_params(&self, params: &WorkflowParams) -> Result<(), JobConfigError> {
         let path = self.workflow_params_path();
-        job_config::config::save_workflow_params(path, params)
+        job_config::workflow::save_workflow_params(path, params)
     }
 
-    /// Saves workflow metadata to workflow.json.
+    /// Saves workflow metadata to workflow.toml.
     /// Creates the .chiral directory if it doesn't exist.
     pub fn save_workflow_metadata(
         &self,
