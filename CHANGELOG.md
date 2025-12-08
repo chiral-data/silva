@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Merged `params_editor.rs` and `global_params_editor.rs` into a single generic `ParamsEditorState<T>` using trait-based polymorphism
   - Fixed test race conditions using `serial_test` crate for tests that modify shared env vars
   - Fixed outdated test fixtures to use new `Container` struct format (`image` instead of `docker_image`)
+  - Extracted `ParamSource` trait to separate `param_source.rs` module for better code organization
 
 ## [0.3.6]
 

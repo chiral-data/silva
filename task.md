@@ -45,6 +45,10 @@
   3. Fixed outdated config format: `docker_image` -> `image` in test fixtures
   4. All 58 tests now pass
 
+- [x] move the `ParamSource` out of `silva/src/components/workflow/params_editor.rs` and put into a new file `silva/src/components/workflow/param_source.rs`
+  1. Created `param_source.rs` with `ParamSource` trait, `JobParamSource`, and `WorkflowParamSource`
+  2. Updated `params_editor.rs` to import from `param_source` module
+  3. Updated `mod.rs` to export from new module location
 - [] add progress info when docker is pulling an image
 - [] publish the crate `job_config` to crate.io
 
