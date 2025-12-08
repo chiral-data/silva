@@ -69,6 +69,17 @@
      - Without args: starts TUI application
      - With workflow path: runs workflow directly, outputs to stdout/stderr
   5. Added to CHANGELOG.md documenting the new CLI argument support
+- [x] run a headless workflow successfully
+  - preconditions:
+    - the workflow path is `../collab-workflows/workflows/workflow-007` with 3 job folders
+    - no `workflow.toml` and no `job.toml` for each job_folder, please add them after reading the scripts from the workflow, use the docker image `chiral.sakuracr.jp/pocketeer:2025_12_08`
+  1. Created `.chiral/job.toml` for each job folder with correct TOML structure (inputs/outputs before sections)
+  2. Created `.chiral/workflow.toml` with job dependencies
+  3. Created `run.sh` wrapper scripts for each job's Python script
+  4. Fixed container reuse by adding `tail -f /dev/null` keep-alive command
+  5. Added temp folder execution in headless mode (mirrors TUI behavior)
+  6. Added input file copying from dependency outputs to current job folder
+  7. Workflow completed successfully: download -> pocket detection -> visualization
 - [] add progress info when docker is pulling an image
 - [] publish the crate `job_config` to crate.io
 

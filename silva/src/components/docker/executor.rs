@@ -453,6 +453,9 @@ impl DockerExecutor {
                 attach_stderr: Some(true),
                 host_config: Some(host_config),
                 working_dir: Some(work_dir.to_string()),
+                // Keep container alive with a long-running command
+                // This allows multiple execs without the container exiting
+                cmd: Some(vec!["tail".to_string(), "-f".to_string(), "/dev/null".to_string()]),
                 ..Default::default()
             };
 

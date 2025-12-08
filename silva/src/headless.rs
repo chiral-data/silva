@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::time::SystemTime;
 
+use tempfile::TempDir;
 use tokio::sync::mpsc;
 
 use crate::components::docker::{
@@ -15,6 +16,7 @@ use crate::components::docker::{
     logs::{LogLine, LogSource},
 };
 use crate::components::workflow::{JobFolder, JobScanner, WorkflowFolder};
+use job_config::job::JobMeta;
 
 /// Runs a workflow in headless mode, outputting logs to stdout/stderr.
 ///
@@ -52,15 +54,22 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
         Some(SystemTime::now()),
     );
 
-    // Scan for jobs
-    let jobs = JobScanner::scan_jobs(&workflow_path)
+    // Create temp workflow folder
+    let temp_workflow_dir = create_temp_workflow_folder(&workflow_path)
+        .map_err(|e| format!("Failed to create temp workflow: {e}"))?;
+    let temp_workflow_path = temp_workflow_dir.path().to_path_buf();
+
+    println!("Running workflow: {workflow_name}");
+    println!("Temp folder: {}", temp_workflow_path.display());
+
+    // Scan for jobs in temp folder
+    let jobs = JobScanner::scan_jobs(&temp_workflow_path)
         .map_err(|e| format!("Failed to scan jobs: {e}"))?;
 
     if jobs.is_empty() {
         return Err("No jobs found in workflow".to_string());
     }
 
-    println!("Running workflow: {workflow_name}");
     println!("Found {} job(s)", jobs.len());
 
     // Load workflow metadata
@@ -113,6 +122,7 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
     let jobs_len = jobs.len();
     let sorted_jobs_clone = sorted_jobs.clone();
     let workflow_folder_clone = workflow_folder.clone();
+    let temp_workflow_path_clone = temp_workflow_path.clone();
 
     // Spawn workflow execution task
     let exec_handle = tokio::spawn(async move {
@@ -143,10 +153,26 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
 
                     let job_params = job.load_params().ok().flatten().unwrap_or_default();
 
+                    // Copy input files from dependencies before running
+                    let job_deps = workflow_metadata.get_job_dependencies(&job.name);
+                    if let Err(e) = copy_input_files_from_dependencies(
+                        &temp_workflow_path_clone,
+                        job,
+                        &sorted_jobs_clone,
+                        &config,
+                        job_deps,
+                    ) {
+                        let log_line = LogLine::new(
+                            LogSource::Stderr,
+                            format!("Warning: Failed to copy input files: {e}"),
+                        );
+                        let _ = tx.send((idx, JobStatus::Running, log_line)).await;
+                    }
+
                     match docker_executor
                         .run_job(
                             &workflow_folder_clone.name,
-                            &workflow_folder_clone.path,
+                            &temp_workflow_path_clone,
                             job,
                             &config,
                             &workflow_params,
@@ -245,10 +271,23 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
     // Wait for execution to finish
     let _ = exec_handle.await;
 
+    // Keep the temp folder for user inspection
+    let temp_path = temp_workflow_dir.into_path();
+
     println!();
     match &workflow_result {
-        Ok(()) => println!("Workflow completed successfully"),
-        Err(e) => eprintln!("Workflow failed: {e}"),
+        Ok(()) => {
+            println!("Workflow completed successfully");
+            println!();
+            println!("Output folder: {}", temp_path.display());
+            println!("  (This folder will persist until you delete it manually)");
+        }
+        Err(e) => {
+            eprintln!("Workflow failed: {e}");
+            println!();
+            println!("Working folder: {}", temp_path.display());
+            println!("  (You can inspect this folder to debug the issue)");
+        }
     }
 
     workflow_result
@@ -341,4 +380,152 @@ fn topological_sort_jobs(
     }
 
     Ok(sorted_jobs)
+}
+
+/// Copies input files from dependency jobs' outputs to the current job folder.
+fn copy_input_files_from_dependencies(
+    workflow_path: &Path,
+    current_job: &JobFolder,
+    all_jobs: &[JobFolder],
+    config: &JobMeta,
+    dependencies: &[String],
+) -> Result<usize, String> {
+    use std::collections::HashSet;
+    use std::fs;
+
+    if dependencies.is_empty() {
+        return Ok(0);
+    }
+
+    let current_job_dir = workflow_path.join(&current_job.name);
+    let mut copied_files: HashSet<String> = HashSet::new();
+
+    for dep_job_name in dependencies {
+        // Find the dependency job
+        let dep_job = all_jobs.iter().find(|j| &j.name == dep_job_name);
+        if dep_job.is_none() {
+            println!("Warning: Dependency job '{dep_job_name}' not found");
+            continue;
+        }
+
+        let dep_outputs_dir = workflow_path.join(dep_job_name).join("outputs");
+        if !dep_outputs_dir.exists() {
+            println!("No outputs found for dependency '{dep_job_name}', skipping");
+            continue;
+        }
+
+        // Determine which files to copy
+        let files_to_copy: Vec<std::path::PathBuf> = if config.inputs.is_empty() {
+            // Copy all files from outputs/
+            match fs::read_dir(&dep_outputs_dir) {
+                Ok(entries) => entries.filter_map(|e| e.ok()).map(|e| e.path()).collect(),
+                Err(e) => {
+                    println!("Error reading outputs from '{dep_job_name}': {e}");
+                    continue;
+                }
+            }
+        } else {
+            // Copy only matching files based on input patterns
+            let mut matching_files = Vec::new();
+            for pattern in &config.inputs {
+                let glob_pattern = dep_outputs_dir.join(pattern).to_string_lossy().to_string();
+                match glob::glob(&glob_pattern) {
+                    Ok(paths) => {
+                        for path in paths.flatten() {
+                            matching_files.push(path);
+                        }
+                    }
+                    Err(e) => {
+                        println!("Invalid glob pattern '{pattern}': {e}");
+                    }
+                }
+            }
+            matching_files
+        };
+
+        // Copy files to current job directory
+        for source_path in files_to_copy {
+            if let Some(filename) = source_path.file_name() {
+                let filename_str = filename.to_string_lossy().to_string();
+                let dest_path = current_job_dir.join(filename);
+
+                // Check for conflicts
+                if copied_files.contains(&filename_str) {
+                    println!(
+                        "Warning: File '{filename_str}' already copied, skipping from '{dep_job_name}'"
+                    );
+                    continue;
+                }
+
+                // Copy the file or directory
+                if source_path.is_file() {
+                    match fs::copy(&source_path, &dest_path) {
+                        Ok(_) => {
+                            copied_files.insert(filename_str.clone());
+                            println!("Copied '{filename_str}' from '{dep_job_name}'");
+                        }
+                        Err(e) => {
+                            println!("Error copying '{filename_str}': {e}");
+                        }
+                    }
+                } else if source_path.is_dir() {
+                    match copy_dir_recursive(&source_path, &dest_path) {
+                        Ok(count) => {
+                            copied_files.insert(filename_str.clone());
+                            println!("Copied directory '{filename_str}/' ({count} files) from '{dep_job_name}'");
+                        }
+                        Err(e) => {
+                            println!("Error copying directory '{filename_str}': {e}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(copied_files.len())
+}
+
+/// Recursively copies a directory and its contents.
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<usize> {
+    use std::fs;
+
+    if !dst.exists() {
+        fs::create_dir_all(dst)?;
+    }
+
+    let mut file_count = 0;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let dest_path = dst.join(entry.file_name());
+
+        if path.is_dir() {
+            file_count += copy_dir_recursive(&path, &dest_path)?;
+        } else {
+            fs::copy(&path, &dest_path)?;
+            file_count += 1;
+        }
+    }
+
+    Ok(file_count)
+}
+
+/// Creates a temporary folder and copies the workflow contents to it.
+fn create_temp_workflow_folder(source_path: &Path) -> std::io::Result<TempDir> {
+    let now = chrono::Local::now();
+    let timestamp = now.format("%Y-%m-%d-%H-%M-%S").to_string();
+    let prefix = format!("silva-{timestamp}-");
+    let temp_dir = tempfile::Builder::new().prefix(&prefix).tempdir()?;
+
+    // Copy source folder contents to temp directory
+    let mut options = fs_extra::dir::CopyOptions::new();
+    options.overwrite = true;
+    options.copy_inside = true;
+    options.content_only = true;
+
+    fs_extra::dir::copy(source_path, temp_dir.path(), &options)
+        .map_err(|e| std::io::Error::other(format!("copy folder error {e}")))?;
+
+    Ok(temp_dir)
 }

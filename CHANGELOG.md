@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - CLI argument support: run `silva <workflow_path>` to execute a workflow directly in headless mode
 - Headless workflow execution outputs logs to stdout/stderr instead of TUI
+- Container keep-alive command (`tail -f /dev/null`) for reliable container reuse across jobs
 
 ### Changed
 
