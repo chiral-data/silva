@@ -87,9 +87,16 @@
   1. Created `workflow.toml` with global `pdb_id` parameter (default: "4TOS")
   2. Created `02_pocket/job.toml` with 8 find_pockets parameters: r_min, r_max, polar_probe_radius, merge_distance, min_spheres, ignore_hydrogens, ignore_water, ignore_hetero
   3. Created `03_visualize/job.toml` with 4 enum parameters: pocket_style, render_method, representation, output_format
-  4. Updated Python scripts to read parameters from environment variables (PARAM_* prefix)
-  5. Fixed outputs in 02_pocket to include *.pdb for proper data flow to 03_visualize
+  4. Updated Python scripts to read parameters from environment variables (PARAM\_\* prefix)
+  5. Fixed outputs in 02_pocket to include \*.pdb for proper data flow to 03_visualize
   6. Workflow completed successfully with all parameters injected via environment variables
+- [x] the default parameters can be changed by adding a new file `params.json` under the job folder, verify the headless flow can be run successfully with customized parameters.
+  1. Created `params.json` in `02_pocket/` with customized parameters (r_min=2.5, r_max=7.5, min_spheres=25, etc.)
+  2. Created `global_params.json` in workflow root with custom `pdb_id: "1A2B"`
+  3. Ran headless workflow successfully - parameters were correctly injected:
+     - Global param: Downloaded PDB file "1A2B" instead of default "4TOS"
+     - Job params: `r_min=2.5, r_max=7.5, polar_probe_radius=2.0, merge_distance=1.5, min_spheres=25`
+  4. Found 35 pockets (more than default due to lower min_spheres threshold)
 - [] add progress info when docker is pulling an image
 - [] publish the crate `job_config` to crate.io
 

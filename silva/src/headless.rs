@@ -215,9 +215,7 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
         } else {
             JobStatus::Completed
         };
-        let _ = tx
-            .send((jobs_len, final_status, LogLine::empty()))
-            .await;
+        let _ = tx.send((jobs_len, final_status, LogLine::empty())).await;
 
         if workflow_failed {
             Err("Workflow failed".to_string())
@@ -272,7 +270,7 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
     let _ = exec_handle.await;
 
     // Keep the temp folder for user inspection
-    let temp_path = temp_workflow_dir.into_path();
+    let temp_path = temp_workflow_dir.keep();
 
     println!();
     match &workflow_result {
@@ -365,8 +363,7 @@ fn topological_sort_jobs(
     }
 
     if sorted_jobs.len() != jobs.len() {
-        let processed: std::collections::HashSet<_> =
-            sorted_jobs.iter().map(|j| &j.name).collect();
+        let processed: std::collections::HashSet<_> = sorted_jobs.iter().map(|j| &j.name).collect();
         let unprocessed: Vec<_> = jobs
             .iter()
             .filter(|j| !processed.contains(&j.name))
@@ -472,7 +469,9 @@ fn copy_input_files_from_dependencies(
                     match copy_dir_recursive(&source_path, &dest_path) {
                         Ok(count) => {
                             copied_files.insert(filename_str.clone());
-                            println!("Copied directory '{filename_str}/' ({count} files) from '{dep_job_name}'");
+                            println!(
+                                "Copied directory '{filename_str}/' ({count} files) from '{dep_job_name}'"
+                            );
                         }
                         Err(e) => {
                             println!("Error copying directory '{filename_str}': {e}");
