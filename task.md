@@ -97,7 +97,11 @@
      - Global param: Downloaded PDB file "1A2B" instead of default "4TOS"
      - Job params: `r_min=2.5, r_max=7.5, polar_probe_radius=2.0, merge_distance=1.5, min_spheres=25`
   4. Found 35 pockets (more than default due to lower min_spheres threshold)
-- [] add progress info when docker is pulling an image
+- [x] show progress when docker is pulling an image
+  1. Modified `pull_image()` in `executor.rs` to extract progress from Bollard's `CreateImageInfo`
+  2. Progress info includes: layer ID, status (Pulling/Downloading/Extracting), percentage
+  3. Example output: `20043066d3d5: Downloading: 52%`, `20043066d3d5: Extracting: 100%`
+  4. Also displays digest and final status when download completes
 - [] publish the crate `job_config` to crate.io
 
 ## Rules for each step

@@ -352,7 +352,40 @@ impl DockerExecutor {
 
         while let Some(result) = stream.next().await {
             match result {
-                Ok(_) => {}
+                Ok(info) => {
+                    // Build progress message from CreateImageInfo fields
+                    let mut parts = Vec::new();
+
+                    if let Some(id) = &info.id {
+                        parts.push(id.clone());
+                    }
+
+                    if let Some(status) = &info.status {
+                        parts.push(status.clone());
+                    }
+
+                    // Add progress percentage if available
+                    if let Some(detail) = &info.progress_detail {
+                        if let (Some(current), Some(total)) = (detail.current, detail.total) {
+                            if total > 0 {
+                                let percent = (current as f64 / total as f64 * 100.0) as u32;
+                                parts.push(format!("{}%", percent));
+                            }
+                        }
+                    }
+
+                    // Send progress update if we have any info
+                    if !parts.is_empty() {
+                        let progress_msg = parts.join(": ");
+                        let log_line = LogLine::new(LogSource::Stdout, progress_msg);
+                        self.tx_send(JobStatus::PullingImage, log_line).await?;
+                    }
+
+                    // Check for errors in the response
+                    if let Some(error) = &info.error {
+                        return Err(DockerError::ImageBuildFailed(error.clone()));
+                    }
+                }
                 Err(e) => return Err(DockerError::ImageBuildFailed(e.to_string())),
             }
         }

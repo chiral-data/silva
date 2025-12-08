@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Global `pdb_id` parameter in workflow.toml
   - Job-level parameters for pocketeer.find_pockets (r_min, r_max, polar_probe_radius, etc.)
   - Enum parameters for visualization options (pocket_style, render_method, representation, output_format)
+- Docker image pull progress display: shows layer ID, download/extract status, and percentage
 
 ### Changed
 
