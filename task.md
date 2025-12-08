@@ -102,6 +102,11 @@
   2. Progress info includes: layer ID, status (Pulling/Downloading/Extracting), percentage
   3. Example output: `20043066d3d5: Downloading: 52%`, `20043066d3d5: Extracting: 100%`
   4. Also displays digest and final status when download completes
+- [x] add another option for `job_config::job::Container.image`, it can be a url or a local file.
+  1. Added `ImageSource` enum with three variants: `Registry`, `TarFile`, `SifFile`
+  2. Added `Container::get_image_source()` method to detect source type from image string
+  3. Detection based on file extension: `.tar` -> TarFile, `.sif` -> SifFile, otherwise -> Registry
+  4. Added tests for all three image source types
 - [] publish the crate `job_config` to crate.io
 
 ## Rules for each step

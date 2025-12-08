@@ -113,11 +113,23 @@ impl ParamDefinition {
     }
 }
 
+/// Represents the source of a container image.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ImageSource {
+    /// Pull image from a Docker registry (e.g., "ubuntu:22.04").
+    Registry(String),
+    /// Load image from a local tar file (e.g., "./image.tar").
+    TarFile(String),
+    /// Load image from a Singularity/Apptainer SIF file (e.g., "./image.sif").
+    SifFile(String),
+}
+
 /// Represents the container configuration for a job.
-/// Contains the Docker image URL and optional GPU support flag.
+/// The `image` field can be a Docker registry URL or a local file path (.tar or .sif).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Container {
-    /// Docker image URL (e.g., "ubuntu:22.04", "python:3.11")
+    /// Docker image source: either a registry URL (e.g., "ubuntu:22.04")
+    /// or a local file path (.tar for Docker, .sif for Singularity/Apptainer).
     pub image: String,
     /// Enable GPU support for this job (requires NVIDIA Container Toolkit).
     #[serde(default)]
@@ -138,6 +150,20 @@ impl Container {
         Self {
             image,
             use_gpu: true,
+        }
+    }
+
+    /// Returns the image source type based on the image string.
+    /// - Paths ending with ".tar" are treated as Docker tar archives.
+    /// - Paths ending with ".sif" are treated as Singularity/Apptainer images.
+    /// - Everything else is treated as a Docker registry URL.
+    pub fn get_image_source(&self) -> ImageSource {
+        if self.image.ends_with(".tar") {
+            ImageSource::TarFile(self.image.clone())
+        } else if self.image.ends_with(".sif") {
+            ImageSource::SifFile(self.image.clone())
+        } else {
+            ImageSource::Registry(self.image.clone())
         }
     }
 }
@@ -512,5 +538,50 @@ mod tests {
         let container = Container::with_gpu("nvidia/cuda:11.8.0".to_string());
         assert_eq!(container.image, "nvidia/cuda:11.8.0");
         assert!(container.use_gpu);
+    }
+
+    #[test]
+    fn test_image_source_registry() {
+        let container = Container::new("ubuntu:22.04".to_string());
+        assert_eq!(
+            container.get_image_source(),
+            ImageSource::Registry("ubuntu:22.04".to_string())
+        );
+
+        let container = Container::new("chiral.sakuracr.jp/pocketeer:2025_12_08".to_string());
+        assert_eq!(
+            container.get_image_source(),
+            ImageSource::Registry("chiral.sakuracr.jp/pocketeer:2025_12_08".to_string())
+        );
+    }
+
+    #[test]
+    fn test_image_source_tar_file() {
+        let container = Container::new("./image.tar".to_string());
+        assert_eq!(
+            container.get_image_source(),
+            ImageSource::TarFile("./image.tar".to_string())
+        );
+
+        let container = Container::new("images/myimage.tar".to_string());
+        assert_eq!(
+            container.get_image_source(),
+            ImageSource::TarFile("images/myimage.tar".to_string())
+        );
+    }
+
+    #[test]
+    fn test_image_source_sif_file() {
+        let container = Container::new("./container.sif".to_string());
+        assert_eq!(
+            container.get_image_source(),
+            ImageSource::SifFile("./container.sif".to_string())
+        );
+
+        let container = Container::new("/opt/images/app.sif".to_string());
+        assert_eq!(
+            container.get_image_source(),
+            ImageSource::SifFile("/opt/images/app.sif".to_string())
+        );
     }
 }

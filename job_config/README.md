@@ -109,13 +109,26 @@ Note: Job dependencies are now defined at the workflow level in `workflow.toml`,
 
 ### Container Section (Required)
 
-Specify the Docker image and optional GPU support:
+Specify the container image and optional GPU support. The `image` field supports multiple sources:
 
 ```toml
 [container]
+# Option 1: Docker registry URL
 image = "ubuntu:22.04"
+
+# Option 2: Local Docker tar archive
+image = "./images/myimage.tar"
+
+# Option 3: Singularity/Apptainer SIF file
+image = "./containers/app.sif"
+
 use_gpu = false  # Default: false, set to true for GPU support
 ```
+
+The image source is automatically detected based on file extension:
+- `.tar` → Docker tar archive (loaded with `docker load`)
+- `.sif` → Singularity/Apptainer image
+- Otherwise → Docker registry URL (pulled with `docker pull`)
 
 ### Scripts Section (Optional)
 
