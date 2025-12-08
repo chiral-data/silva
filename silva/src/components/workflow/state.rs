@@ -171,7 +171,6 @@ impl State {
                     self.params_editor_state = Some(state);
                     self.show_params_popup = true;
                 }
-                Err(_e) => {}
             }
         }
     }
