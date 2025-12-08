@@ -5,17 +5,17 @@ use std::path::{Path, PathBuf};
 use job_config::job::{JobError as JobConfigError, JobMeta};
 use job_config::params::{JobParams, ParamsError, load_job_params, save_job_params};
 
-/// Represents a job within a workflow.
+/// Represents a job folder within a workflow.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Job {
+pub struct JobFolder {
     pub name: String,
     pub path: PathBuf,
     pub config_path: PathBuf,
     pub chiral_dir: PathBuf,
 }
 
-impl Job {
-    /// Creates a new Job.
+impl JobFolder {
+    /// Creates a new JobFolder.
     pub fn new(name: String, path: PathBuf) -> Self {
         let chiral_dir = path.join(".chiral");
         let config_path = chiral_dir.join("job.toml");
@@ -153,9 +153,9 @@ impl JobScanner {
     ///
     /// # Returns
     ///
-    /// * `Ok(Vec<Job>)` - List of jobs found, sorted by name
+    /// * `Ok(Vec<JobFolder>)` - List of jobs found, sorted by name
     /// * `Err(JobError)` - Error scanning directory
-    pub fn scan_jobs(workflow_path: &Path) -> Result<Vec<Job>, JobError> {
+    pub fn scan_jobs(workflow_path: &Path) -> Result<Vec<JobFolder>, JobError> {
         if !workflow_path.exists() {
             return Err(JobError::InvalidJob(format!(
                 "Workflow path does not exist: {}",
@@ -184,7 +184,7 @@ impl JobScanner {
                         && let Some(name) = path.file_name()
                     {
                         let name_str = name.to_string_lossy().to_string();
-                        let job = Job::new(name_str, path);
+                        let job = JobFolder::new(name_str, path);
 
                         // Only include if it has a config file
                         if job.has_config() {
@@ -253,9 +253,9 @@ image = "ubuntu:22.04"
 
     #[test]
     #[serial]
-    fn test_job_new() {
+    fn test_job_folder_new() {
         let path = PathBuf::from("/tmp/test_job");
-        let job = Job::new("test_job".to_string(), path.clone());
+        let job = JobFolder::new("test_job".to_string(), path.clone());
 
         assert_eq!(job.name, "test_job");
         assert_eq!(job.path, path);
@@ -264,14 +264,14 @@ image = "ubuntu:22.04"
 
     #[test]
     #[serial]
-    fn test_job_has_config() {
+    fn test_job_folder_has_config() {
         let (test_path, workflow_path) = setup_test_workflow();
 
         fs::create_dir_all(&workflow_path).unwrap();
         let job_path = workflow_path.join("job_1");
         fs::create_dir_all(&job_path).unwrap();
 
-        let job = Job::new("job_1".to_string(), job_path.clone());
+        let job = JobFolder::new("job_1".to_string(), job_path.clone());
         assert!(!job.has_config());
 
         // Create config file
@@ -399,7 +399,7 @@ image = "ubuntu:22.04"
 
     #[test]
     #[serial]
-    fn test_job_load_meta() {
+    fn test_job_folder_load_meta() {
         let (test_path, workflow_path) = setup_test_workflow();
 
         fs::create_dir_all(&workflow_path).unwrap();
@@ -421,7 +421,7 @@ run = "test.sh"
 "#;
         fs::write(chiral_dir.join("job.toml"), config_content).unwrap();
 
-        let job = Job::new("job_1".to_string(), job_path);
+        let job = JobFolder::new("job_1".to_string(), job_path);
         let meta = job.load_meta();
 
         assert!(meta.is_ok());

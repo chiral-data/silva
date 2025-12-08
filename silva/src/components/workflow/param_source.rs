@@ -9,11 +9,11 @@ use job_config::job::{JobMeta, ParamDefinition};
 use job_config::params::JobParams;
 use job_config::workflow::WorkflowMeta;
 
-use super::job::Job;
+use super::job_folder::JobFolder;
 use super::workflow_folder::WorkflowFolder;
 
 /// Trait for types that can provide parameters for editing.
-/// This abstracts over Job (job-level params) and WorkflowFolder (global params).
+/// This abstracts over JobFolder (job-level params) and WorkflowFolder (global params).
 pub trait ParamSource: Clone {
     /// Returns the display name for the editor title.
     fn display_name(&self) -> &str;
@@ -38,15 +38,15 @@ pub trait ParamSource: Clone {
     fn is_global(&self) -> bool;
 }
 
-/// Wrapper for Job with its metadata for parameter editing.
+/// Wrapper for JobFolder with its metadata for parameter editing.
 #[derive(Debug, Clone)]
 pub struct JobParamSource {
-    pub job: Job,
+    pub job: JobFolder,
     pub meta: JobMeta,
 }
 
 impl JobParamSource {
-    pub fn new(job: Job, meta: JobMeta) -> Self {
+    pub fn new(job: JobFolder, meta: JobMeta) -> Self {
         Self { job, meta }
     }
 }

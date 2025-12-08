@@ -54,6 +54,11 @@
   2. Updated `manager.rs` to import from `workflow_folder` module
   3. Updated `param_source.rs` to import from `workflow_folder` module
   4. Updated `mod.rs` to export from new module location
+- [x] rename `Job` in `silva/src/components/workflow/job.rs` to `JobFolder` and rename the file to `silva/src/components/workflow/job_folder.rs`
+  1. Renamed `job.rs` to `job_folder.rs`
+  2. Renamed `Job` struct to `JobFolder`
+  3. Updated all imports and references in: `mod.rs`, `param_source.rs`, `docker/state.rs`, `docker/executor.rs`, `examples/docker_executor.rs`
+  4. Renamed test functions: `test_job_new` -> `test_job_folder_new`, etc.
 - [] add progress info when docker is pulling an image
 - [] publish the crate `job_config` to crate.io
 

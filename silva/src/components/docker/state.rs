@@ -8,7 +8,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 
-use crate::components::workflow::{self, Job};
+use crate::components::workflow::{self, JobFolder};
 
 use super::{
     executor::DockerExecutor,
@@ -18,7 +18,7 @@ use super::{
 
 #[derive(Debug)]
 pub struct State {
-    pub jobs: Vec<Job>,
+    pub jobs: Vec<JobFolder>,
     pub job_entries: Vec<JobEntry>,
     pub selected_job_index: Option<usize>,
     pub scroll_offset: usize,
@@ -389,18 +389,18 @@ impl State {
     }
 
     /// Gets a mutable reference to the currently selected job.
-    pub fn get_selected_job_mut(&mut self) -> Option<&mut Job> {
+    pub fn get_selected_job_mut(&mut self) -> Option<&mut JobFolder> {
         self.selected_job_index
             .and_then(|idx| self.jobs.get_mut(idx))
     }
 
     /// Gets a job by index.
-    pub fn get_job(&self, index: usize) -> Option<&Job> {
+    pub fn get_job(&self, index: usize) -> Option<&JobFolder> {
         self.jobs.get(index)
     }
 
     /// Gets a mutable reference to a job by index.
-    pub fn get_job_mut(&mut self, index: usize) -> Option<&mut Job> {
+    pub fn get_job_mut(&mut self, index: usize) -> Option<&mut JobFolder> {
         self.jobs.get_mut(index)
     }
 
@@ -510,7 +510,7 @@ impl State {
 ///
 /// # Returns
 ///
-/// * `Ok(Vec<Job>)` - Jobs sorted in dependency order (dependencies first)
+/// * `Ok(Vec<JobFolder>)` - Jobs sorted in dependency order (dependencies first)
 /// * `Err(String)` - Error message if circular dependency detected or invalid dependency
 ///
 /// # Algorithm
@@ -521,9 +521,9 @@ impl State {
 /// 3. Process jobs in order, removing edges as we go
 /// 4. If we can't process all jobs, there's a cycle
 fn topological_sort_jobs(
-    jobs: &[Job],
+    jobs: &[JobFolder],
     workflow_metadata: &job_config::workflow::WorkflowMeta,
-) -> Result<Vec<Job>, String> {
+) -> Result<Vec<JobFolder>, String> {
     use std::collections::{HashMap, VecDeque};
 
     if jobs.is_empty() {
@@ -531,7 +531,7 @@ fn topological_sort_jobs(
     }
 
     // Build a map of job names to job data for quick lookup
-    let job_map: HashMap<String, Job> = jobs.iter().map(|j| (j.name.clone(), j.clone())).collect();
+    let job_map: HashMap<String, JobFolder> = jobs.iter().map(|j| (j.name.clone(), j.clone())).collect();
 
     // Build dependency graph: job_name -> Vec<jobs that depend on it>
     let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
@@ -676,8 +676,8 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<usize> {
 /// - Handles conflicts: uses first match and sends warning
 async fn copy_input_files_from_dependencies(
     temp_workflow_dir: &Path,
-    current_job: &Job,
-    all_jobs: &[Job],
+    current_job: &JobFolder,
+    all_jobs: &[JobFolder],
     config: &job_config::job::JobMeta,
     dependencies: &[String],
     tx: &mpsc::Sender<(usize, JobStatus, LogLine)>,

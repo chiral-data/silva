@@ -388,7 +388,7 @@ impl DockerExecutor {
         &self,
         _workflow_name: &str,
         workflow_folder: &Path, // tmp workflow folder
-        job: &workflow::Job,
+        job: &workflow::JobFolder,
         config: &JobMeta,
         workflow_params: &job_config::params::WorkflowParams,
         job_params: &job_config::params::JobParams,

@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed outdated test fixtures to use new `Container` struct format (`image` instead of `docker_image`)
   - Extracted `ParamSource` trait to separate `param_source.rs` module for better code organization
   - Extracted `WorkflowFolder` struct to separate `workflow_folder.rs` module
+  - Renamed `Job` to `JobFolder` and `job.rs` to `job_folder.rs` for consistency with `WorkflowFolder`
 
 ## [0.3.6]
 

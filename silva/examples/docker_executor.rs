@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (cancel_tx, mut cancel_rx) = mpsc::channel::<()>(1);
 
         let workflow_params = WorkflowParams::new();
-        let job = workflow::Job::new(job_name.clone(), job_folder_path.clone());
+        let job = workflow::JobFolder::new(job_name.clone(), job_folder_path.clone());
         let job_params = job.load_params().ok().flatten().unwrap_or_default();
 
         tokio::spawn(async move {
