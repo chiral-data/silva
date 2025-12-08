@@ -4,16 +4,22 @@ Configuration parser for Silva workflow jobs with TOML support.
 
 ## Overview
 
-`job_config` provides a simple and type-safe way to parse job configuration files for workflow systems. It supports Docker containers, custom scripts, GPU usage, job dependencies, and file input/output specifications.
+`job_config` provides a simple and type-safe way to parse job configuration files for workflow systems. It supports Docker containers, custom scripts, GPU usage, job dependencies, file input/output specifications, and parameter definitions.
 
 ## Features
 
-- **Container Configuration**: Support for both Docker images and Dockerfiles
+- **Container Configuration**: Docker image with optional GPU support
 - **Custom Scripts**: Configure pre-run, run, and post-run scripts
-- **GPU Support**: Optional GPU usage flag
-- **Job Dependencies**: Specify dependencies on other jobs with `depends_on`
+- **Job Dependencies**: Specify job dependencies at the workflow level
 - **File I/O**: Define input and output file patterns with glob support
+- **Parameter Definitions**: Define typed parameters with defaults and validation
 - **TOML Format**: Easy-to-read and write configuration format
+
+## Modules
+
+- `job` - Unified `JobMeta` struct combining job configuration and metadata (TOML)
+- `workflow` - Workflow-level metadata with `WorkflowMeta` struct (TOML), including job dependencies
+- `params` - JSON-based parameter storage with `JobParams` and `WorkflowParams` types
 
 ## Installation
 
@@ -29,22 +35,21 @@ job_config = "0.3.3"
 ### Basic Example
 
 ```rust
-use job_config::config::JobConfig;
+use job_config::job::JobMeta;
 
-// Load configuration from a TOML file
-let config = JobConfig::load_from_file("@job.toml")?;
+// Load job metadata from a TOML file
+let meta = JobMeta::load_from_file("job.toml")?;
 
-// Access configuration fields
-match &config.container {
-    job_config::config::Container::DockerImage(image) => {
-        println!("Using Docker image: {}", image);
-    }
-    job_config::config::Container::DockerFile(path) => {
-        println!("Using Dockerfile: {}", path);
-    }
+println!("Job: {} - {}", meta.name, meta.description);
+
+// Access container configuration
+println!("Using Docker image: {}", meta.container.image);
+if meta.container.use_gpu {
+    println!("GPU support enabled");
 }
 
-println!("Run script: {}", config.scripts.run);
+// Generate default parameters
+let defaults = meta.generate_default_params();
 ```
 
 ### TOML Configuration Format
@@ -52,47 +57,78 @@ println!("Run script: {}", config.scripts.run);
 #### Minimal Configuration
 
 ```toml
+name = "My Job"
+description = "A simple job"
+
 [container]
-docker_image = "ubuntu:22.04"
+image = "ubuntu:22.04"
 ```
 
-#### Full Configuration with Dependencies
+#### Full Configuration with Parameters
 
 ```toml
+name = "Training Job"
+description = "Train a machine learning model"
+
 [container]
-docker_image = "python:3.11"
+image = "python:3.11"
+use_gpu = true
 
 [scripts]
 pre = "setup.sh"
 run = "train.sh"
 post = "cleanup.sh"
 
-use_gpu = true
-
-# Job dependencies
-depends_on = ["prepare_data", "download_model"]
-
 # Input files from dependency outputs (supports glob patterns)
 inputs = ["*.csv", "models/*.pt"]
 
 # Output files to collect (supports glob patterns)
 outputs = ["results/*.json", "trained_model.pt"]
+
+# Parameter definitions
+[params.learning_rate]
+type = "float"
+default = 0.001
+hint = "Learning rate for training"
+
+[params.epochs]
+type = "integer"
+default = 100
+hint = "Number of training epochs"
+
+[params.model_type]
+type = "enum"
+default = "resnet"
+hint = "Model architecture to use"
+enum_values = ["resnet", "vgg", "transformer"]
 ```
+
+Note: Job dependencies are now defined at the workflow level in `workflow.toml`, not in individual job configurations.
 
 ## Configuration Reference
 
 ### Container Section (Required)
 
-Specify either a Docker image or Dockerfile:
+Specify the container image and optional GPU support. The `image` field supports multiple sources:
 
 ```toml
 [container]
-# Option 1: Docker image
-docker_image = "ubuntu:22.04"
+# Option 1: Docker registry URL
+image = "ubuntu:22.04"
 
-# Option 2: Dockerfile path (mutually exclusive with docker_image)
-dockerfile = "./Dockerfile"
+# Option 2: Local Docker tar archive
+image = "./images/myimage.tar"
+
+# Option 3: Singularity/Apptainer SIF file
+image = "./containers/app.sif"
+
+use_gpu = false  # Default: false, set to true for GPU support
 ```
+
+The image source is automatically detected based on file extension:
+- `.tar` → Docker tar archive (loaded with `docker load`)
+- `.sif` → Singularity/Apptainer image
+- Otherwise → Docker registry URL (pulled with `docker pull`)
 
 ### Scripts Section (Optional)
 
@@ -103,18 +139,6 @@ Customize script names (defaults shown):
 pre = "pre_run.sh"   # Default: "pre_run.sh"
 run = "run.sh"       # Default: "run.sh"
 post = "post_run.sh" # Default: "post_run.sh"
-```
-
-### GPU Support (Optional)
-
-```toml
-use_gpu = true  # Default: false
-```
-
-### Job Dependencies (Optional)
-
-```toml
-depends_on = ["job1", "job2"]
 ```
 
 ### Input Files (Optional)
@@ -139,40 +163,100 @@ outputs = ["results/*.json", "*.csv", "models/"]
 
 ## API Documentation
 
-### `JobConfig`
+### `Container`
+
+Container configuration:
+
+```rust
+pub struct Container {
+    pub image: String,     // Docker image URL
+    pub use_gpu: bool,     // Enable GPU support (default: false)
+}
+```
+
+### `JobMeta`
 
 Main configuration structure:
 
 ```rust
-pub struct JobConfig {
+pub struct JobMeta {
+    pub name: String,
+    pub description: String,
     pub container: Container,
     pub scripts: Scripts,
-    pub use_gpu: bool,
     pub inputs: Vec<String>,
     pub outputs: Vec<String>,
-    pub depends_on: Vec<String>,
+    pub params: HashMap<String, ParamDefinition>,
 }
+```
+
+### `WorkflowMeta`
+
+Workflow-level configuration (workflow.toml):
+
+```rust
+pub struct WorkflowMeta {
+    pub name: String,
+    pub description: String,
+    pub dependencies: HashMap<String, Vec<String>>,  // job_name -> [dep1, dep2, ...]
+    pub params: HashMap<String, ParamDefinition>,
+}
+```
+
+Example workflow.toml:
+
+```toml
+name = "ML Pipeline"
+description = "A machine learning pipeline"
+
+[dependencies]
+job_2 = ["job_1"]
+job_3 = ["job_1", "job_2"]
+
+[params.batch_size]
+type = "integer"
+default = 32
+hint = "Batch size for training"
 ```
 
 ### Methods
 
-- `JobConfig::load_from_file(path)` - Load configuration from a TOML file
-- Returns `Result<JobConfig, ConfigError>`
+- `JobMeta::load_from_file(path)` - Load configuration from a TOML file
+- `JobMeta::save_to_file(path)` - Save configuration to a TOML file
+- `JobMeta::validate_params(params)` - Validate JSON parameters against TOML definitions
+- `JobMeta::generate_default_params()` - Generate default parameter values as JSON
+
+### Parameter Storage
+
+Parameter *definitions* are stored in TOML format (in `job.toml`), while parameter *values* are stored in JSON format:
+
+- Job parameters: `params.json`
+- Workflow parameters: `global_params.json`
+
+```rust
+use job_config::params::{JobParams, load_job_params, save_job_params};
+
+// Load job parameters from JSON
+let params = load_job_params("params.json")?;
+
+// Save job parameters to JSON
+save_job_params("params.json", &params)?;
+```
 
 ## Error Handling
 
 ```rust
-use job_config::config::{JobConfig, ConfigError};
+use job_config::job::{JobMeta, JobError};
 
-match JobConfig::load_from_file("@job.toml") {
-    Ok(config) => {
-        // Use config
+match JobMeta::load_from_file("job.toml") {
+    Ok(meta) => {
+        // Use meta
     }
-    Err(ConfigError::FileNotFound(path)) => {
+    Err(JobError::FileNotFound(path)) => {
         eprintln!("Config file not found: {}", path);
     }
-    Err(ConfigError::ParseError(msg)) => {
-        eprintln!("Failed to parse config: {}", msg);
+    Err(JobError::InvalidToml(err)) => {
+        eprintln!("Failed to parse config: {}", err);
     }
     Err(e) => {
         eprintln!("Error: {}", e);

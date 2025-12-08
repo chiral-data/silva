@@ -140,7 +140,7 @@ use std::path::Path;
 use tokio::sync::mpsc;
 
 use crate::components::workflow;
-use job_config::config::{Container, JobConfig};
+use job_config::job::JobMeta;
 
 use super::error::DockerError;
 use super::job::JobStatus;
@@ -352,7 +352,40 @@ impl DockerExecutor {
 
         while let Some(result) = stream.next().await {
             match result {
-                Ok(_) => {}
+                Ok(info) => {
+                    // Build progress message from CreateImageInfo fields
+                    let mut parts = Vec::new();
+
+                    if let Some(id) = &info.id {
+                        parts.push(id.clone());
+                    }
+
+                    if let Some(status) = &info.status {
+                        parts.push(status.clone());
+                    }
+
+                    // Add progress percentage if available
+                    if let Some(detail) = &info.progress_detail {
+                        if let (Some(current), Some(total)) = (detail.current, detail.total) {
+                            if total > 0 {
+                                let percent = (current as f64 / total as f64 * 100.0) as u32;
+                                parts.push(format!("{}%", percent));
+                            }
+                        }
+                    }
+
+                    // Send progress update if we have any info
+                    if !parts.is_empty() {
+                        let progress_msg = parts.join(": ");
+                        let log_line = LogLine::new(LogSource::Stdout, progress_msg);
+                        self.tx_send(JobStatus::PullingImage, log_line).await?;
+                    }
+
+                    // Check for errors in the response
+                    if let Some(error) = &info.error {
+                        return Err(DockerError::ImageBuildFailed(error.clone()));
+                    }
+                }
                 Err(e) => return Err(DockerError::ImageBuildFailed(e.to_string())),
             }
         }
@@ -386,61 +419,23 @@ impl DockerExecutor {
     /// **Note**: The container is left running. Call `cleanup_containers()` after all jobs complete.
     pub async fn run_job(
         &self,
-        workflow_name: &str,
+        _workflow_name: &str,
         workflow_folder: &Path, // tmp workflow folder
-        job: &workflow::Job,
-        config: &JobConfig,
-        workflow_params: &job_config::config::WorkflowParams,
-        job_params: &job_config::config::JobParams,
+        job: &workflow::JobFolder,
+        config: &JobMeta,
+        workflow_params: &job_config::params::WorkflowParams,
+        job_params: &job_config::params::JobParams,
         container_registry: &mut std::collections::HashMap<String, String>,
         cancel_rx: &mut mpsc::Receiver<()>,
     ) -> Result<String, DockerError> {
         let work_dir = "/workspace";
 
-        let image_name = match &config.container {
-            Container::DockerImage(url) => {
-                self.pull_image(url).await?;
-                url.clone()
-            }
-            Container::DockerFile(path) => {
-                let job_folder = workflow_folder.join(&job.name);
-                let docker_file_path = job_folder.join(path);
-                let image_name = format!("{workflow_name}_{}", job.name);
-                match self
-                    .client
-                    .inspect_image(format!("{image_name}:latest").as_str())
-                    .await
-                {
-                    Ok(_) => {
-                        // If inspect_image succeeds, the image exists
-                        let log_line = LogLine::new(
-                            LogSource::Stdout,
-                            format!(
-                                "docker image {image_name} exists, skip building, remove the image to rebuild ..."
-                            ),
-                        );
-                        self.tx_send(JobStatus::BuildingImage, log_line).await?;
-                        format!("{image_name}:latest")
-                    }
-                    Err(bollard::errors::Error::DockerResponseServerError {
-                        status_code: 404,
-                        ..
-                    }) => {
-                        // A 404 status code from the Docker API means "no such image"
-                        self.build_image(&image_name, &docker_file_path).await?
-                    }
-                    Err(e) => {
-                        // Handle other errors (e.g., connection, authentication)
-                        return Err(DockerError::ImageBuildFailed(format!(
-                            "inspect image {image_name} error: {e}"
-                        )));
-                    }
-                }
-            }
-        };
+        // Pull the Docker image
+        let image_name = &config.container.image;
+        self.pull_image(image_name).await?;
 
         // Check if we already have a container for this image
-        let container_id = if let Some(existing_id) = container_registry.get(&image_name) {
+        let container_id = if let Some(existing_id) = container_registry.get(image_name) {
             let log_line = LogLine::new(
                 LogSource::Stdout,
                 format!("Reusing existing container {existing_id} for image {image_name}"),
@@ -456,7 +451,7 @@ impl DockerExecutor {
             self.tx_send(JobStatus::CreatingContainer, log_line).await?;
 
             // Build host config based on GPU requirement
-            let mut host_config = if config.use_gpu {
+            let mut host_config = if config.container.use_gpu {
                 let log_line = LogLine::new(
                     LogSource::Stdout,
                     "GPU support enabled for this container".to_string(),
@@ -491,6 +486,9 @@ impl DockerExecutor {
                 attach_stderr: Some(true),
                 host_config: Some(host_config),
                 working_dir: Some(work_dir.to_string()),
+                // Keep container alive with a long-running command
+                // This allows multiple execs without the container exiting
+                cmd: Some(vec!["tail".to_string(), "-f".to_string(), "/dev/null".to_string()]),
                 ..Default::default()
             };
 
@@ -557,6 +555,7 @@ impl DockerExecutor {
                 serde_json::Value::String(s) => s.clone(),
                 serde_json::Value::Number(n) => n.to_string(),
                 serde_json::Value::Bool(b) => b.to_string(),
+                serde_json::Value::Null => "null".to_string(),
                 v => v.to_string(),
             };
             // Add with PARAM_ prefix to avoid conflicts

@@ -19,4 +19,6 @@
 // run = "compute.sh"
 // post = "cleanup.sh"
 
-pub mod config;
+pub mod job;
+pub mod params;
+pub mod workflow;
