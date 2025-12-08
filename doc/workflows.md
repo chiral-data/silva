@@ -21,52 +21,69 @@ A collection of workflows can be found in [this repository](https://github.com/c
 ```
 $SILVA_WORKFLOW_HOME/
 ├── workflow_1/
+│   ├── .chiral/
+│   │   └── workflow.toml       # Workflow metadata, dependencies, global params
+│   ├── global_params.json      # Global parameter values
 │   ├── job_1/
-│   │   ├── @job.toml
-│   │   ├── pre_run.sh
+│   │   ├── .chiral/
+│   │   │   └── job.toml        # Job configuration
+│   │   ├── params.json         # Job parameter values
 │   │   ├── run.sh
-│   │   └── post_run.sh
+│   │   └── outputs/            # Output files collected after execution
 │   ├── job_2/
-│   │   ├── @job.toml
-│   │   ├── Dockerfile
+│   │   ├── .chiral/
+│   │   │   └── job.toml
 │   │   └── run.sh
 │   └── job_3/
-│       ├── @job.toml
+│       ├── .chiral/
+│       │   └── job.toml
 │       └── run.sh
 ├── workflow_2/
-│   └── job_1/
-│       ├── @job.toml
-│       └── run.sh
+│   └── ...
+```
+
+**Note**: Legacy `@job.toml` in the job root is still supported but `.chiral/job.toml` is preferred.
+
+## Workflow Configuration
+
+Workflows can have a `.chiral/workflow.toml` file that defines workflow-level metadata, job dependencies, and global parameters:
+
+```toml
+name = "My Workflow"
+description = "A multi-step data processing workflow"
+
+# Job dependencies (defines execution order)
+[dependencies]
+02_transform = ["01_extract"]
+03_load = ["02_transform"]
+
+# Global parameters (available to all jobs)
+[params.input_source]
+type = "string"
+default = "production"
+hint = "Data source environment"
+
+[params.batch_size]
+type = "integer"
+default = 1000
+hint = "Number of records per batch"
 ```
 
 ## Job Configuration
 
-Each job requires a `@job.toml` configuration file that defines:
+Each job requires a `.chiral/job.toml` configuration file that defines:
 
 ### Container Configuration
 
-You must specify **either** a Docker image URL **or** a Dockerfile (but not both):
-
-### Using a Docker Image
+Specify a Docker image for the job:
 
 ```toml
 [container]
-docker_image = "ubuntu:22.04"
+image = "ubuntu:22.04"
+use_gpu = false  # optional, defaults to false
 
 [scripts]
 run = "run.sh"
-```
-
-### Using a Dockerfile
-
-```toml
-[container]
-docker_file = "Dockerfile"
-
-[scripts]
-pre = "setup.sh"
-run = "main.sh"
-post = "cleanup.sh"
 ```
 
 ### Script Configuration
@@ -81,104 +98,138 @@ Scripts are optional and have default values:
 
 **Note 2**: If pre-execution script and post-execution script are not specified, they will be ignored.
 
-### Complete Example
+### Job Parameters
+
+Jobs can define parameters that are injected as environment variables:
 
 ```toml
+name = "Data Processor"
+description = "Processes input data files"
+inputs = ["*.csv"]
+outputs = ["processed_*.csv", "report.json"]
+
 [container]
-docker_image = "python:3.11-slim"
+image = "python:3.11-slim"
 
 [scripts]
-pre = "install_deps.sh"
 run = "process_data.sh"
-post = "generate_report.sh"
+
+# Parameter definitions
+[params.batch_size]
+type = "integer"
+default = 100
+hint = "Number of records per batch"
+
+[params.output_format]
+type = "enum"
+default = "json"
+hint = "Output file format"
+enum_values = ["json", "csv", "parquet"]
+
+[params.verbose]
+type = "boolean"
+default = false
+hint = "Enable verbose logging"
 ```
 
-### Job Dependencies and Data Flow (v0.3.3+)
+**Supported Parameter Types:**
+- `string`: Text values
+- `integer`: Whole numbers
+- `float`: Decimal numbers
+- `boolean`: true/false values
+- `enum`: Choice from predefined values (requires `enum_values` list)
+- `file`: File path
+- `directory`: Directory path
+- `array`: List of values
 
-Jobs can now specify dependencies on other jobs and automatically handle input/output file transfers:
+Parameters are injected as environment variables with `PARAM_` prefix:
+- `batch_size` → `PARAM_BATCH_SIZE`
+- `output_format` → `PARAM_OUTPUT_FORMAT`
+
+### Input/Output Data Flow
+
+Jobs can specify input and output file patterns for automatic data transfer:
 
 ```toml
-# Example: A job that depends on preprocessing and uses its outputs
-depends_on = ["01_preprocessing", "02_feature_extraction"]
 inputs = ["*.csv", "features/*.json"]
 outputs = ["model.pkl", "metrics/*.txt"]
-
-[container]
-docker_image = "python:3.11-slim"
-
-[scripts]
-run = "train_model.sh"
 ```
 
-**Dependency Fields:**
-
-- `depends_on`: List of job names that must complete before this job runs
-  - Jobs execute in dependency order (topological sort)
-  - Circular dependencies are detected and reported as errors
-  - If a dependency job fails, dependent jobs won't execute
-
 - `inputs`: Glob patterns for files to copy from dependency outputs
-  - Files are copied from each dependency's `outputs/` folder
+  - Files are copied from each dependency's `outputs/` folder before execution
   - If empty or omitted, **all** output files from dependencies are copied
-  - Supports wildcards: `*.csv`, `data_*.json`, `results/**/*.txt`
-  - Conflicts (same filename from multiple dependencies) use first match with warning
 
 - `outputs`: Glob patterns for files to collect after job execution
   - Matching files are copied to an `outputs/` folder in the job directory
-  - Supports wildcards and directory patterns
   - Files become available to jobs that depend on this one
-  - If empty, no output collection occurs
 
 **Example Multi-Job Workflow with Dependencies:**
 
 ```
 ml_pipeline/
+├── .chiral/
+│   └── workflow.toml     # Dependencies defined here
 ├── 01_data_prep/
-│   ├── @job.toml         # No dependencies
+│   ├── .chiral/
+│   │   └── job.toml
 │   └── prepare.sh        # Outputs: train.csv, test.csv
 ├── 02_feature_eng/
-│   ├── @job.toml         # depends_on: ["01_data_prep"]
+│   ├── .chiral/
+│   │   └── job.toml
 │   └── features.sh       # Inputs: *.csv, Outputs: features.json
 └── 03_train_model/
-    ├── @job.toml         # depends_on: ["02_feature_eng"]
+    ├── .chiral/
+    │   └── job.toml
     └── train.sh          # Inputs: features.json, Outputs: model.pkl
 ```
 
-**01_data_prep/@job.toml:**
+**.chiral/workflow.toml:**
 
 ```toml
+name = "ML Pipeline"
+description = "Train a machine learning model"
+
+[dependencies]
+02_feature_eng = ["01_data_prep"]
+03_train_model = ["02_feature_eng"]
+```
+
+**01_data_prep/.chiral/job.toml:**
+
+```toml
+name = "Data Preparation"
 outputs = ["train.csv", "test.csv"]
 
 [container]
-docker_image = "python:3.11-slim"
+image = "python:3.11-slim"
 
 [scripts]
 run = "prepare.sh"
 ```
 
-**02_feature_eng/@job.toml:**
+**02_feature_eng/.chiral/job.toml:**
 
 ```toml
-depends_on = ["01_data_prep"]
+name = "Feature Engineering"
 inputs = ["*.csv"]
 outputs = ["features.json"]
 
 [container]
-docker_image = "python:3.11-slim"
+image = "python:3.11-slim"
 
 [scripts]
 run = "features.sh"
 ```
 
-**03_train_model/@job.toml:**
+**03_train_model/.chiral/job.toml:**
 
 ```toml
-depends_on = ["02_feature_eng"]
+name = "Model Training"
 inputs = ["features.json"]
 outputs = ["model.pkl", "metrics.txt"]
 
 [container]
-docker_image = "python:3.11-slim"
+image = "python:3.11-slim"
 
 [scripts]
 run = "train.sh"
@@ -186,10 +237,11 @@ run = "train.sh"
 
 **How It Works:**
 
-1. Jobs execute in dependency order (not alphabetical when dependencies exist)
-2. Before a job runs, input files from dependencies are copied to the job directory
-3. After successful execution, output files are collected to the `outputs/` folder
-4. The workflow displays execution order at startup: `01_data_prep → 02_feature_eng → 03_train_model`
+1. Job dependencies are defined in `workflow.toml` (not in individual job.toml files)
+2. Jobs execute in dependency order (topological sort)
+3. Before a job runs, input files from dependencies are copied to the job directory
+4. After successful execution, output files are collected to the `outputs/` folder
+5. The workflow displays execution order at startup: `01_data_prep → 02_feature_eng → 03_train_model`
 
 ## Creating Workflows
 
@@ -211,12 +263,16 @@ mkdir -p $SILVA_HOME_DIR/my_workflow/03_reporting
 
 ### 3. Create Job Configurations
 
-For each job, create a `@job.toml` file:
+For each job, create a `.chiral/job.toml` file:
 
 ```bash
-cat > $SILVA_HOME_DIR/my_workflow/01_preprocessing/@job.toml << 'EOF'
+mkdir -p $SILVA_HOME_DIR/my_workflow/01_preprocessing/.chiral
+cat > $SILVA_HOME_DIR/my_workflow/01_preprocessing/.chiral/job.toml << 'EOF'
+name = "Preprocessing"
+outputs = ["processed_data.csv"]
+
 [container]
-docker_image = "python:3.11-slim"
+image = "python:3.11-slim"
 
 [scripts]
 run = "preprocess.sh"
@@ -274,65 +330,86 @@ If any script returns a non-zero exit code, the job fails and the workflow stops
 
 ```
 data_pipeline/
+├── .chiral/
+│   └── workflow.toml
 ├── 01_extract/
-│   ├── @job.toml
+│   ├── .chiral/
+│   │   └── job.toml
 │   └── extract.sh
 ├── 02_transform/
-│   ├── @job.toml
-│   ├── Dockerfile
+│   ├── .chiral/
+│   │   └── job.toml
 │   └── transform.py
 └── 03_load/
-    ├── @job.toml
+    ├── .chiral/
+    │   └── job.toml
     └── load.sh
 ```
 
-**01_extract/@job.toml**:
+**.chiral/workflow.toml**:
 
 ```toml
+name = "Data Pipeline"
+
+[dependencies]
+02_transform = ["01_extract"]
+03_load = ["02_transform"]
+```
+
+**01_extract/.chiral/job.toml**:
+
+```toml
+name = "Extract Data"
+outputs = ["raw_data.csv"]
+
 [container]
-docker_image = "alpine:latest"
+image = "alpine:latest"
 
 [scripts]
 run = "extract.sh"
 ```
 
-**02_transform/@job.toml**:
+**02_transform/.chiral/job.toml**:
 
 ```toml
+name = "Transform Data"
+inputs = ["*.csv"]
+outputs = ["transformed_data.csv"]
+
 [container]
-dockerfile = "Dockerfile"
+image = "python:3.11-slim"
 
 [scripts]
 run = "transform.py"
-```
-
-**02_transform/Dockerfile**:
-
-```dockerfile
-FROM python:3.11-slim
-RUN pip install pandas numpy
 ```
 
 ### Example 2: Testing Pipeline
 
 ```
 test_suite/
+├── .chiral/
+│   └── workflow.toml
 ├── job_1_unit_tests/
-│   ├── @job.toml
+│   ├── .chiral/
+│   │   └── job.toml
 │   └── run_tests.sh
 ├── job_2_integration_tests/
-│   ├── @job.toml
+│   ├── .chiral/
+│   │   └── job.toml
 │   └── run_tests.sh
 └── job_3_e2e_tests/
-    ├── @job.toml
+    ├── .chiral/
+    │   └── job.toml
     └── run_tests.sh
 ```
 
-All jobs use the same configuration:
+All jobs use the same configuration pattern:
 
 ```toml
+name = "Unit Tests"
+
 [container]
-docker_image = "node:20-alpine"
+image = "node:20-alpine"
 
 [scripts]
 pre = "npm install"
@@ -345,12 +422,12 @@ run = "npm test"
 
 - Verify the workflow directory exists in `$SILVA_WORKFLOW_HOME`
 - Press `r` to refresh the workflow list
-- Check that jobs contain `@job.toml` files
+- Check that jobs contain `.chiral/job.toml` files (or legacy `@job.toml`)
 
 ### Job Configuration Errors
 
-- Verify `@job.toml` syntax is valid
-- Ensure exactly one container type is specified (docker_image OR docker_file)
+- Verify `.chiral/job.toml` syntax is valid
+- Ensure `[container]` section has an `image` field
 - Check that script files exist and are executable
 
 ### Docker Execution Errors
@@ -369,26 +446,31 @@ run = "npm test"
 
 ### Sharing Data Between Jobs
 
-**Recommended Approach (v0.3.3+):** Use the `depends_on`, `inputs`, and `outputs` configuration:
+**Recommended Approach:** Use dependencies in `workflow.toml` and `inputs`/`outputs` in job configs:
 
 ```toml
-# job_1/@job.toml
+# .chiral/workflow.toml
+[dependencies]
+job_2 = ["job_1"]
+```
+
+```toml
+# job_1/.chiral/job.toml
 outputs = ["result.txt", "data.csv"]
 
 [container]
-docker_image = "ubuntu:22.04"
+image = "ubuntu:22.04"
 
 [scripts]
 run = "process.sh"
 ```
 
 ```toml
-# job_2/@job.toml
-depends_on = ["job_1"]
+# job_2/.chiral/job.toml
 inputs = ["*.txt", "*.csv"]  # or omit to copy all outputs
 
 [container]
-docker_image = "ubuntu:22.04"
+image = "ubuntu:22.04"
 
 [scripts]
 run = "analyze.sh"
@@ -450,13 +532,16 @@ Currently, each job runs in isolation. For jobs that need to communicate, use fi
 
 ### File Names
 
-| File          | Required | Description                          |
-| ------------- | -------- | ------------------------------------ |
-| `@job.toml`   | Yes      | Job configuration file               |
-| `run.sh`      | Default  | Main execution script (configurable) |
-| `pre_run.sh`  | Default  | Pre-execution script (configurable)  |
-| `post_run.sh` | Default  | Post-execution script (configurable) |
-| `Dockerfile`  | Optional | Custom Docker image definition       |
+| File                    | Required | Description                               |
+| ----------------------- | -------- | ----------------------------------------- |
+| `.chiral/workflow.toml` | Optional | Workflow metadata, dependencies, params   |
+| `.chiral/job.toml`      | Yes      | Job configuration file                    |
+| `global_params.json`    | Optional | Global parameter values (workflow root)   |
+| `params.json`           | Optional | Job parameter values (job directory)      |
+| `run.sh`                | Default  | Main execution script (configurable)      |
+| `pre_run.sh`            | Default  | Pre-execution script (configurable)       |
+| `post_run.sh`           | Default  | Post-execution script (configurable)      |
+| `outputs/`              | Auto     | Output files collected after execution    |
 
 ### Exit Codes
 

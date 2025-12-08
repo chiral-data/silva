@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI argument support: run `silva <workflow_path>` to execute a workflow directly in headless mode
 - Headless workflow execution outputs logs to stdout/stderr instead of TUI
 - Container keep-alive command (`tail -f /dev/null`) for reliable container reuse across jobs
+- Headless mode now copies input files from dependency outputs to current job folder
+- Headless mode creates temp folder for workflow execution (mirrors TUI behavior)
+- Example workflow-007 (Protein Pocket Analysis) with parameterized configuration:
+  - Global `pdb_id` parameter in workflow.toml
+  - Job-level parameters for pocketeer.find_pockets (r_min, r_max, polar_probe_radius, etc.)
+  - Enum parameters for visualization options (pocket_style, render_method, representation, output_format)
 
 ### Changed
 

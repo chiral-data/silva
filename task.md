@@ -80,6 +80,16 @@
   5. Added temp folder execution in headless mode (mirrors TUI behavior)
   6. Added input file copying from dependency outputs to current job folder
   7. Workflow completed successfully: download -> pocket detection -> visualization
+- [x] move the parameters from the scripts out from the scripts, define the parameters in `workflow.toml` and `job.toml`, use them as Environment variables, refer to the TUI implementation.
+  - for global parameters in workflow.toml: `pdb_id` (replace `pdb_code`)
+  - job `02_pocket`: search parameters for `pocketeer.find_pockets` and add them as job parameters.
+  - job `03_visualize`: convert the configuration options into parameters
+  1. Created `workflow.toml` with global `pdb_id` parameter (default: "4TOS")
+  2. Created `02_pocket/job.toml` with 8 find_pockets parameters: r_min, r_max, polar_probe_radius, merge_distance, min_spheres, ignore_hydrogens, ignore_water, ignore_hetero
+  3. Created `03_visualize/job.toml` with 4 enum parameters: pocket_style, render_method, representation, output_format
+  4. Updated Python scripts to read parameters from environment variables (PARAM_* prefix)
+  5. Fixed outputs in 02_pocket to include *.pdb for proper data flow to 03_visualize
+  6. Workflow completed successfully with all parameters injected via environment variables
 - [] add progress info when docker is pulling an image
 - [] publish the crate `job_config` to crate.io
 
