@@ -2,15 +2,17 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::components::docker;
 
+use super::{JobParamSource, ParamsEditorState, WorkflowParamSource};
+
 pub struct State {
     pub selected_workflow: Option<usize>,
     pub workflow_manager: super::WorkflowManager,
     pub docker_state: docker::state::State,
     pub show_docker_popup: bool,
     pub show_params_popup: bool,
-    pub params_editor_state: Option<super::ParamsEditorState>,
+    pub params_editor_state: Option<ParamsEditorState<JobParamSource>>,
     pub show_global_params_popup: bool,
-    pub global_params_editor_state: Option<super::GlobalParamsEditorState>,
+    pub global_params_editor_state: Option<ParamsEditorState<WorkflowParamSource>>,
 }
 
 impl Default for State {
@@ -151,33 +153,26 @@ impl State {
         }
 
         // Get the selected job from docker_state
-        if let Some(selected_job_idx) = self.docker_state.selected_job_index {
-            if let Some(job) = self.docker_state.jobs.get(selected_job_idx) {
-                // Load or create node metadata
-                let node_metadata: job_config::config::NodeMetadata = match job.load_node_metadata()
-                {
-                    Ok(Some(metadata)) => metadata,
-                    Ok(None) => {
-                        // Create default metadata
-                        match job.ensure_default_node_metadata() {
-                            Ok(metadata) => metadata,
-                            Err(_e) => {
-                                return;
-                            }
-                        }
-                    }
-                    Err(_e) => {
-                        return;
-                    }
-                };
+        if let Some(selected_job_idx) = self.docker_state.selected_job_index
+            && let Some(job) = self.docker_state.jobs.get(selected_job_idx)
+        {
+            // Load job metadata
+            let job_meta: job_config::job::JobMeta = match job.load_meta() {
+                Ok(meta) => meta,
+                Err(_e) => {
+                    return;
+                }
+            };
 
-                // Create params editor state
-                match super::ParamsEditorState::new(job.clone(), node_metadata) {
-                    Ok(state) => {
-                        self.params_editor_state = Some(state);
-                        self.show_params_popup = true;
-                    }
-                    Err(_e) => {}
+            // Create params editor state using JobParamSource
+            let source = JobParamSource::new(job.clone(), job_meta);
+            match ParamsEditorState::new(source) {
+                Ok(state) => {
+                    self.params_editor_state = Some(state);
+                    self.show_params_popup = true;
+                }
+                Err(_e) => {
+                    return;
                 }
             }
         }
@@ -243,12 +238,12 @@ impl State {
         // Need to have a selected workflow
         if let Some(workflow_folder) = self.get_selected_workflow() {
             // Load or create workflow metadata
-            let workflow_metadata: job_config::config::WorkflowMetadata =
+            let workflow_metadata: job_config::workflow::WorkflowMeta =
                 match workflow_folder.load_workflow_metadata() {
                     Ok(Some(metadata)) => metadata,
                     Ok(None) => {
                         // Create default metadata
-                        let metadata = job_config::config::WorkflowMetadata::new(
+                        let metadata = job_config::workflow::WorkflowMeta::new(
                             workflow_folder.name.clone(),
                             "Global workflow parameters".to_string(),
                         );
@@ -261,8 +256,9 @@ impl State {
                     }
                 };
 
-            // Create global params editor state
-            match super::GlobalParamsEditorState::new(workflow_folder.clone(), workflow_metadata) {
+            // Create global params editor state using WorkflowParamSource
+            let source = WorkflowParamSource::new(workflow_folder.clone(), workflow_metadata);
+            match ParamsEditorState::new(source) {
                 Ok(state) => {
                     self.global_params_editor_state = Some(state);
                     self.show_global_params_popup = true;

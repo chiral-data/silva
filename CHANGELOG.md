@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.7]
+
+### Added
+
+- CLI argument support: run `silva <workflow_path>` to execute a workflow directly in headless mode
+- Headless workflow execution outputs logs to stdout/stderr instead of TUI
+- Container keep-alive command (`tail -f /dev/null`) for reliable container reuse across jobs
+- Headless mode now copies input files from dependency outputs to current job folder
+- Headless mode creates temp folder for workflow execution (mirrors TUI behavior)
+- Example workflow-007 (Protein Pocket Analysis) with parameterized configuration:
+  - Global `pdb_id` parameter in workflow.toml
+  - Job-level parameters for pocketeer.find_pockets (r_min, r_max, polar_probe_radius, etc.)
+  - Enum parameters for visualization options (pocket_style, render_method, representation, output_format)
+- Docker image pull progress display: shows layer ID, download/extract status, and percentage
+- `ImageSource` enum in `job_config` to support multiple image sources: Docker registry, local tar files (.tar), and Singularity/Apptainer images (.sif)
+
+### Changed
+
+- Extracted navigation and key bindings documentation to `doc/navigation.md`
+- Extracted requirements, installation, and FAQ to `doc/get_started.md`
+- Extracted workflow documentation to `doc/workflows.md`
+- Moved release guide to `doc/releasing.md`
+- **Configuration unification:**
+  - Added new `JobMeta` struct in `job_config/src/job.rs` merging `JobConfig` and `NodeMetadata`
+  - Moved `WorkflowMetadata` to separate `job_config/src/workflow.rs` module
+  - Job definitions now use TOML format (`job.toml`) with `ParamDefinition` using `toml::Value`
+  - Updated callers: `load_config()` → `load_meta()` across workflow and docker components
+  - Added new `job_config/src/params.rs` module for JSON-based parameter storage
+  - `JobParams` and `WorkflowParams` now use `serde_json::Value` (JSON format)
+  - Parameter files: `params.json` for job params, `global_params.json` for workflow params
+  - Added `toml_to_json()` and `json_to_toml()` conversion utilities
+  - Simplified `Container` struct: now has `image` and `use_gpu` fields (removed DockerFile support)
+  - Moved `use_gpu` from `JobMeta` into `Container` struct
+  - Moved job dependencies from `JobMeta.depends_on` to `WorkflowMeta.dependencies`
+  - Job dependencies are now defined at workflow level in `workflow.toml`
+  - Renamed `WorkflowMetadata` to `WorkflowMeta` for consistency with `JobMeta`
+  - Removed legacy `config` module (`job_config::config`) - use `job_config::job`, `job_config::params`, and `job_config::workflow` instead
+  - Merged `params_editor.rs` and `global_params_editor.rs` into a single generic `ParamsEditorState<T>` using trait-based polymorphism
+  - Fixed test race conditions using `serial_test` crate for tests that modify shared env vars
+  - Fixed outdated test fixtures to use new `Container` struct format (`image` instead of `docker_image`)
+  - Extracted `ParamSource` trait to separate `param_source.rs` module for better code organization
+  - Extracted `WorkflowFolder` struct to separate `workflow_folder.rs` module
+  - Renamed `Job` to `JobFolder` and `job.rs` to `job_folder.rs` for consistency with `WorkflowFolder`
+
 ## [0.3.6]
 
 ### Added
