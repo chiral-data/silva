@@ -219,6 +219,7 @@ impl JobScanner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::fs;
 
     fn setup_test_workflow() -> (String, PathBuf) {
@@ -244,13 +245,14 @@ mod tests {
 description = "A test job"
 
 [container]
-docker_image = "ubuntu:22.04"
+image = "ubuntu:22.04"
 "#,
         )
         .unwrap();
     }
 
     #[test]
+    #[serial]
     fn test_job_new() {
         let path = PathBuf::from("/tmp/test_job");
         let job = Job::new("test_job".to_string(), path.clone());
@@ -261,6 +263,7 @@ docker_image = "ubuntu:22.04"
     }
 
     #[test]
+    #[serial]
     fn test_job_has_config() {
         let (test_path, workflow_path) = setup_test_workflow();
 
@@ -279,6 +282,7 @@ docker_image = "ubuntu:22.04"
     }
 
     #[test]
+    #[serial]
     fn test_scan_jobs_empty_workflow() {
         let (test_path, workflow_path) = setup_test_workflow();
 
@@ -292,6 +296,7 @@ docker_image = "ubuntu:22.04"
     }
 
     #[test]
+    #[serial]
     fn test_scan_jobs_with_jobs() {
         let (test_path, workflow_path) = setup_test_workflow();
 
@@ -317,6 +322,7 @@ docker_image = "ubuntu:22.04"
     }
 
     #[test]
+    #[serial]
     fn test_scan_jobs_ignores_folders_without_config() {
         let (test_path, workflow_path) = setup_test_workflow();
 
@@ -342,6 +348,7 @@ docker_image = "ubuntu:22.04"
     }
 
     #[test]
+    #[serial]
     fn test_scan_jobs_ignores_files() {
         let (test_path, workflow_path) = setup_test_workflow();
 
@@ -365,6 +372,7 @@ docker_image = "ubuntu:22.04"
     }
 
     #[test]
+    #[serial]
     fn test_scan_jobs_nonexistent_path() {
         let workflow_path = PathBuf::from("/nonexistent/path");
         let result = JobScanner::scan_jobs(&workflow_path);
@@ -373,6 +381,7 @@ docker_image = "ubuntu:22.04"
     }
 
     #[test]
+    #[serial]
     fn test_is_job_folder() {
         let (test_path, workflow_path) = setup_test_workflow();
 
@@ -389,6 +398,7 @@ docker_image = "ubuntu:22.04"
     }
 
     #[test]
+    #[serial]
     fn test_job_load_meta() {
         let (test_path, workflow_path) = setup_test_workflow();
 
@@ -404,7 +414,7 @@ name = "Test Job"
 description = "A test job"
 
 [container]
-docker_image = "ubuntu:22.04"
+image = "ubuntu:22.04"
 
 [scripts]
 run = "test.sh"

@@ -114,9 +114,11 @@ impl WorkflowHome {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::fs;
 
     #[test]
+    #[serial]
     fn test_default_home_path() {
         // Clear env var to test default
         unsafe { env::remove_var(crate::SILVA_WORKFLOW_HOME) };
@@ -126,6 +128,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_home_path_from_env() {
         let test_path = "/tmp/test_silva_home";
         unsafe { env::set_var(crate::SILVA_WORKFLOW_HOME, test_path) };
@@ -137,6 +140,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_ensure_exists_creates_directory() {
         let test_path = format!("/tmp/silva_test_home_create_{}", std::process::id());
         unsafe { env::set_var(crate::SILVA_WORKFLOW_HOME, &test_path) };
@@ -156,6 +160,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_ensure_exists_validates_existing_directory() {
         let test_path = "/tmp/silva_test_home_existing";
         unsafe { env::set_var(crate::SILVA_WORKFLOW_HOME, test_path) };
@@ -175,6 +180,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_not_a_directory_error() {
         let test_file = format!("/tmp/silva_test_file_{}", std::process::id());
         unsafe { env::set_var(crate::SILVA_WORKFLOW_HOME, &test_file) };
@@ -200,6 +206,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_exists_returns_false_for_nonexistent() {
         let test_path = "/tmp/silva_nonexistent_dir";
         unsafe { env::set_var(crate::SILVA_WORKFLOW_HOME, test_path) };
@@ -214,6 +221,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_absolute_path() {
         let test_path = format!("/tmp/silva_test_absolute_{}", std::process::id());
         unsafe { env::set_var(crate::SILVA_WORKFLOW_HOME, &test_path) };

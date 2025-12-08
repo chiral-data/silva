@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Job dependencies are now defined at workflow level in `workflow.toml`
   - Renamed `WorkflowMetadata` to `WorkflowMeta` for consistency with `JobMeta`
   - Removed legacy `config` module (`job_config::config`) - use `job_config::job`, `job_config::params`, and `job_config::workflow` instead
+  - Merged `params_editor.rs` and `global_params_editor.rs` into a single generic `ParamsEditorState<T>` using trait-based polymorphism
+  - Fixed test race conditions using `serial_test` crate for tests that modify shared env vars
+  - Fixed outdated test fixtures to use new `Container` struct format (`image` instead of `docker_image`)
 
 ## [0.3.6]
 

@@ -280,6 +280,7 @@ impl WorkflowManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::env;
     use std::fs;
 
@@ -300,6 +301,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_workflow_manager_new() {
         let (test_path, home) = setup_test_env();
 
@@ -311,6 +313,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_workflow_manager_initialize() {
         let (test_path, home) = setup_test_env();
 
@@ -324,6 +327,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_scan_workflows_empty_directory() {
         let (test_path, home) = setup_test_env();
 
@@ -339,6 +343,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_scan_workflows_with_folders() {
         let (test_path, home) = setup_test_env();
 
@@ -362,6 +367,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_scan_workflows_ignores_files() {
         let (test_path, home) = setup_test_env();
 
@@ -380,6 +386,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_workflow_folder_created_display() {
         let now = SystemTime::now();
         let workflow = WorkflowFolder::new("test".to_string(), PathBuf::from("/test"), Some(now));
@@ -389,6 +396,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_workflow_folder_created_display_none() {
         let workflow = WorkflowFolder::new("test".to_string(), PathBuf::from("/test"), None);
 
@@ -396,6 +404,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_refresh_workflows() {
         let (test_path, home) = setup_test_env();
 
@@ -415,6 +424,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_create_workflow() {
         let (test_path, home) = setup_test_env();
 
@@ -432,6 +442,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_create_workflow_sanitizes_name() {
         let (test_path, home) = setup_test_env();
 
@@ -450,6 +461,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_create_workflow_duplicate() {
         let (test_path, home) = setup_test_env();
 
@@ -467,6 +479,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_create_workflow_empty_name() {
         let (test_path, home) = setup_test_env();
 

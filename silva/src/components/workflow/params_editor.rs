@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -6,18 +8,139 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 
-use job_config::job::{JobMeta, ParamType};
-use job_config::params::{json_to_toml, toml_to_json};
+use job_config::job::{JobMeta, ParamDefinition, ParamType};
+use job_config::params::{json_to_toml, toml_to_json, JobParams};
+use job_config::workflow::WorkflowMeta;
 
 use super::job::Job;
+use super::manager::WorkflowFolder;
+
+/// Trait for types that can provide parameters for editing.
+/// This abstracts over Job (job-level params) and WorkflowFolder (global params).
+pub trait ParamSource: Clone {
+    /// Returns the display name for the editor title.
+    fn display_name(&self) -> &str;
+
+    /// Returns the description text.
+    fn description(&self) -> &str;
+
+    /// Returns the parameter definitions.
+    fn param_definitions(&self) -> &HashMap<String, ParamDefinition>;
+
+    /// Loads current parameter values.
+    /// Returns None if no params file exists yet.
+    fn load_params(&self) -> Result<Option<JobParams>, String>;
+
+    /// Saves parameter values.
+    fn save_params(&self, params: &JobParams) -> Result<(), String>;
+
+    /// Generates default parameter values from definitions.
+    fn generate_default_params(&self) -> JobParams;
+
+    /// Returns true if this is a global/workflow-level editor.
+    fn is_global(&self) -> bool;
+}
+
+/// Wrapper for Job with its metadata for parameter editing.
+#[derive(Debug, Clone)]
+pub struct JobParamSource {
+    pub job: Job,
+    pub meta: JobMeta,
+}
+
+impl JobParamSource {
+    pub fn new(job: Job, meta: JobMeta) -> Self {
+        Self { job, meta }
+    }
+}
+
+impl ParamSource for JobParamSource {
+    fn display_name(&self) -> &str {
+        &self.job.name
+    }
+
+    fn description(&self) -> &str {
+        &self.meta.description
+    }
+
+    fn param_definitions(&self) -> &HashMap<String, ParamDefinition> {
+        &self.meta.params
+    }
+
+    fn load_params(&self) -> Result<Option<JobParams>, String> {
+        self.job
+            .load_params()
+            .map_err(|e| format!("Failed to load params: {e}"))
+    }
+
+    fn save_params(&self, params: &JobParams) -> Result<(), String> {
+        self.job
+            .save_params(params)
+            .map_err(|e| format!("Failed to save params: {e}"))
+    }
+
+    fn generate_default_params(&self) -> JobParams {
+        self.meta.generate_default_params()
+    }
+
+    fn is_global(&self) -> bool {
+        false
+    }
+}
+
+/// Wrapper for WorkflowFolder with its metadata for parameter editing.
+#[derive(Debug, Clone)]
+pub struct WorkflowParamSource {
+    pub workflow: WorkflowFolder,
+    pub meta: WorkflowMeta,
+}
+
+impl WorkflowParamSource {
+    pub fn new(workflow: WorkflowFolder, meta: WorkflowMeta) -> Self {
+        Self { workflow, meta }
+    }
+}
+
+impl ParamSource for WorkflowParamSource {
+    fn display_name(&self) -> &str {
+        &self.workflow.name
+    }
+
+    fn description(&self) -> &str {
+        &self.meta.description
+    }
+
+    fn param_definitions(&self) -> &HashMap<String, ParamDefinition> {
+        &self.meta.params
+    }
+
+    fn load_params(&self) -> Result<Option<JobParams>, String> {
+        self.workflow
+            .load_workflow_params()
+            .map_err(|e| format!("Failed to load global params: {e}"))
+    }
+
+    fn save_params(&self, params: &JobParams) -> Result<(), String> {
+        self.workflow
+            .save_workflow_params(params)
+            .map_err(|e| format!("Failed to save global params: {e}"))
+    }
+
+    fn generate_default_params(&self) -> JobParams {
+        self.meta.generate_default_params()
+    }
+
+    fn is_global(&self) -> bool {
+        true
+    }
+}
 
 /// State for the parameter editor popup.
+/// Generic over the parameter source type.
 #[derive(Debug, Clone)]
-pub struct ParamsEditorState {
-    /// The job being edited
-    pub job: Job,
-    /// Job metadata with parameter definitions
-    pub job_meta: JobMeta,
+pub struct ParamsEditorState<T: ParamSource> {
+    /// The source being edited (Job or WorkflowFolder with metadata)
+    pub source: T,
     /// Current parameter values (as strings for editing)
     pub param_values: Vec<(String, String)>,
     /// Currently selected parameter index
@@ -30,18 +153,17 @@ pub struct ParamsEditorState {
     pub error_message: Option<String>,
 }
 
-impl ParamsEditorState {
-    /// Creates a new parameter editor state for a job.
-    pub fn new(job: Job, job_meta: JobMeta) -> Result<Self, String> {
+impl<T: ParamSource> ParamsEditorState<T> {
+    /// Creates a new parameter editor state from a param source.
+    pub fn new(source: T) -> Result<Self, String> {
         // Load current params or use defaults
-        let current_params = job
-            .load_params()
-            .map_err(|e| format!("Failed to load params: {e}"))?
-            .unwrap_or_else(|| job_meta.generate_default_params());
+        let current_params = source
+            .load_params()?
+            .unwrap_or_else(|| source.generate_default_params());
 
         // Convert params to editable strings
         let mut param_values = Vec::new();
-        for (param_name, param_def) in &job_meta.params {
+        for (param_name, param_def) in source.param_definitions() {
             // Get value from current params or convert default from TOML to JSON
             let default_json = toml_to_json(&param_def.default);
             let value = current_params
@@ -55,8 +177,7 @@ impl ParamsEditorState {
         param_values.sort_by(|a, b| a.0.cmp(&b.0));
 
         Ok(Self {
-            job,
-            job_meta,
+            source,
             param_values,
             selected_index: 0,
             editing: false,
@@ -101,7 +222,7 @@ impl ParamsEditorState {
             let param_name = &self.param_values[self.selected_index].0;
 
             // Validate the input
-            if let Some(param_def) = self.job_meta.params.get(param_name) {
+            if let Some(param_def) = self.source.param_definitions().get(param_name) {
                 match string_to_param_value(&self.input_buffer, &param_def.param_type) {
                     Ok(json_value) => {
                         // Convert JSON to TOML for validation against TOML-based ParamDefinition
@@ -135,15 +256,12 @@ impl ParamsEditorState {
         self.input_buffer.pop();
     }
 
-    /// Saves all parameters to the job's params.json file.
+    /// Saves all parameters to the params file.
     pub fn save_params(&mut self) -> Result<(), String> {
-        use serde_json::Value;
-        use std::collections::HashMap;
-
-        let mut params: HashMap<String, Value> = HashMap::new();
+        let mut params = JobParams::new();
 
         for (param_name, param_value_str) in &self.param_values {
-            if let Some(param_def) = self.job_meta.params.get(param_name) {
+            if let Some(param_def) = self.source.param_definitions().get(param_name) {
                 let json_value = string_to_param_value(param_value_str, &param_def.param_type)
                     .map_err(|e| format!("Invalid value for {param_name}: {e}"))?;
 
@@ -157,16 +275,12 @@ impl ParamsEditorState {
             }
         }
 
-        self.job
-            .save_params(&params)
-            .map_err(|e| format!("Failed to save params: {e}"))?;
-
-        Ok(())
+        self.source.save_params(&params)
     }
 }
 
 /// Renders the parameter editor popup.
-pub fn render(f: &mut Frame, state: &mut ParamsEditorState, area: Rect) {
+pub fn render<T: ParamSource>(f: &mut Frame, state: &mut ParamsEditorState<T>, area: Rect) {
     // Create centered popup area (60% width, 70% height)
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
@@ -190,7 +304,12 @@ pub fn render(f: &mut Frame, state: &mut ParamsEditorState, area: Rect) {
     f.render_widget(Clear, popup_area);
 
     // Create the main popup block with background
-    let title = format!(" Edit Parameters: {} ", state.job.name);
+    let title_prefix = if state.source.is_global() {
+        "Edit Global Parameters"
+    } else {
+        "Edit Parameters"
+    };
+    let title = format!(" {}: {} ", title_prefix, state.source.display_name());
     let popup_block = Block::default()
         .title(title)
         .borders(Borders::ALL)
@@ -217,7 +336,7 @@ pub fn render(f: &mut Frame, state: &mut ParamsEditorState, area: Rect) {
         .split(inner_area);
 
     // Render description
-    let description = Paragraph::new(state.job_meta.description.as_str())
+    let description = Paragraph::new(state.source.description())
         .style(Style::default().fg(Color::Gray))
         .wrap(Wrap { trim: true });
     f.render_widget(description, sections[0]);
@@ -242,13 +361,13 @@ pub fn render(f: &mut Frame, state: &mut ParamsEditorState, area: Rect) {
     }
 }
 
-fn render_params_list(f: &mut Frame, state: &ParamsEditorState, area: Rect) {
+fn render_params_list<T: ParamSource>(f: &mut Frame, state: &ParamsEditorState<T>, area: Rect) {
     let items: Vec<ListItem> = state
         .param_values
         .iter()
         .enumerate()
         .map(|(i, (name, value))| {
-            let param_def = state.job_meta.params.get(name);
+            let param_def = state.source.param_definitions().get(name);
             let type_str = param_def
                 .map(|d| d.param_type.to_string())
                 .unwrap_or_else(|| "?".to_string());
@@ -322,11 +441,18 @@ fn render_params_list(f: &mut Frame, state: &ParamsEditorState, area: Rect) {
         })
         .collect();
 
+    // Use different title based on whether this is global or job params
+    let list_title = if state.source.is_global() {
+        " Global Parameters "
+    } else {
+        " Parameters "
+    };
+
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::White))
-            .title(" Parameters "),
+            .title(list_title),
     );
 
     f.render_widget(list, area);

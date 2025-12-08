@@ -2,15 +2,17 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::components::docker;
 
+use super::{JobParamSource, ParamsEditorState, WorkflowParamSource};
+
 pub struct State {
     pub selected_workflow: Option<usize>,
     pub workflow_manager: super::WorkflowManager,
     pub docker_state: docker::state::State,
     pub show_docker_popup: bool,
     pub show_params_popup: bool,
-    pub params_editor_state: Option<super::ParamsEditorState>,
+    pub params_editor_state: Option<ParamsEditorState<JobParamSource>>,
     pub show_global_params_popup: bool,
-    pub global_params_editor_state: Option<super::GlobalParamsEditorState>,
+    pub global_params_editor_state: Option<ParamsEditorState<WorkflowParamSource>>,
 }
 
 impl Default for State {
@@ -162,8 +164,9 @@ impl State {
                 }
             };
 
-            // Create params editor state
-            match super::ParamsEditorState::new(job.clone(), job_meta) {
+            // Create params editor state using JobParamSource
+            let source = JobParamSource::new(job.clone(), job_meta);
+            match ParamsEditorState::new(source) {
                 Ok(state) => {
                     self.params_editor_state = Some(state);
                     self.show_params_popup = true;
@@ -251,8 +254,9 @@ impl State {
                     }
                 };
 
-            // Create global params editor state
-            match super::GlobalParamsEditorState::new(workflow_folder.clone(), workflow_metadata) {
+            // Create global params editor state using WorkflowParamSource
+            let source = WorkflowParamSource::new(workflow_folder.clone(), workflow_metadata);
+            match ParamsEditorState::new(source) {
                 Ok(state) => {
                     self.global_params_editor_state = Some(state);
                     self.show_global_params_popup = true;

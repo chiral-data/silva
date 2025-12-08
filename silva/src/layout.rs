@@ -49,11 +49,7 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
     if app.workflow_state.show_global_params_popup
         && let Some(ref mut global_params_state) = app.workflow_state.global_params_editor_state
     {
-        components::workflow::global_params_editor::render(
-            frame,
-            global_params_state,
-            frame.area(),
-        );
+        components::workflow::params_editor::render(frame, global_params_state, frame.area());
     }
 
     // Help popup (rendered on top if visible)
