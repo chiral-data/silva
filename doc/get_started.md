@@ -44,6 +44,36 @@ cargo build --release
 ./target/release/silva
 ```
 
+## Usage
+
+### TUI Mode (default)
+
+Simply run `silva` without arguments to start the terminal UI:
+
+```bash
+silva
+```
+
+### Headless Mode
+
+Run a workflow directly from the command line by providing the workflow path:
+
+```bash
+silva /path/to/workflow
+```
+
+This executes the workflow and outputs logs to stdout/stderr, useful for:
+- CI/CD pipelines
+- Scripted automation
+- Running workflows without a terminal UI
+
+### CLI Options
+
+```bash
+silva --help     # Show help message
+silva --version  # Show version
+```
+
 ## FAQ
 
 - Q: the emojis do not show correctly under Windows.

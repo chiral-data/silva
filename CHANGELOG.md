@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.7]
 
+### Added
+
+- CLI argument support: run `silva <workflow_path>` to execute a workflow directly in headless mode
+- Headless workflow execution outputs logs to stdout/stderr instead of TUI
+
 ### Changed
 
 - Extracted navigation and key bindings documentation to `doc/navigation.md`

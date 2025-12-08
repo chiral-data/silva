@@ -59,6 +59,16 @@
   2. Renamed `Job` struct to `JobFolder`
   3. Updated all imports and references in: `mod.rs`, `param_source.rs`, `docker/state.rs`, `docker/executor.rs`, `examples/docker_executor.rs`
   4. Renamed test functions: `test_job_new` -> `test_job_folder_new`, etc.
+- [x] add argument for "silva".
+  - If "silva" launches without any argument, the TUI app will start.
+  - If "silva" launches with an argument of a workflow folder, it will run the workflow directly and output the stdout and stderr to the user.
+  1. Added `clap = "4.5"` dependency with derive feature to silva/Cargo.toml
+  2. Created `silva/src/headless.rs` module with `run_workflow()` function for headless execution
+  3. Updated `silva/src/lib.rs` to export the new `headless` module
+  4. Updated `silva/src/main.rs` with CLI argument parsing:
+     - Without args: starts TUI application
+     - With workflow path: runs workflow directly, outputs to stdout/stderr
+  5. Added to CHANGELOG.md documenting the new CLI argument support
 - [] add progress info when docker is pulling an image
 - [] publish the crate `job_config` to crate.io
 
