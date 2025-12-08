@@ -10,7 +10,7 @@ use job_config::params::JobParams;
 use job_config::workflow::WorkflowMeta;
 
 use super::job::Job;
-use super::manager::WorkflowFolder;
+use super::workflow_folder::WorkflowFolder;
 
 /// Trait for types that can provide parameters for editing.
 /// This abstracts over Job (job-level params) and WorkflowFolder (global params).

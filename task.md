@@ -49,6 +49,11 @@
   1. Created `param_source.rs` with `ParamSource` trait, `JobParamSource`, and `WorkflowParamSource`
   2. Updated `params_editor.rs` to import from `param_source` module
   3. Updated `mod.rs` to export from new module location
+- [x] move the `WorkflowFolder` out of `silva/src/components/workflow/manager.rs` and put into a new file `silva/src/components/workflow/workflow_folder.rs`
+  1. Created `workflow_folder.rs` with `WorkflowFolder` struct and all its methods
+  2. Updated `manager.rs` to import from `workflow_folder` module
+  3. Updated `param_source.rs` to import from `workflow_folder` module
+  4. Updated `mod.rs` to export from new module location
 - [] add progress info when docker is pulling an image
 - [] publish the crate `job_config` to crate.io
 
