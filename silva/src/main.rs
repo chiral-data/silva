@@ -26,6 +26,13 @@ struct Args {
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
+    // Check for updates on startup
+    let update_result = silva::update::run_update_check().await;
+    if update_result.should_exit {
+        // Update was performed, exit
+        return Ok(());
+    }
+
     // Check if workflow path is provided
     if let Some(workflow_path) = args.workflow_path {
         // Headless mode: run workflow directly
@@ -33,20 +40,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await
             .map_err(|e| e.into())
     } else {
-        // TUI mode: start the terminal UI
-        run_tui().await
+        // TUI mode: start the terminal UI with update info
+        run_tui(update_result.deferred_update).await
     }
 }
 
 /// Runs the TUI application
-async fn run_tui() -> Result<(), Box<dyn Error>> {
+async fn run_tui(update_available: Option<String>) -> Result<(), Box<dyn Error>> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let res = run_app(&mut terminal).await;
+    let res = run_app(&mut terminal, update_available).await;
 
     disable_raw_mode()?;
     execute!(

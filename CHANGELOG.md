@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.8]
+
+### Added
+
+- Local Docker image detection: `pull_image` now checks if an image exists locally before attempting to pull from registry
+- Test coverage for local Docker image detection feature
+- Auto-update feature: checks GitHub releases on startup, prompts user to update if new version available, shows notification in TUI footer if update is deferred
+
+### Changed
+
+- Refactored `run_job` function signature to use tuple grouping for related parameters
+
+### Fixed
+
+- Workflow now correctly reports `Failed` status when a job fails (was incorrectly reporting `Completed`)
+- `run_job` now returns error when script execution fails, stopping workflow immediately instead of continuing to next job
+
 ## [0.3.7]
 
 ### Added
@@ -48,6 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Extracted `ParamSource` trait to separate `param_source.rs` module for better code organization
   - Extracted `WorkflowFolder` struct to separate `workflow_folder.rs` module
   - Renamed `Job` to `JobFolder` and `job.rs` to `job_folder.rs` for consistency with `WorkflowFolder`
+
+### Fixed
+
+- Docker `pull_image` now checks if image exists locally before pulling, avoiding unnecessary network requests
 
 ## [0.3.6]
 

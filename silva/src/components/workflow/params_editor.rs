@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use job_config::job::ParamType;
-use job_config::params::{json_to_toml, toml_to_json, JobParams};
+use job_config::params::{JobParams, json_to_toml, toml_to_json};
 
 use super::param_source::ParamSource;
 
@@ -42,9 +42,7 @@ impl<T: ParamSource> ParamsEditorState<T> {
         for (param_name, param_def) in source.param_definitions() {
             // Get value from current params or convert default from TOML to JSON
             let default_json = toml_to_json(&param_def.default);
-            let value = current_params
-                .get(param_name)
-                .unwrap_or(&default_json);
+            let value = current_params.get(param_name).unwrap_or(&default_json);
             let value_str = param_value_to_string(value);
             param_values.push((param_name.clone(), value_str));
         }

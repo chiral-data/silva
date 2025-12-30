@@ -298,8 +298,8 @@ impl JobMeta {
 
     /// Saves job metadata to a TOML file.
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), JobError> {
-        let toml_str = toml::to_string_pretty(self)
-            .map_err(|e| JobError::SerializeError(e.to_string()))?;
+        let toml_str =
+            toml::to_string_pretty(self).map_err(|e| JobError::SerializeError(e.to_string()))?;
         fs::write(path, toml_str)?;
         Ok(())
     }
@@ -435,7 +435,11 @@ mod tests {
         assert_eq!(format_param.param_type, ParamType::Enum);
         assert_eq!(
             format_param.enum_values,
-            Some(vec!["pdb".to_string(), "cif".to_string(), "xml".to_string()])
+            Some(vec![
+                "pdb".to_string(),
+                "cif".to_string(),
+                "xml".to_string()
+            ])
         );
     }
 

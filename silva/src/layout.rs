@@ -39,10 +39,10 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
     }
 
     // Params popup (rendered on top if visible)
-    if app.workflow_state.show_params_popup {
-        if let Some(ref mut params_state) = app.workflow_state.params_editor_state {
-            components::workflow::params_editor::render(frame, params_state, frame.area());
-        }
+    if app.workflow_state.show_params_popup
+        && let Some(ref mut params_state) = app.workflow_state.params_editor_state
+    {
+        components::workflow::params_editor::render(frame, params_state, frame.area());
     }
 
     // Global params popup (rendered on top if visible)
