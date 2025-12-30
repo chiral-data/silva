@@ -26,6 +26,12 @@ struct Args {
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
+    // Check for updates on startup
+    if silva::update::run_update_check().await {
+        // Update was performed, exit
+        return Ok(());
+    }
+
     // Check if workflow path is provided
     if let Some(workflow_path) = args.workflow_path {
         // Headless mode: run workflow directly

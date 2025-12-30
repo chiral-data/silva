@@ -8,6 +8,7 @@ pub mod components;
 pub mod headless;
 mod layout;
 mod style;
+pub mod update;
 
 pub async fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
     let mut app = app::App::new().await;
