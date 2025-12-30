@@ -14,10 +14,12 @@ pub struct App {
     pub application_state: application::state::State,
     pub health_check_state: health_check::state::State,
     pub workflow_state: workflow::state::State,
+    /// Available update version (if any), set during startup check
+    pub update_available: Option<String>,
 }
 
 impl App {
-    pub async fn new() -> App {
+    pub async fn new(update_available: Option<String>) -> App {
         let loader = application::ApplicationLoader::default();
         let url = "https://raw.githubusercontent.com/chiral-data/container-images-silva/refs/heads/main/applications.json";
         let catalog = loader
@@ -37,6 +39,7 @@ impl App {
             application_state: application::state::State::new(catalog),
             health_check_state: health_check::state::State::default(),
             workflow_state: workflow::state::State::default(),
+            update_available,
         }
     }
 

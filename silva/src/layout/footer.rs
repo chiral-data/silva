@@ -43,7 +43,7 @@ pub fn render(frame: &mut Frame, area: ratatui::prelude::Rect, app: &App) {
     let state = &app.footer_state;
     let uptime = state.start_time.elapsed().as_secs();
 
-    let footer_text = vec![Line::from(vec![
+    let mut spans = vec![
         Span::styled(
             "Silva: workflow automation in the terminal",
             Style::default().fg(Color::LightYellow),
@@ -51,6 +51,20 @@ pub fn render(frame: &mut Frame, area: ratatui::prelude::Rect, app: &App) {
         Span::raw(" | "),
         Span::styled("Ver: ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(crate::VERSION),
+    ];
+
+    // Show update notification if available
+    if let Some(ref new_version) = app.update_available {
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(
+            format!("[Update: v{new_version}]"),
+            Style::default()
+                .fg(Color::LightMagenta)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
+    spans.extend([
         Span::raw(" | "),
         Span::styled("Uptime: ", Style::default().add_modifier(Modifier::BOLD)),
         Span::styled(format!("{uptime}s"), Style::default().fg(Color::Cyan)),
@@ -66,7 +80,9 @@ pub fn render(frame: &mut Frame, area: ratatui::prelude::Rect, app: &App) {
             format!("{:3.1}%", state.cpu_usage),
             Style::default().fg(Color::Yellow),
         ),
-    ])];
+    ]);
+
+    let footer_text = vec![Line::from(spans)];
 
     let footer = Paragraph::new(footer_text)
         .block(

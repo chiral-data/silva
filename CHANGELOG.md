@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Local Docker image detection: `pull_image` now checks if an image exists locally before attempting to pull from registry
 - Test coverage for local Docker image detection feature
-- Auto-update feature: checks GitHub releases on startup, prompts user to update if new version available
+- Auto-update feature: checks GitHub releases on startup, prompts user to update if new version available, shows notification in TUI footer if update is deferred
 
 ### Changed
 

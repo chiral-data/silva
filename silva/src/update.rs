@@ -151,22 +151,34 @@ pub fn perform_update() -> Result<(), String> {
     }
 }
 
+/// Result of the update check flow.
+pub struct UpdateCheckResult {
+    /// Whether the application should exit (update was performed)
+    pub should_exit: bool,
+    /// Available update version if user declined to update (for TUI notification)
+    pub deferred_update: Option<String>,
+}
+
 /// Run the complete update check and prompt flow.
 ///
 /// This is the main entry point for the update feature.
-/// Returns `true` if the application should exit (update was performed).
-pub async fn run_update_check() -> bool {
+/// Returns UpdateCheckResult indicating whether to exit and any deferred update info.
+pub async fn run_update_check() -> UpdateCheckResult {
     print!("Checking for updates... ");
     io::stdout().flush().ok();
 
     match check_for_updates().await {
         Ok(Some(info)) => {
             println!();
+            let version = info.latest_version.clone();
             if prompt_update(&info) {
                 match perform_update() {
                     Ok(()) => {
                         // Exit after successful update
-                        return true;
+                        return UpdateCheckResult {
+                            should_exit: true,
+                            deferred_update: None,
+                        };
                     }
                     Err(e) => {
                         eprintln!("Update failed: {e}");
@@ -178,6 +190,11 @@ pub async fn run_update_check() -> bool {
                 }
             } else {
                 println!("Update skipped. You can update later with the install script.");
+                // Return the deferred update version for TUI notification
+                return UpdateCheckResult {
+                    should_exit: false,
+                    deferred_update: Some(version),
+                };
             }
         }
         Ok(None) => {
@@ -187,7 +204,10 @@ pub async fn run_update_check() -> bool {
             println!("skipped ({e})");
         }
     }
-    false
+    UpdateCheckResult {
+        should_exit: false,
+        deferred_update: None,
+    }
 }
 
 #[cfg(test)]
