@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Workflow now correctly reports `Failed` status when a job fails (was incorrectly reporting `Completed`)
+- `run_job` now returns error when script execution fails, stopping workflow immediately instead of continuing to next job
 
 ## [0.3.7]
 

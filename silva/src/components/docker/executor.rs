@@ -679,16 +679,24 @@ impl DockerExecutor {
             }
         }
 
-        // Return container ID for cleanup later
-        let log_line = LogLine::new(
-            LogSource::Stdout,
-            format!(
-                "Job completed, container {container_id} will be cleaned up after workflow finishes"
-            ),
-        );
-        self.tx_send(JobStatus::Completed, log_line).await?;
-
-        Ok(container_id)
+        // Return container ID for cleanup later, or error if scripts failed
+        if all_scripts_succeeded {
+            let log_line = LogLine::new(
+                LogSource::Stdout,
+                format!(
+                    "Job completed, container {container_id} will be cleaned up after workflow finishes"
+                ),
+            );
+            self.tx_send(JobStatus::Completed, log_line).await?;
+            Ok(container_id)
+        } else {
+            // Register container for cleanup even on failure
+            container_registry.insert(image_name.clone(), container_id.clone());
+            Err(DockerError::ScriptExecutionFailed {
+                script: "job scripts".to_string(),
+                exit_code: 1,
+            })
+        }
     }
 
     /// Cleans up (stops and removes) multiple containers.
