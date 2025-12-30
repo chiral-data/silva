@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Refactored `run_job` function signature to use tuple grouping for related parameters
 
+### Fixed
+
+- Workflow now correctly reports `Failed` status when a job fails (was incorrectly reporting `Completed`)
+
 ## [0.3.7]
 
 ### Added

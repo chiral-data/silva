@@ -263,6 +263,7 @@ impl State {
 
             // Container registry: image_name -> container_id (for reusing containers)
             let mut container_registry: HashMap<String, String> = HashMap::new();
+            let mut workflow_failed = false;
 
             for job in sorted_jobs.iter() {
                 // Get the original index for this job (for UI updates)
@@ -307,6 +308,7 @@ impl State {
                                     format!("docker run job error: {e}"),
                                 );
                                 tx.send((idx, JobStatus::Failed, log_line)).await.unwrap();
+                                workflow_failed = true;
                                 break;
                             }
                         }
@@ -315,6 +317,7 @@ impl State {
                         let log_line =
                             LogLine::new(LogSource::Stderr, format!("Load job config error: {e}"));
                         tx.send((idx, JobStatus::Failed, log_line)).await.unwrap();
+                        workflow_failed = true;
                         break;
                     }
                 }
@@ -324,8 +327,13 @@ impl State {
             let container_ids: Vec<String> = container_registry.values().cloned().collect();
             docker_executor.cleanup_containers(&container_ids).await;
 
-            // run workflow completes
-            tx.send((jobs_length, JobStatus::Completed, LogLine::empty()))
+            // Send workflow completion status
+            let final_status = if workflow_failed {
+                JobStatus::Failed
+            } else {
+                JobStatus::Completed
+            };
+            tx.send((jobs_length, final_status, LogLine::empty()))
                 .await
                 .unwrap();
         });
