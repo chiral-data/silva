@@ -429,12 +429,16 @@ impl DockerExecutor {
     /// **Note**: The container is left running. Call `cleanup_containers()` after all jobs complete.
     pub async fn run_job(
         &self,
-        _workflow_name: &str,
-        workflow_folder: &Path, // tmp workflow folder
-        job: &workflow::JobFolder,
-        config: &JobMeta,
-        workflow_params: &job_config::params::WorkflowParams,
-        job_params: &job_config::params::JobParams,
+        (_workflow_name, workflow_folder, workflow_params): (
+            &str,
+            &Path,
+            &job_config::params::WorkflowParams,
+        ),
+        (job, config, job_params): (
+            &workflow::JobFolder,
+            &JobMeta,
+            &job_config::params::JobParams,
+        ),
         container_registry: &mut std::collections::HashMap<String, String>,
         cancel_rx: &mut mpsc::Receiver<()>,
     ) -> Result<String, DockerError> {
@@ -498,7 +502,11 @@ impl DockerExecutor {
                 working_dir: Some(work_dir.to_string()),
                 // Keep container alive with a long-running command
                 // This allows multiple execs without the container exiting
-                cmd: Some(vec!["tail".to_string(), "-f".to_string(), "/dev/null".to_string()]),
+                cmd: Some(vec![
+                    "tail".to_string(),
+                    "-f".to_string(),
+                    "/dev/null".to_string(),
+                ]),
                 ..Default::default()
             };
 
@@ -1068,5 +1076,47 @@ mod tests {
             Ok(_) => println!("Docker connection successful"),
             Err(e) => println!("Docker connection failed (expected in CI): {e}"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_pull_image_uses_local_image() {
+        // Test that pull_image uses local image when it already exists
+        let (tx, mut rx) = mpsc::channel::<(usize, JobStatus, LogLine)>(32);
+        let executor = match DockerExecutor::new(tx) {
+            Ok(e) => e,
+            Err(e) => {
+                println!("Docker connection failed (expected in CI): {e}");
+                return;
+            }
+        };
+
+        // Use hello-world image which is small and commonly available
+        let test_image = "hello-world:latest";
+
+        // First pull to ensure image exists locally
+        if let Err(e) = executor.pull_image(test_image).await {
+            println!("Initial pull failed (may be network issue): {e}");
+            return;
+        }
+
+        // Drain any messages from the first pull
+        while rx.try_recv().is_ok() {}
+
+        // Second pull should detect local image
+        let result = executor.pull_image(test_image).await;
+        assert!(result.is_ok(), "pull_image should succeed for local image");
+
+        // Check that we received the "already exists locally" message
+        let mut found_local_message = false;
+        while let Ok((_idx, _status, log_line)) = rx.try_recv() {
+            if log_line.content.contains("already exists locally") {
+                found_local_message = true;
+                break;
+            }
+        }
+        assert!(
+            found_local_message,
+            "Expected 'already exists locally' message for cached image"
+        );
     }
 }

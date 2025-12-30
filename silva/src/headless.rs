@@ -171,12 +171,8 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
 
                     match docker_executor
                         .run_job(
-                            &workflow_folder_clone.name,
-                            &temp_workflow_path_clone,
-                            job,
-                            &config,
-                            &workflow_params,
-                            &job_params,
+                            (&workflow_folder_clone.name, &temp_workflow_path_clone, &workflow_params),
+                            (job, &config, &job_params),
                             &mut container_registry,
                             &mut cancel_rx,
                         )
