@@ -49,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Extracted `WorkflowFolder` struct to separate `workflow_folder.rs` module
   - Renamed `Job` to `JobFolder` and `job.rs` to `job_folder.rs` for consistency with `WorkflowFolder`
 
+### Fixed
+
+- Docker `pull_image` now checks if image exists locally before pulling, avoiding unnecessary network requests
+
 ## [0.3.6]
 
 ### Added

@@ -338,6 +338,16 @@ impl DockerExecutor {
     /// * `Ok(())` - Image pulled successfully
     /// * `Err(DockerError)` - Pull error
     pub async fn pull_image(&self, image_url: &str) -> Result<(), DockerError> {
+        // Check if image exists locally first
+        if self.client.inspect_image(image_url).await.is_ok() {
+            let log_line = LogLine::new(
+                LogSource::Stdout,
+                format!("Image already exists locally: {image_url}"),
+            );
+            self.tx_send(JobStatus::PullingImage, log_line).await?;
+            return Ok(());
+        }
+
         // update job entry
         let log_line = LogLine::new(LogSource::Stdout, format!("Pulling image: {image_url}"));
         self.tx_send(JobStatus::PullingImage, log_line).await?;
