@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 use job_config::job::JobError;
-use job_config::params::{load_workflow_params, save_workflow_params, ParamsError, WorkflowParams};
+use job_config::params::{ParamsError, WorkflowParams, load_workflow_params, save_workflow_params};
 use job_config::workflow::WorkflowMeta;
 
 /// Represents a single workflow folder.

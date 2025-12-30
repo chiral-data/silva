@@ -535,7 +535,8 @@ fn topological_sort_jobs(
     }
 
     // Build a map of job names to job data for quick lookup
-    let job_map: HashMap<String, JobFolder> = jobs.iter().map(|j| (j.name.clone(), j.clone())).collect();
+    let job_map: HashMap<String, JobFolder> =
+        jobs.iter().map(|j| (j.name.clone(), j.clone())).collect();
 
     // Build dependency graph: job_name -> Vec<jobs that depend on it>
     let mut dependents: HashMap<String, Vec<String>> = HashMap::new();

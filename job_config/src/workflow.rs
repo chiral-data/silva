@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::job::{JobError, ParamDefinition};
-use crate::params::{WorkflowParams, toml_to_json, json_to_toml};
+use crate::params::{WorkflowParams, json_to_toml, toml_to_json};
 
 // Re-export WorkflowParams from params module for convenience
 pub use crate::params::WorkflowParams as WorkflowParamsType;
@@ -63,19 +63,15 @@ impl WorkflowMeta {
 
     /// Saves workflow metadata to a TOML file.
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<(), JobError> {
-        let toml_str = toml::to_string_pretty(self).map_err(|e| {
-            JobError::SerializeError(e.to_string())
-        })?;
+        let toml_str =
+            toml::to_string_pretty(self).map_err(|e| JobError::SerializeError(e.to_string()))?;
         fs::write(path, toml_str)?;
         Ok(())
     }
 
     /// Validates a params HashMap against this workflow's parameter definitions.
     /// Accepts JSON-based WorkflowParams and converts values for validation against TOML definitions.
-    pub fn validate_params(
-        &self,
-        params: &WorkflowParams,
-    ) -> Result<(), String> {
+    pub fn validate_params(&self, params: &WorkflowParams) -> Result<(), String> {
         for (param_name, param_value) in params {
             if let Some(param_def) = self.params.get(param_name) {
                 // Convert JSON value to TOML for validation
@@ -108,7 +104,8 @@ mod tests {
 
     #[test]
     fn test_workflow_meta_new() {
-        let metadata = WorkflowMeta::new("Test Workflow".to_string(), "A test workflow".to_string());
+        let metadata =
+            WorkflowMeta::new("Test Workflow".to_string(), "A test workflow".to_string());
         assert_eq!(metadata.name, "Test Workflow");
         assert_eq!(metadata.description, "A test workflow");
         assert!(metadata.params.is_empty());
@@ -143,8 +140,14 @@ mod tests {
 
         // Check dependencies
         assert_eq!(metadata.get_job_dependencies("job_1"), &[] as &[String]);
-        assert_eq!(metadata.get_job_dependencies("job_2"), &["job_1".to_string()]);
-        assert_eq!(metadata.get_job_dependencies("job_3"), &["job_1".to_string(), "job_2".to_string()]);
+        assert_eq!(
+            metadata.get_job_dependencies("job_2"),
+            &["job_1".to_string()]
+        );
+        assert_eq!(
+            metadata.get_job_dependencies("job_3"),
+            &["job_1".to_string(), "job_2".to_string()]
+        );
     }
 
     #[test]
@@ -152,7 +155,10 @@ mod tests {
         let mut metadata = WorkflowMeta::new("Test".to_string(), "Test workflow".to_string());
 
         metadata.set_job_dependencies("job_2".to_string(), vec!["job_1".to_string()]);
-        assert_eq!(metadata.get_job_dependencies("job_2"), &["job_1".to_string()]);
+        assert_eq!(
+            metadata.get_job_dependencies("job_2"),
+            &["job_1".to_string()]
+        );
     }
 
     #[test]
@@ -164,7 +170,10 @@ mod tests {
         }"#;
 
         let params: WorkflowParams = serde_json::from_str(json_str).unwrap();
-        assert_eq!(params.get("input_path").unwrap().as_str().unwrap(), "/data/input");
+        assert_eq!(
+            params.get("input_path").unwrap().as_str().unwrap(),
+            "/data/input"
+        );
         assert_eq!(params.get("batch_size").unwrap().as_i64().unwrap(), 32);
     }
 }

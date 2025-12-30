@@ -133,15 +133,11 @@ pub fn toml_to_json(value: &toml::Value) -> serde_json::Value {
     match value {
         toml::Value::String(s) => serde_json::Value::String(s.clone()),
         toml::Value::Integer(i) => serde_json::Value::Number((*i).into()),
-        toml::Value::Float(f) => {
-            serde_json::Number::from_f64(*f)
-                .map(serde_json::Value::Number)
-                .unwrap_or(serde_json::Value::Null)
-        }
+        toml::Value::Float(f) => serde_json::Number::from_f64(*f)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
         toml::Value::Boolean(b) => serde_json::Value::Bool(*b),
-        toml::Value::Array(arr) => {
-            serde_json::Value::Array(arr.iter().map(toml_to_json).collect())
-        }
+        toml::Value::Array(arr) => serde_json::Value::Array(arr.iter().map(toml_to_json).collect()),
         toml::Value::Table(table) => {
             let map: serde_json::Map<String, serde_json::Value> = table
                 .iter()
@@ -169,9 +165,7 @@ pub fn json_to_toml(value: &serde_json::Value) -> toml::Value {
             }
         }
         serde_json::Value::String(s) => toml::Value::String(s.clone()),
-        serde_json::Value::Array(arr) => {
-            toml::Value::Array(arr.iter().map(json_to_toml).collect())
-        }
+        serde_json::Value::Array(arr) => toml::Value::Array(arr.iter().map(json_to_toml).collect()),
         serde_json::Value::Object(obj) => {
             let table: toml::map::Map<String, toml::Value> = obj
                 .iter()
@@ -195,7 +189,10 @@ mod tests {
         }"#;
 
         let params: JobParams = serde_json::from_str(json_str).unwrap();
-        assert_eq!(params.get("input_path").unwrap().as_str().unwrap(), "/data/input");
+        assert_eq!(
+            params.get("input_path").unwrap().as_str().unwrap(),
+            "/data/input"
+        );
         assert_eq!(params.get("batch_size").unwrap().as_i64().unwrap(), 32);
     }
 
@@ -207,7 +204,10 @@ mod tests {
         }"#;
 
         let params: WorkflowParams = serde_json::from_str(json_str).unwrap();
-        assert_eq!(params.get("project_name").unwrap().as_str().unwrap(), "ml-pipeline");
+        assert_eq!(
+            params.get("project_name").unwrap().as_str().unwrap(),
+            "ml-pipeline"
+        );
         assert_eq!(params.get("max_workers").unwrap().as_i64().unwrap(), 4);
     }
 

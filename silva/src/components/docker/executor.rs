@@ -375,13 +375,12 @@ impl DockerExecutor {
                     }
 
                     // Add progress percentage if available
-                    if let Some(detail) = &info.progress_detail {
-                        if let (Some(current), Some(total)) = (detail.current, detail.total) {
-                            if total > 0 {
-                                let percent = (current as f64 / total as f64 * 100.0) as u32;
-                                parts.push(format!("{}%", percent));
-                            }
-                        }
+                    if let Some(detail) = &info.progress_detail
+                        && let (Some(current), Some(total)) = (detail.current, detail.total)
+                        && total > 0
+                    {
+                        let percent = (current as f64 / total as f64 * 100.0) as u32;
+                        parts.push(format!("{}%", percent));
                     }
 
                     // Send progress update if we have any info

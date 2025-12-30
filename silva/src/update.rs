@@ -54,10 +54,7 @@ pub async fn check_for_updates() -> Result<Option<UpdateInfo>, String> {
         .map_err(|e| format!("Failed to fetch release info: {e}"))?;
 
     if !response.status().is_success() {
-        return Err(format!(
-            "GitHub API returned status: {}",
-            response.status()
-        ));
+        return Err(format!("GitHub API returned status: {}", response.status()));
     }
 
     let release: GitHubRelease = response
@@ -68,8 +65,8 @@ pub async fn check_for_updates() -> Result<Option<UpdateInfo>, String> {
     let latest_version = release.tag_name.trim_start_matches('v').to_string();
 
     // Compare versions using semver
-    let current = Version::parse(current_version)
-        .map_err(|e| format!("Invalid current version: {e}"))?;
+    let current =
+        Version::parse(current_version).map_err(|e| format!("Invalid current version: {e}"))?;
     let latest =
         Version::parse(&latest_version).map_err(|e| format!("Invalid latest version: {e}"))?;
 
