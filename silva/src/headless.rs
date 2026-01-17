@@ -106,6 +106,10 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
             .collect::<Vec<_>>()
             .join(" -> ")
     );
+
+    // Copy input_files to the first job if the folder exists
+    copy_input_files_to_first_job(&workflow_path, &temp_workflow_path, &sorted_jobs);
+
     println!();
 
     // Create message channel for logs
@@ -527,4 +531,69 @@ fn create_temp_workflow_folder(source_path: &Path) -> std::io::Result<TempDir> {
         .map_err(|e| std::io::Error::other(format!("copy folder error {e}")))?;
 
     Ok(temp_dir)
+}
+
+/// Copies files from the workflow's `input_files/` folder to the first job folder.
+///
+/// If the `input_files/` folder exists, all its contents are copied to the first job
+/// in the execution order. If the folder doesn't exist, a hint is printed.
+fn copy_input_files_to_first_job(
+    workflow_path: &Path,
+    temp_workflow_path: &Path,
+    sorted_jobs: &[JobFolder],
+) {
+    use std::fs;
+
+    let input_files_path = workflow_path.join("input_files");
+
+    if !input_files_path.is_dir() {
+        println!("Hint: No 'input_files' folder found in workflow");
+        return;
+    }
+
+    // Get the first job in execution order
+    let Some(first_job) = sorted_jobs.first() else {
+        println!("Warning: No jobs to copy input files to");
+        return;
+    };
+
+    let first_job_path = temp_workflow_path.join(&first_job.name);
+
+    // Read and copy all files from input_files/
+    let entries = match fs::read_dir(&input_files_path) {
+        Ok(entries) => entries,
+        Err(e) => {
+            eprintln!("Error reading input_files folder: {e}");
+            return;
+        }
+    };
+
+    let mut copied_count = 0;
+    for entry in entries.flatten() {
+        let source = entry.path();
+        let dest = first_job_path.join(entry.file_name());
+
+        let result = if source.is_file() {
+            fs::copy(&source, &dest).map(|_| ())
+        } else if source.is_dir() {
+            copy_dir_recursive(&source, &dest).map(|_| ())
+        } else {
+            continue;
+        };
+
+        match result {
+            Ok(()) => copied_count += 1,
+            Err(e) => eprintln!(
+                "Error copying '{}': {e}",
+                entry.file_name().to_string_lossy()
+            ),
+        }
+    }
+
+    if copied_count > 0 {
+        println!(
+            "Copied {} item(s) from 'input_files/' to '{}'",
+            copied_count, first_job.name
+        );
+    }
 }
