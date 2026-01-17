@@ -383,7 +383,7 @@ fn topological_sort_jobs(
     Ok(sorted_jobs)
 }
 
-/// Copies input files from dependency jobs' outputs to the current job folder.
+/// Copies input files from dependency jobs' outputs to the current job's inputs folder.
 fn copy_input_files_from_dependencies(
     workflow_path: &Path,
     current_job: &JobFolder,
@@ -398,7 +398,10 @@ fn copy_input_files_from_dependencies(
         return Ok(0);
     }
 
-    let current_job_dir = workflow_path.join(&current_job.name);
+    // Copy to inputs/ subfolder for clear separation
+    let inputs_dir = workflow_path.join(&current_job.name).join("inputs");
+    fs::create_dir_all(&inputs_dir).map_err(|e| format!("Failed to create inputs dir: {e}"))?;
+
     let mut copied_files: HashSet<String> = HashSet::new();
 
     for dep_job_name in dependencies {
@@ -444,11 +447,11 @@ fn copy_input_files_from_dependencies(
             matching_files
         };
 
-        // Copy files to current job directory
+        // Copy files to inputs/ directory
         for source_path in files_to_copy {
             if let Some(filename) = source_path.file_name() {
                 let filename_str = filename.to_string_lossy().to_string();
-                let dest_path = current_job_dir.join(filename);
+                let dest_path = inputs_dir.join(filename);
 
                 // Check for conflicts
                 if copied_files.contains(&filename_str) {
@@ -533,10 +536,10 @@ fn create_temp_workflow_folder(source_path: &Path) -> std::io::Result<TempDir> {
     Ok(temp_dir)
 }
 
-/// Copies files from the workflow's `input_files/` folder to the first job folder.
+/// Copies files from the workflow's `input_files/` folder to the first job's inputs folder.
 ///
-/// If the `input_files/` folder exists, all its contents are copied to the first job
-/// in the execution order. If the folder doesn't exist, a hint is printed.
+/// If the `input_files/` folder exists, all its contents are copied to the first job's
+/// `inputs/` subfolder. If the folder doesn't exist, a hint is printed.
 fn copy_input_files_to_first_job(
     workflow_path: &Path,
     temp_workflow_path: &Path,
@@ -557,7 +560,12 @@ fn copy_input_files_to_first_job(
         return;
     };
 
-    let first_job_path = temp_workflow_path.join(&first_job.name);
+    // Copy to inputs/ subfolder for clear separation
+    let inputs_dir = temp_workflow_path.join(&first_job.name).join("inputs");
+    if let Err(e) = fs::create_dir_all(&inputs_dir) {
+        eprintln!("Error creating inputs folder: {e}");
+        return;
+    }
 
     // Read and copy all files from input_files/
     let entries = match fs::read_dir(&input_files_path) {
@@ -571,7 +579,7 @@ fn copy_input_files_to_first_job(
     let mut copied_count = 0;
     for entry in entries.flatten() {
         let source = entry.path();
-        let dest = first_job_path.join(entry.file_name());
+        let dest = inputs_dir.join(entry.file_name());
 
         let result = if source.is_file() {
             fs::copy(&source, &dest).map(|_| ())
@@ -592,7 +600,7 @@ fn copy_input_files_to_first_job(
 
     if copied_count > 0 {
         println!(
-            "Copied {} item(s) from 'input_files/' to '{}'",
+            "Copied {} item(s) from 'input_files/' to '{}/inputs/'",
             copied_count, first_job.name
         );
     }
