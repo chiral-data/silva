@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Input files feature: workflows can now include an `input_files/` folder at the root, whose contents are automatically copied to the first job before execution
 - CLI argument support: run `silva <workflow_path>` to execute a workflow directly in headless mode
 - Headless workflow execution outputs logs to stdout/stderr instead of TUI
 - Container keep-alive command (`tail -f /dev/null`) for reliable container reuse across jobs
