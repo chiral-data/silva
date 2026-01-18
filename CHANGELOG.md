@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0]
+
+### Changed
+
+- **BREAKING**: Input files are now copied to `inputs/` subfolder instead of job root
+  - Dependency outputs are copied to `{job}/inputs/` folder
+  - Workflow `input_files/` contents are copied to first job's `inputs/` folder
+  - Scripts should read from `./inputs/` and write to `./outputs/`
+
+### Added
+
+- Input files feature: workflows can now include an `input_files/` folder at the root, whose contents are automatically copied to the first job's `inputs/` folder before execution
+
 ## [0.3.8]
 
 ### Added
