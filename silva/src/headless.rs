@@ -107,8 +107,8 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
             .join(" -> ")
     );
 
-    // Copy input_files to the first job if the folder exists
-    copy_input_files_to_first_job(&workflow_path, &temp_workflow_path, &sorted_jobs);
+    // Copy input_files to all jobs without dependencies
+    copy_input_files_to_first_job(&workflow_path, &temp_workflow_path, &sorted_jobs, &workflow_metadata);
 
     println!();
 
@@ -536,14 +536,15 @@ fn create_temp_workflow_folder(source_path: &Path) -> std::io::Result<TempDir> {
     Ok(temp_dir)
 }
 
-/// Copies files from the workflow's `input_files/` folder to the first job's inputs folder.
+/// Copies files from the workflow's `input_files/` folder to all jobs without dependencies.
 ///
-/// If the `input_files/` folder exists, all its contents are copied to the first job's
-/// `inputs/` subfolder. If the folder doesn't exist, a hint is printed.
+/// If the `input_files/` folder exists, all its contents are copied to each dependency-free
+/// job's `inputs/` subfolder. If the folder doesn't exist, a hint is printed.
 fn copy_input_files_to_first_job(
     workflow_path: &Path,
     temp_workflow_path: &Path,
     sorted_jobs: &[JobFolder],
+    workflow_metadata: &job_config::workflow::WorkflowMeta,
 ) {
     use std::fs;
 
@@ -554,54 +555,62 @@ fn copy_input_files_to_first_job(
         return;
     }
 
-    // Get the first job in execution order
-    let Some(first_job) = sorted_jobs.first() else {
+    // Find all jobs with no dependencies
+    let jobs_without_deps: Vec<&JobFolder> = sorted_jobs
+        .iter()
+        .filter(|job| workflow_metadata.get_job_dependencies(&job.name).is_empty())
+        .collect();
+
+    if jobs_without_deps.is_empty() {
         println!("Warning: No jobs to copy input files to");
         return;
-    };
-
-    // Copy to inputs/ subfolder for clear separation
-    let inputs_dir = temp_workflow_path.join(&first_job.name).join("inputs");
-    if let Err(e) = fs::create_dir_all(&inputs_dir) {
-        eprintln!("Error creating inputs folder: {e}");
-        return;
     }
 
-    // Read and copy all files from input_files/
-    let entries = match fs::read_dir(&input_files_path) {
-        Ok(entries) => entries,
-        Err(e) => {
-            eprintln!("Error reading input_files folder: {e}");
-            return;
-        }
-    };
-
-    let mut copied_count = 0;
-    for entry in entries.flatten() {
-        let source = entry.path();
-        let dest = inputs_dir.join(entry.file_name());
-
-        let result = if source.is_file() {
-            fs::copy(&source, &dest).map(|_| ())
-        } else if source.is_dir() {
-            copy_dir_recursive(&source, &dest).map(|_| ())
-        } else {
+    // Copy input_files to each job without dependencies
+    for job in &jobs_without_deps {
+        // Copy to inputs/ subfolder for clear separation
+        let inputs_dir = temp_workflow_path.join(&job.name).join("inputs");
+        if let Err(e) = fs::create_dir_all(&inputs_dir) {
+            eprintln!("Error creating inputs folder for '{}': {e}", job.name);
             continue;
+        }
+
+        // Read and copy all files from input_files/
+        let entries = match fs::read_dir(&input_files_path) {
+            Ok(entries) => entries,
+            Err(e) => {
+                eprintln!("Error reading input_files folder: {e}");
+                return;
+            }
         };
 
-        match result {
-            Ok(()) => copied_count += 1,
-            Err(e) => eprintln!(
-                "Error copying '{}': {e}",
-                entry.file_name().to_string_lossy()
-            ),
-        }
-    }
+        let mut copied_count = 0;
+        for entry in entries.flatten() {
+            let source = entry.path();
+            let dest = inputs_dir.join(entry.file_name());
 
-    if copied_count > 0 {
-        println!(
-            "Copied {} item(s) from 'input_files/' to '{}/inputs/'",
-            copied_count, first_job.name
-        );
+            let result = if source.is_file() {
+                fs::copy(&source, &dest).map(|_| ())
+            } else if source.is_dir() {
+                copy_dir_recursive(&source, &dest).map(|_| ())
+            } else {
+                continue;
+            };
+
+            match result {
+                Ok(()) => copied_count += 1,
+                Err(e) => eprintln!(
+                    "Error copying '{}': {e}",
+                    entry.file_name().to_string_lossy()
+                ),
+            }
+        }
+
+        if copied_count > 0 {
+            println!(
+                "Copied {} item(s) from 'input_files/' to '{}/inputs/'",
+                copied_count, job.name
+            );
+        }
     }
 }
