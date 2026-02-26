@@ -59,6 +59,9 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
         .map_err(|e| format!("Failed to create temp workflow: {e}"))?;
     let temp_workflow_path = temp_workflow_dir.path().to_path_buf();
 
+    let docker_socket = std::env::var("DOCKER_HOST")
+        .unwrap_or_else(|_| "unix:///var/run/docker.sock".to_string());
+    println!("Docker socket: {docker_socket}");
     println!("Running workflow: {workflow_name}");
     println!("Temp folder: {}", temp_workflow_path.display());
 
