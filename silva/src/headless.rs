@@ -16,6 +16,7 @@ use crate::components::docker::{
     logs::{LogLine, LogSource},
 };
 use crate::components::workflow::{JobFolder, JobScanner, WorkflowFolder};
+use crate::utils::copy_dir_recursive;
 use job_config::job::JobMeta;
 
 /// Runs a workflow in headless mode, outputting logs to stdout/stderr.
@@ -59,6 +60,9 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
         .map_err(|e| format!("Failed to create temp workflow: {e}"))?;
     let temp_workflow_path = temp_workflow_dir.path().to_path_buf();
 
+    let docker_socket =
+        std::env::var("DOCKER_HOST").unwrap_or_else(|_| "unix:///var/run/docker.sock".to_string());
+    println!("Docker socket: {docker_socket}");
     println!("Running workflow: {workflow_name}");
     println!("Temp folder: {}", temp_workflow_path.display());
 
@@ -107,8 +111,13 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
             .join(" -> ")
     );
 
-    // Copy input_files to the first job if the folder exists
-    copy_input_files_to_first_job(&workflow_path, &temp_workflow_path, &sorted_jobs);
+    // Copy input_files to all jobs without dependencies
+    copy_input_files_to_dependency_free_jobs(
+        &workflow_path,
+        &temp_workflow_path,
+        &sorted_jobs,
+        &workflow_metadata,
+    );
 
     println!();
 
@@ -492,31 +501,6 @@ fn copy_input_files_from_dependencies(
     Ok(copied_files.len())
 }
 
-/// Recursively copies a directory and its contents.
-fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<usize> {
-    use std::fs;
-
-    if !dst.exists() {
-        fs::create_dir_all(dst)?;
-    }
-
-    let mut file_count = 0;
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let path = entry.path();
-        let dest_path = dst.join(entry.file_name());
-
-        if path.is_dir() {
-            file_count += copy_dir_recursive(&path, &dest_path)?;
-        } else {
-            fs::copy(&path, &dest_path)?;
-            file_count += 1;
-        }
-    }
-
-    Ok(file_count)
-}
-
 /// Creates a temporary folder and copies the workflow contents to it.
 fn create_temp_workflow_folder(source_path: &Path) -> std::io::Result<TempDir> {
     let now = chrono::Local::now();
@@ -536,14 +520,15 @@ fn create_temp_workflow_folder(source_path: &Path) -> std::io::Result<TempDir> {
     Ok(temp_dir)
 }
 
-/// Copies files from the workflow's `input_files/` folder to the first job's inputs folder.
+/// Copies files from the workflow's `input_files/` folder to all jobs without dependencies.
 ///
-/// If the `input_files/` folder exists, all its contents are copied to the first job's
-/// `inputs/` subfolder. If the folder doesn't exist, a hint is printed.
-fn copy_input_files_to_first_job(
+/// If the `input_files/` folder exists, all its contents are copied to each dependency-free
+/// job's `inputs/` subfolder. If the folder doesn't exist, a hint is printed.
+fn copy_input_files_to_dependency_free_jobs(
     workflow_path: &Path,
     temp_workflow_path: &Path,
     sorted_jobs: &[JobFolder],
+    workflow_metadata: &job_config::workflow::WorkflowMeta,
 ) {
     use std::fs;
 
@@ -554,54 +539,62 @@ fn copy_input_files_to_first_job(
         return;
     }
 
-    // Get the first job in execution order
-    let Some(first_job) = sorted_jobs.first() else {
+    // Find all jobs with no dependencies
+    let jobs_without_deps: Vec<&JobFolder> = sorted_jobs
+        .iter()
+        .filter(|job| workflow_metadata.get_job_dependencies(&job.name).is_empty())
+        .collect();
+
+    if jobs_without_deps.is_empty() {
         println!("Warning: No jobs to copy input files to");
         return;
-    };
-
-    // Copy to inputs/ subfolder for clear separation
-    let inputs_dir = temp_workflow_path.join(&first_job.name).join("inputs");
-    if let Err(e) = fs::create_dir_all(&inputs_dir) {
-        eprintln!("Error creating inputs folder: {e}");
-        return;
     }
 
-    // Read and copy all files from input_files/
-    let entries = match fs::read_dir(&input_files_path) {
-        Ok(entries) => entries,
-        Err(e) => {
-            eprintln!("Error reading input_files folder: {e}");
-            return;
-        }
-    };
-
-    let mut copied_count = 0;
-    for entry in entries.flatten() {
-        let source = entry.path();
-        let dest = inputs_dir.join(entry.file_name());
-
-        let result = if source.is_file() {
-            fs::copy(&source, &dest).map(|_| ())
-        } else if source.is_dir() {
-            copy_dir_recursive(&source, &dest).map(|_| ())
-        } else {
+    // Copy input_files to each job without dependencies
+    for job in &jobs_without_deps {
+        // Copy to inputs/ subfolder for clear separation
+        let inputs_dir = temp_workflow_path.join(&job.name).join("inputs");
+        if let Err(e) = fs::create_dir_all(&inputs_dir) {
+            eprintln!("Error creating inputs folder for '{}': {e}", job.name);
             continue;
+        }
+
+        // Read and copy all files from input_files/
+        let entries = match fs::read_dir(&input_files_path) {
+            Ok(entries) => entries,
+            Err(e) => {
+                eprintln!("Error reading input_files folder: {e}");
+                return;
+            }
         };
 
-        match result {
-            Ok(()) => copied_count += 1,
-            Err(e) => eprintln!(
-                "Error copying '{}': {e}",
-                entry.file_name().to_string_lossy()
-            ),
-        }
-    }
+        let mut copied_count = 0;
+        for entry in entries.flatten() {
+            let source = entry.path();
+            let dest = inputs_dir.join(entry.file_name());
 
-    if copied_count > 0 {
-        println!(
-            "Copied {} item(s) from 'input_files/' to '{}/inputs/'",
-            copied_count, first_job.name
-        );
+            let result = if source.is_file() {
+                fs::copy(&source, &dest).map(|_| ())
+            } else if source.is_dir() {
+                copy_dir_recursive(&source, &dest).map(|_| ())
+            } else {
+                continue;
+            };
+
+            match result {
+                Ok(()) => copied_count += 1,
+                Err(e) => eprintln!(
+                    "Error copying '{}': {e}",
+                    entry.file_name().to_string_lossy()
+                ),
+            }
+        }
+
+        if copied_count > 0 {
+            println!(
+                "Copied {} item(s) from 'input_files/' to '{}/inputs/'",
+                copied_count, job.name
+            );
+        }
     }
 }

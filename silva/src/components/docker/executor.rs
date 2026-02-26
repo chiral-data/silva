@@ -206,7 +206,7 @@ impl DockerExecutor {
     /// * `Ok(DockerExecutor)` - Successfully connected to Docker daemon
     /// * `Err(DockerError)` - Failed to connect to Docker (daemon may not be running)
     pub fn new(tx: mpsc::Sender<(usize, JobStatus, LogLine)>) -> Result<Self, DockerError> {
-        let client = Docker::connect_with_local_defaults()?;
+        let client = Docker::connect_with_defaults()?;
         Ok(Self {
             client,
             tx,

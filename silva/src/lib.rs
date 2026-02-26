@@ -9,6 +9,7 @@ pub mod headless;
 mod layout;
 mod style;
 pub mod update;
+pub mod utils;
 
 pub async fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
