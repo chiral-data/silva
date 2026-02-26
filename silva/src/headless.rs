@@ -10,13 +10,13 @@ use std::time::SystemTime;
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 
-use crate::utils::copy_dir_recursive;
 use crate::components::docker::{
     executor::DockerExecutor,
     job::JobStatus,
     logs::{LogLine, LogSource},
 };
 use crate::components::workflow::{JobFolder, JobScanner, WorkflowFolder};
+use crate::utils::copy_dir_recursive;
 use job_config::job::JobMeta;
 
 /// Runs a workflow in headless mode, outputting logs to stdout/stderr.
@@ -60,8 +60,8 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
         .map_err(|e| format!("Failed to create temp workflow: {e}"))?;
     let temp_workflow_path = temp_workflow_dir.path().to_path_buf();
 
-    let docker_socket = std::env::var("DOCKER_HOST")
-        .unwrap_or_else(|_| "unix:///var/run/docker.sock".to_string());
+    let docker_socket =
+        std::env::var("DOCKER_HOST").unwrap_or_else(|_| "unix:///var/run/docker.sock".to_string());
     println!("Docker socket: {docker_socket}");
     println!("Running workflow: {workflow_name}");
     println!("Temp folder: {}", temp_workflow_path.display());
@@ -112,7 +112,12 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
     );
 
     // Copy input_files to all jobs without dependencies
-    copy_input_files_to_dependency_free_jobs(&workflow_path, &temp_workflow_path, &sorted_jobs, &workflow_metadata);
+    copy_input_files_to_dependency_free_jobs(
+        &workflow_path,
+        &temp_workflow_path,
+        &sorted_jobs,
+        &workflow_metadata,
+    );
 
     println!();
 
