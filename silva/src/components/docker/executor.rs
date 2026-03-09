@@ -489,8 +489,21 @@ impl DockerExecutor {
                 }
             };
             let workflow_folder_str = workflow_folder.to_str().unwrap();
-            let volume_binds = vec![format!("{workflow_folder_str}:{work_dir}")];
+            let volume_binds = vec![
+                format!("{workflow_folder_str}:{work_dir}"),
+                "/tmp:/tmp".to_string(),
+            ];
             host_config.binds = Some(volume_binds);
+
+            // Run container as host user to avoid permission issues on bind mounts
+            #[cfg(unix)]
+            let user = {
+                use std::os::unix::fs::MetadataExt;
+                let meta = std::fs::metadata(workflow_folder).ok();
+                meta.map(|m| format!("{}:{}", m.uid(), m.gid()))
+            };
+            #[cfg(not(unix))]
+            let user: Option<String> = None;
 
             let container_config = Config {
                 image: Some(image_name.clone()),
@@ -499,6 +512,7 @@ impl DockerExecutor {
                 attach_stderr: Some(true),
                 host_config: Some(host_config),
                 working_dir: Some(work_dir.to_string()),
+                user,
                 // Keep container alive with a long-running command
                 // This allows multiple execs without the container exiting
                 cmd: Some(vec![
