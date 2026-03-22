@@ -1,0 +1,5 @@
+name = "inputs-contract"
+description = "Test that the inputs/ contract still works after move"
+
+[dependencies]
+02-consume = ["01-produce"]

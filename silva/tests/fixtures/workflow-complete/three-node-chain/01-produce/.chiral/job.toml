@@ -1,0 +1,9 @@
+name = "Produce"
+description = "First node"
+outputs = ["step1.txt"]
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"

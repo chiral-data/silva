@@ -1,0 +1,10 @@
+name = "Consume"
+description = "Middle node"
+inputs = ["step1.txt"]
+outputs = ["step2.txt"]
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"

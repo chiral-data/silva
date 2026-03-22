@@ -1,0 +1,10 @@
+name = "Final"
+description = "Last node"
+inputs = ["step2.txt"]
+outputs = ["final.txt"]
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"

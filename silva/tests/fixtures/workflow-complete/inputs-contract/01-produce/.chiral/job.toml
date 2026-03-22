@@ -1,0 +1,9 @@
+name = "Produce"
+description = "Produces output files"
+outputs = ["data.csv", "metadata.json"]
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"

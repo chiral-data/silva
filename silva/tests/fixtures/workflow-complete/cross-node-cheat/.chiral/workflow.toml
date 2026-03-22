@@ -1,0 +1,5 @@
+name = "cross-node-cheat"
+description = "Test that cross-node path access fails after move"
+
+[dependencies]
+02-consume = ["01-produce"]
