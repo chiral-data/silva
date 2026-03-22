@@ -111,6 +111,9 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
             .join(" -> ")
     );
 
+    // Pre-check: reject workflows with install commands in scripts
+    crate::precheck::check_install_commands(&sorted_jobs)?;
+
     // Copy input_files to all jobs without dependencies
     copy_input_files_to_dependency_free_jobs(
         &workflow_path,
