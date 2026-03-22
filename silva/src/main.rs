@@ -36,9 +36,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Check if workflow path is provided
     if let Some(workflow_path) = args.workflow_path {
         // Headless mode: run workflow directly
-        silva::headless::run_workflow(&workflow_path)
-            .await
-            .map_err(|e| e.into())
+        if let Err(e) = silva::headless::run_workflow(&workflow_path).await {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+        Ok(())
     } else {
         // TUI mode: start the terminal UI with update info
         run_tui(update_result.deferred_update).await
