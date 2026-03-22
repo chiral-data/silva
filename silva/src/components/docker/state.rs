@@ -252,6 +252,16 @@ impl State {
                 }
             };
 
+            // Pre-check: reject workflows with install commands in scripts
+            if let Err(e) = crate::precheck::check_install_commands(&sorted_jobs) {
+                let log_line = LogLine::new(LogSource::Stderr, e);
+                tx.send((0, JobStatus::Failed, log_line)).await.unwrap();
+                tx.send((jobs.len(), JobStatus::Failed, LogLine::empty()))
+                    .await
+                    .unwrap();
+                return;
+            }
+
             // Execute jobs sequentially in dependency order
             let jobs_length = jobs.len();
 

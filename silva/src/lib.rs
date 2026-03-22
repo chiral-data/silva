@@ -7,6 +7,7 @@ pub mod app;
 pub mod components;
 pub mod headless;
 mod layout;
+pub mod precheck;
 mod style;
 pub mod update;
 pub mod utils;
