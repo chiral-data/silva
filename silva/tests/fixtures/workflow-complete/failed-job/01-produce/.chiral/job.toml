@@ -1,0 +1,9 @@
+name = "Produce"
+description = "This job fails"
+outputs = ["result.txt"]
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"

@@ -1,0 +1,6 @@
+name = "three-node-chain"
+description = "Test that all nodes in a chain are moved to @complete"
+
+[dependencies]
+02-consume = ["01-produce"]
+03-final = ["02-consume"]

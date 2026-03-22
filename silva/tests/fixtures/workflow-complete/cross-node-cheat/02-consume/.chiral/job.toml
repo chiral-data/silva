@@ -1,0 +1,10 @@
+name = "Consume"
+description = "Tries to cheat with cross-node path"
+inputs = ["result.txt"]
+outputs = ["stolen.txt"]
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"

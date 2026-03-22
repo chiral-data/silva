@@ -1,0 +1,5 @@
+name = "failed-job"
+description = "Test that failed jobs are not moved to @complete"
+
+[dependencies]
+02-consume = ["01-produce"]

@@ -1,0 +1,9 @@
+name = "Consume"
+description = "Should never run"
+inputs = ["result.txt"]
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"
