@@ -202,13 +202,15 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
                     {
                         Ok(_container_id) => {
                             // Move completed job to @complete/ to prevent cross-node path access
-                            if let Err(e) = move_job_to_complete(
-                                &temp_workflow_path_clone,
-                                &job.name,
-                            ) {
+                            if let Err(e) =
+                                move_job_to_complete(&temp_workflow_path_clone, &job.name)
+                            {
                                 let log_line = LogLine::new(
                                     LogSource::Stderr,
-                                    format!("Warning: Failed to move '{}' to @complete: {e}", job.name),
+                                    format!(
+                                        "Warning: Failed to move '{}' to @complete: {e}",
+                                        job.name
+                                    ),
                                 );
                                 let _ = tx.send((idx, JobStatus::Running, log_line)).await;
                             }
@@ -439,7 +441,10 @@ fn copy_input_files_from_dependencies(
         }
 
         // Look in @complete/ first (job already finished), fall back to original location
-        let complete_outputs_dir = workflow_path.join("@complete").join(dep_job_name).join("outputs");
+        let complete_outputs_dir = workflow_path
+            .join("@complete")
+            .join(dep_job_name)
+            .join("outputs");
         let dep_outputs_dir = if complete_outputs_dir.exists() {
             complete_outputs_dir
         } else {

@@ -52,17 +52,14 @@ fn run_silva(fixture_name: &str) -> (bool, String, Option<PathBuf>) {
 
     // Extract temp folder path from output
     // Silva prints either "Output folder: /tmp/silva-..." or "Working folder: /tmp/silva-..."
-    let temp_path = stdout
-        .lines()
-        .chain(stderr.lines())
-        .find_map(|line| {
-            let line = line.trim();
-            if line.starts_with("Output folder:") || line.starts_with("Working folder:") {
-                line.split(':').nth(1).map(|p| PathBuf::from(p.trim()))
-            } else {
-                None
-            }
-        });
+    let temp_path = stdout.lines().chain(stderr.lines()).find_map(|line| {
+        let line = line.trim();
+        if line.starts_with("Output folder:") || line.starts_with("Working folder:") {
+            line.split(':').nth(1).map(|p| PathBuf::from(p.trim()))
+        } else {
+            None
+        }
+    });
 
     (output.status.success(), stdout, temp_path)
 }
@@ -98,7 +95,8 @@ fn test_completed_job_moved_to_complete() {
         "01-produce should be in @complete/"
     );
     assert!(
-        temp.join("@complete/01-produce/outputs/result.txt").exists(),
+        temp.join("@complete/01-produce/outputs/result.txt")
+            .exists(),
         "01-produce outputs should be preserved in @complete/"
     );
 
@@ -151,11 +149,12 @@ fn test_inputs_contract_still_works() {
     assert!(temp.join("@complete/02-consume").exists());
 
     // Verify the report was actually generated with correct content
-    let report = std::fs::read_to_string(
-        temp.join("@complete/02-consume/outputs/report.txt"),
-    )
-    .expect("report.txt should exist");
-    assert!(report.contains("col1,col2"), "Report should contain CSV data");
+    let report = std::fs::read_to_string(temp.join("@complete/02-consume/outputs/report.txt"))
+        .expect("report.txt should exist");
+    assert!(
+        report.contains("col1,col2"),
+        "Report should contain CSV data"
+    );
     assert!(report.contains("rows"), "Report should contain metadata");
 
     // Cleanup
@@ -173,10 +172,7 @@ fn test_three_node_chain_all_moved() {
 
     // All three should be in @complete/
     for node in &["01-produce", "02-consume", "03-final"] {
-        assert!(
-            !temp.join(node).exists(),
-            "{node} should not exist in root"
-        );
+        assert!(!temp.join(node).exists(), "{node} should not exist in root");
         assert!(
             temp.join(format!("@complete/{node}")).exists(),
             "{node} should be in @complete/"
@@ -184,10 +180,8 @@ fn test_three_node_chain_all_moved() {
     }
 
     // Verify data flowed through the chain correctly
-    let final_output = std::fs::read_to_string(
-        temp.join("@complete/03-final/outputs/final.txt"),
-    )
-    .expect("final.txt should exist");
+    let final_output = std::fs::read_to_string(temp.join("@complete/03-final/outputs/final.txt"))
+        .expect("final.txt should exist");
     assert!(final_output.contains("step1"), "Should contain step1 data");
     assert!(final_output.contains("step2"), "Should contain step2 data");
     assert!(final_output.contains("done"), "Should contain final marker");
@@ -201,7 +195,10 @@ fn test_failed_job_not_moved() {
     require_docker();
 
     let (success, _stdout, temp_path) = run_silva("failed-job");
-    assert!(!success, "Workflow should fail because node 01 exits with error");
+    assert!(
+        !success,
+        "Workflow should fail because node 01 exits with error"
+    );
 
     let temp = temp_path.expect("Should have temp folder path");
 

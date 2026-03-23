@@ -31,11 +31,7 @@ fn fixture_path(name: &str) -> PathBuf {
 /// Runs silva on a workflow fixture and returns (success, stdout, stderr)
 fn run_silva(fixture_name: &str) -> (bool, String, String) {
     let fixture = fixture_path(fixture_name);
-    assert!(
-        fixture.exists(),
-        "Fixture not found: {}",
-        fixture.display()
-    );
+    assert!(fixture.exists(), "Fixture not found: {}", fixture.display());
 
     let output = Command::new(silva_bin())
         .arg(&fixture)

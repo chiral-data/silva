@@ -64,8 +64,7 @@ pub fn check_install_commands(jobs: &[JobFolder]) -> Result<(), String> {
 
         for script_name in &script_names {
             let script_path = job_dir.join(script_name);
-            if let Some(mut script_violations) = scan_script(&job.name, script_name, &script_path)
-            {
+            if let Some(mut script_violations) = scan_script(&job.name, script_name, &script_path) {
                 violations.append(&mut script_violations);
             }
         }
@@ -342,11 +341,7 @@ run = "run.sh"
     #[test]
     fn test_apk_add_detected() {
         let temp = TempDir::new().unwrap();
-        let job = create_job(
-            temp.path(),
-            "01-apk",
-            "#!/bin/bash\napk  add  git\n",
-        );
+        let job = create_job(temp.path(), "01-apk", "#!/bin/bash\napk  add  git\n");
         let err = check_install_commands(&[job]).unwrap_err();
         assert!(err.contains("[01-apk]"));
     }
@@ -382,8 +377,10 @@ run = "run.sh"
     fn create_workflow_meta_with_deps(
         deps: Vec<(&str, Vec<&str>)>,
     ) -> job_config::workflow::WorkflowMeta {
-        let mut meta =
-            job_config::workflow::WorkflowMeta::new("test".to_string(), "test workflow".to_string());
+        let mut meta = job_config::workflow::WorkflowMeta::new(
+            "test".to_string(),
+            "test workflow".to_string(),
+        );
         for (job, dep_list) in deps {
             meta.set_job_dependencies(
                 job.to_string(),
