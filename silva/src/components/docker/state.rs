@@ -252,14 +252,24 @@ impl State {
                 }
             };
 
-            // Pre-check: reject workflows with install commands in scripts
-            if let Err(e) = crate::precheck::check_install_commands(&sorted_jobs) {
-                let log_line = LogLine::new(LogSource::Stderr, e);
-                tx.send((0, JobStatus::Failed, log_line)).await.unwrap();
-                tx.send((jobs.len(), JobStatus::Failed, LogLine::empty()))
-                    .await
-                    .unwrap();
-                return;
+            // Pre-checks: reject workflows that violate conventions
+            for check_result in [
+                crate::precheck::check_install_commands(&sorted_jobs),
+                crate::precheck::check_cross_node_references(&sorted_jobs),
+                crate::precheck::check_input_files_folder(
+                    &workflow_folder.path,
+                    &sorted_jobs,
+                    &workflow_metadata,
+                ),
+            ] {
+                if let Err(e) = check_result {
+                    let log_line = LogLine::new(LogSource::Stderr, e);
+                    tx.send((0, JobStatus::Failed, log_line)).await.unwrap();
+                    tx.send((jobs.len(), JobStatus::Failed, LogLine::empty()))
+                        .await
+                        .unwrap();
+                    return;
+                }
             }
 
             // Execute jobs sequentially in dependency order
