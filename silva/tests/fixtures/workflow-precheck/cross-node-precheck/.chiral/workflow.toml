@@ -1,0 +1,5 @@
+name = "cross-node-precheck"
+description = "Test that pre-check rejects scripts with ../ references"
+
+[dependencies]
+02-consume = ["01-produce"]

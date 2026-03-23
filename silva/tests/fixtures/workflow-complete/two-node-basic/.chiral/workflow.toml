@@ -1,0 +1,5 @@
+name = "two-node-basic"
+description = "Test that completed jobs are moved to @complete"
+
+[dependencies]
+02-consume = ["01-produce"]

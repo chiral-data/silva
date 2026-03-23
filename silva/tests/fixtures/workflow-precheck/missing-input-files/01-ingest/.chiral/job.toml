@@ -1,0 +1,8 @@
+name = "Ingest"
+description = "A dependency-free job that expects input data"
+
+[container]
+image = "alpine:latest"
+
+[scripts]
+run = "run.sh"

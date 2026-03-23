@@ -1,0 +1,8 @@
+name = "Consume"
+description = "Tries to access sibling via ../"
+
+[container]
+image = "alpine:latest"
+
+[scripts]
+run = "run.sh"

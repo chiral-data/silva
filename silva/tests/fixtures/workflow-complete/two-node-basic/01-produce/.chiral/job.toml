@@ -1,0 +1,9 @@
+name = "Produce"
+description = "Produces a result file"
+outputs = ["result.txt"]
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"

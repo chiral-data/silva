@@ -111,6 +111,11 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
             .join(" -> ")
     );
 
+    // Pre-checks: reject workflows that violate conventions
+    crate::precheck::check_install_commands(&sorted_jobs)?;
+    crate::precheck::check_cross_node_references(&sorted_jobs)?;
+    crate::precheck::check_input_files_folder(&workflow_path, &sorted_jobs, &workflow_metadata)?;
+
     // Copy input_files to all jobs without dependencies
     copy_input_files_to_dependency_free_jobs(
         &workflow_path,
@@ -195,7 +200,19 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
                         )
                         .await
                     {
-                        Ok(_container_id) => {}
+                        Ok(_container_id) => {
+                            // Move completed job to @complete/ to prevent cross-node path access
+                            if let Err(e) = move_job_to_complete(
+                                &temp_workflow_path_clone,
+                                &job.name,
+                            ) {
+                                let log_line = LogLine::new(
+                                    LogSource::Stderr,
+                                    format!("Warning: Failed to move '{}' to @complete: {e}", job.name),
+                                );
+                                let _ = tx.send((idx, JobStatus::Running, log_line)).await;
+                            }
+                        }
                         Err(e) => {
                             let log_line = LogLine::new(
                                 LogSource::Stderr,
@@ -421,7 +438,13 @@ fn copy_input_files_from_dependencies(
             continue;
         }
 
-        let dep_outputs_dir = workflow_path.join(dep_job_name).join("outputs");
+        // Look in @complete/ first (job already finished), fall back to original location
+        let complete_outputs_dir = workflow_path.join("@complete").join(dep_job_name).join("outputs");
+        let dep_outputs_dir = if complete_outputs_dir.exists() {
+            complete_outputs_dir
+        } else {
+            workflow_path.join(dep_job_name).join("outputs")
+        };
         if !dep_outputs_dir.exists() {
             println!("No outputs found for dependency '{dep_job_name}', skipping");
             continue;
@@ -518,6 +541,29 @@ fn create_temp_workflow_folder(source_path: &Path) -> std::io::Result<TempDir> {
         .map_err(|e| std::io::Error::other(format!("copy folder error {e}")))?;
 
     Ok(temp_dir)
+}
+
+/// Moves a completed job folder to `@complete/` to prevent cross-node path access.
+///
+/// After a job finishes, its folder is moved from the temp workflow root into
+/// `@complete/{job_name}/`. This ensures that subsequent jobs cannot use relative
+/// paths (e.g., `../01-data-prep/`) to access sibling node folders directly,
+/// forcing them to use the proper `inputs/` contract.
+fn move_job_to_complete(workflow_path: &Path, job_name: &str) -> Result<(), String> {
+    use std::fs;
+
+    let source = workflow_path.join(job_name);
+    let complete_dir = workflow_path.join("@complete");
+    let dest = complete_dir.join(job_name);
+
+    fs::create_dir_all(&complete_dir)
+        .map_err(|e| format!("Failed to create @complete directory: {e}"))?;
+
+    fs::rename(&source, &dest)
+        .map_err(|e| format!("Failed to move '{job_name}' to @complete: {e}"))?;
+
+    println!("[{job_name}] Moved to @complete/");
+    Ok(())
 }
 
 /// Copies files from the workflow's `input_files/` folder to all jobs without dependencies.

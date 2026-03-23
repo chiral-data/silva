@@ -1,0 +1,10 @@
+name = "Consume"
+description = "Reads from inputs"
+inputs = ["result.txt"]
+outputs = ["done.txt"]
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"

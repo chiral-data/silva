@@ -1,0 +1,10 @@
+name = "Consume"
+description = "Reads from inputs using the proper contract"
+inputs = ["data.csv", "metadata.json"]
+outputs = ["report.txt"]
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"
