@@ -114,34 +114,27 @@ fn test_completed_job_moved_to_complete() {
 
 #[test]
 fn test_cross_node_path_access_fails() {
-    require_docker();
-
-    let (success, _stdout, temp_path) = run_silva("cross-node-cheat");
+    // No Docker needed — pre-check catches ../ references before execution
+    let (success, stdout, _temp_path) = run_silva("cross-node-cheat");
     assert!(
         !success,
-        "Workflow should fail because cross-node cp should error"
+        "Workflow should fail because pre-check detects ../ references"
     );
 
-    let temp = temp_path.expect("Should have temp folder path");
+    let stderr = {
+        let fixture = fixture_path("cross-node-cheat");
+        let output = std::process::Command::new(silva_bin())
+            .arg(&fixture)
+            .output()
+            .expect("Failed to run silva binary");
+        String::from_utf8_lossy(&output.stderr).to_string()
+    };
 
-    // 01-produce completed successfully, so it should be in @complete/
+    let combined = format!("{stdout}{stderr}");
     assert!(
-        temp.join("@complete/01-produce").exists(),
-        "01-produce should be in @complete/ (it succeeded before 02 ran)"
+        combined.contains("Cross-node path references"),
+        "Should be caught by pre-check. Output:\n{combined}"
     );
-
-    // 02-consume failed, so it should NOT be in @complete/
-    assert!(
-        !temp.join("@complete/02-consume").exists(),
-        "02-consume should not be in @complete/ (it failed)"
-    );
-    assert!(
-        temp.join("02-consume").exists(),
-        "02-consume should remain in root (failed job stays for debugging)"
-    );
-
-    // Cleanup
-    let _ = std::fs::remove_dir_all(&temp);
 }
 
 #[test]
