@@ -228,7 +228,7 @@ impl DockerExecutor {
     }
 
     /// Detects GPU runtime available on the host. Call once before running jobs.
-    /// Checks for NVIDIA runtime in Docker daemon, then falls back to AMD/ROCm device detection.
+    /// Checks for NVIDIA first (Docker runtime or nvidia-smi), then AMD/ROCm (amd-smi or rocm-smi).
     pub async fn detect_host_gpu(&mut self) {
         // Check for NVIDIA runtime via Docker daemon info
         if let Ok(info) = self.client.info().await
@@ -239,9 +239,29 @@ impl DockerExecutor {
             return;
         }
 
-        // Check for AMD/ROCm via /dev/kfd device
-        #[cfg(unix)]
-        if std::path::Path::new("/dev/kfd").exists() {
+        // Check for NVIDIA GPU via nvidia-smi
+        if std::process::Command::new("nvidia-smi")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+        {
+            self.host_gpu = GpuRuntime::Nvidia;
+            return;
+        }
+
+        // Check for AMD/ROCm GPU via amd-smi or rocm-smi
+        if std::process::Command::new("amd-smi")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+            || std::process::Command::new("rocm-smi")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|s| s.success())
+        {
             self.host_gpu = GpuRuntime::Rocm;
         }
     }
