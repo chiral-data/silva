@@ -170,7 +170,8 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
                 Ok(config) => {
                     docker_executor.set_job_idx(idx);
 
-                    let job_params = job.load_params().ok().flatten().unwrap_or_default();
+                    let job_params = job.load_params().ok().flatten()
+                        .unwrap_or_else(|| config.generate_default_params());
 
                     // Copy input files from dependencies before running
                     let job_deps = workflow_metadata.get_job_dependencies(&job.name);
