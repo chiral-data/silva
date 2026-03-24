@@ -131,26 +131,12 @@ pub struct Container {
     /// Docker image source: either a registry URL (e.g., "ubuntu:22.04")
     /// or a local file path (.tar for Docker, .sif for Singularity/Apptainer).
     pub image: String,
-    /// Enable GPU support for this job (requires NVIDIA Container Toolkit).
-    #[serde(default)]
-    pub use_gpu: bool,
 }
 
 impl Container {
     /// Creates a new container configuration with the given image.
     pub fn new(image: String) -> Self {
-        Self {
-            image,
-            use_gpu: false,
-        }
-    }
-
-    /// Creates a new container configuration with GPU support.
-    pub fn with_gpu(image: String) -> Self {
-        Self {
-            image,
-            use_gpu: true,
-        }
+        Self { image }
     }
 
     /// Returns the image source type based on the image string.
@@ -254,7 +240,7 @@ pub struct JobMeta {
     pub name: String,
     /// Job description.
     pub description: String,
-    /// Container configuration (includes image and GPU settings).
+    /// Container configuration (image source).
     pub container: Container,
     /// Scripts to execute.
     #[serde(default)]
@@ -358,7 +344,6 @@ mod tests {
         assert_eq!(meta.name, "Test Job");
         assert_eq!(meta.description, "A test job");
         assert_eq!(meta.container.image, "ubuntu:22.04");
-        assert!(!meta.container.use_gpu);
     }
 
     #[test]
@@ -515,7 +500,8 @@ mod tests {
     }
 
     #[test]
-    fn test_gpu_support() {
+    fn test_backward_compat_use_gpu_ignored() {
+        // Old job.toml files with use_gpu should still parse (field is silently ignored)
         let toml_str = r#"
             name = "GPU Job"
             description = "A GPU job"
@@ -526,7 +512,6 @@ mod tests {
         "#;
 
         let meta: JobMeta = toml::from_str(toml_str).unwrap();
-        assert!(meta.container.use_gpu);
         assert_eq!(meta.container.image, "nvidia/cuda:11.8.0-base-ubuntu22.04");
     }
 
@@ -534,14 +519,6 @@ mod tests {
     fn test_container_new() {
         let container = Container::new("ubuntu:22.04".to_string());
         assert_eq!(container.image, "ubuntu:22.04");
-        assert!(!container.use_gpu);
-    }
-
-    #[test]
-    fn test_container_with_gpu() {
-        let container = Container::with_gpu("nvidia/cuda:11.8.0".to_string());
-        assert_eq!(container.image, "nvidia/cuda:11.8.0");
-        assert!(container.use_gpu);
     }
 
     #[test]

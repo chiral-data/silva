@@ -360,10 +360,6 @@ pub struct JobConfig {
     pub container: Container,
     #[serde(default)]
     pub scripts: Scripts,
-    /// Enable GPU support for this job (requires NVIDIA Container Toolkit).
-    /// Defaults to false.
-    #[serde(default)]
-    pub use_gpu: bool,
     /// List of input file patterns to copy from dependent jobs.
     /// Supports glob patterns (e.g., "*.csv", "data_*.json").
     /// If empty, all output files from dependencies will be copied.
@@ -731,18 +727,8 @@ mod tests {
     }
 
     #[test]
-    fn test_gpu_disabled_by_default() {
-        let toml_str = r#"
-            [container]
-            docker_image = "ubuntu:22.04"
-        "#;
-
-        let config: JobConfig = toml::from_str(toml_str).unwrap();
-        assert!(!config.use_gpu);
-    }
-
-    #[test]
-    fn test_gpu_enabled() {
+    fn test_backward_compat_use_gpu_ignored() {
+        // Old config files with use_gpu should still parse (field is silently ignored)
         let toml_str = r#"
             use_gpu = true
 
@@ -751,20 +737,10 @@ mod tests {
         "#;
 
         let config: JobConfig = toml::from_str(toml_str).unwrap();
-        assert!(config.use_gpu);
-    }
-
-    #[test]
-    fn test_gpu_explicitly_disabled() {
-        let toml_str = r#"
-            use_gpu = false
-
-            [container]
-            docker_image = "ubuntu:22.04"
-        "#;
-
-        let config: JobConfig = toml::from_str(toml_str).unwrap();
-        assert!(!config.use_gpu);
+        assert_eq!(
+            config.container,
+            Container::DockerImage("nvidia/cuda:11.8.0-base-ubuntu22.04".to_string())
+        );
     }
 
     #[test]

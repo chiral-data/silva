@@ -158,6 +158,7 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
                 return Err(format!("Docker initialization failed: {e}"));
             }
         };
+        docker_executor.detect_host_gpu().await;
 
         let mut container_registry: HashMap<String, String> = HashMap::new();
         let mut workflow_failed = false;

@@ -67,7 +67,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  Name: {}", config.name);
         println!("  Description: {}", config.description);
         println!("  Container: Docker Image '{}'", config.container.image);
-        println!("  GPU Enabled: {}", config.container.use_gpu);
         println!("  Pre-script: {}", config.scripts.pre);
         println!("  Run-script: {}", config.scripts.run);
         println!("  Post-script: {}\n", config.scripts.post);
@@ -82,12 +81,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let job_params = job.load_params().ok().flatten().unwrap_or_default();
 
         tokio::spawn(async move {
-            let executor = DockerExecutor::new(tx)
+            let mut executor = DockerExecutor::new(tx)
                 .map_err(|e| {
                     eprintln!("✗ Failed to initialize Docker: {e}");
                     eprintln!("  Make sure Docker daemon is running");
                 })
                 .unwrap();
+            executor.detect_host_gpu().await;
             println!("✓ Docker executor initialized\n");
 
             if !job_params.is_empty() {

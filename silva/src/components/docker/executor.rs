@@ -185,11 +185,23 @@ impl JobResult {
     }
 }
 
+/// Detected GPU runtime on the host.
+#[derive(Debug, Clone, PartialEq)]
+pub enum GpuRuntime {
+    /// NVIDIA GPU available (via NVIDIA Container Toolkit runtime).
+    Nvidia,
+    /// AMD GPU available (via ROCm, /dev/kfd + /dev/dri).
+    Rocm,
+    /// No GPU runtime detected on the host.
+    None,
+}
+
 /// Docker executor for building images and running jobs.
 pub struct DockerExecutor {
     client: Docker,
     tx: mpsc::Sender<(usize, JobStatus, LogLine)>,
     job_idx: usize,
+    host_gpu: GpuRuntime,
 }
 
 impl DockerExecutor {
@@ -211,7 +223,47 @@ impl DockerExecutor {
             client,
             tx,
             job_idx: 0,
+            host_gpu: GpuRuntime::None,
         })
+    }
+
+    /// Detects GPU runtime available on the host. Call once before running jobs.
+    /// Checks for NVIDIA runtime in Docker daemon, then falls back to AMD/ROCm device detection.
+    pub async fn detect_host_gpu(&mut self) {
+        // Check for NVIDIA runtime via Docker daemon info
+        if let Ok(info) = self.client.info().await
+            && let Some(runtimes) = info.runtimes
+            && runtimes.contains_key("nvidia")
+        {
+            self.host_gpu = GpuRuntime::Nvidia;
+            return;
+        }
+
+        // Check for AMD/ROCm via /dev/kfd device
+        #[cfg(unix)]
+        if std::path::Path::new("/dev/kfd").exists() {
+            self.host_gpu = GpuRuntime::Rocm;
+        }
+    }
+
+    /// Detects whether a Docker image is GPU-capable by inspecting its environment variables.
+    /// Returns the GPU type the image was built for, or None.
+    async fn detect_image_gpu(&self, image_name: &str) -> GpuRuntime {
+        if let Ok(image_info) = self.client.inspect_image(image_name).await
+            && let Some(config) = image_info.config
+            && let Some(env_vars) = config.env
+        {
+            for env in &env_vars {
+                if env.starts_with("NVIDIA_VISIBLE_DEVICES=") || env.starts_with("CUDA_VERSION=") {
+                    return GpuRuntime::Nvidia;
+                }
+                if env.starts_with("ROCM_VERSION=") || env.starts_with("HSA_OVERRIDE_GFX_VERSION=")
+                {
+                    return GpuRuntime::Rocm;
+                }
+            }
+        }
+        GpuRuntime::None
     }
 
     /// Sets the current job index for message tagging.
@@ -463,11 +515,14 @@ impl DockerExecutor {
             );
             self.tx_send(JobStatus::CreatingContainer, log_line).await?;
 
-            // Build host config based on GPU requirement
-            let mut host_config = if config.container.use_gpu {
+            // Auto-detect GPU: check if image needs GPU and host has it
+            let image_gpu = self.detect_image_gpu(image_name).await;
+            let use_gpu = image_gpu != GpuRuntime::None && self.host_gpu != GpuRuntime::None;
+
+            let mut host_config = if use_gpu && self.host_gpu == GpuRuntime::Nvidia {
                 let log_line = LogLine::new(
                     LogSource::Stdout,
-                    "GPU support enabled for this container".to_string(),
+                    "GPU auto-detected: NVIDIA runtime on host, CUDA image — enabling GPU passthrough".to_string(),
                 );
                 self.tx_send(JobStatus::CreatingContainer, log_line).await?;
 
@@ -482,7 +537,40 @@ impl DockerExecutor {
                     }]),
                     ..Default::default()
                 }
+            } else if use_gpu && self.host_gpu == GpuRuntime::Rocm {
+                let log_line = LogLine::new(
+                    LogSource::Stdout,
+                    "GPU auto-detected: AMD/ROCm runtime on host, ROCm image — enabling GPU passthrough".to_string(),
+                );
+                self.tx_send(JobStatus::CreatingContainer, log_line).await?;
+
+                bollard::models::HostConfig {
+                    extra_hosts: Some(vec!["host.docker.internal:host-gateway".into()]),
+                    devices: Some(vec![
+                        bollard::models::DeviceMapping {
+                            path_on_host: Some("/dev/kfd".to_string()),
+                            path_in_container: Some("/dev/kfd".to_string()),
+                            cgroup_permissions: Some("rw".to_string()),
+                        },
+                        bollard::models::DeviceMapping {
+                            path_on_host: Some("/dev/dri".to_string()),
+                            path_in_container: Some("/dev/dri".to_string()),
+                            cgroup_permissions: Some("rw".to_string()),
+                        },
+                    ]),
+                    ..Default::default()
+                }
             } else {
+                if image_gpu != GpuRuntime::None {
+                    let log_line = LogLine::new(
+                        LogSource::Stdout,
+                        format!(
+                            "Image is GPU-capable ({image_gpu:?}) but host has no matching GPU runtime — running on CPU"
+                        ),
+                    );
+                    self.tx_send(JobStatus::CreatingContainer, log_line).await?;
+                }
+
                 bollard::models::HostConfig {
                     extra_hosts: Some(vec!["host.docker.internal:host-gateway".into()]),
                     ..Default::default()

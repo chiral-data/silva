@@ -8,7 +8,7 @@ Configuration parser for Silva workflow jobs with TOML support.
 
 ## Features
 
-- **Container Configuration**: Docker image with optional GPU support
+- **Container Configuration**: Docker image specification
 - **Custom Scripts**: Configure pre-run, run, and post-run scripts
 - **Job Dependencies**: Specify job dependencies at the workflow level
 - **File I/O**: Define input and output file patterns with glob support
@@ -44,9 +44,6 @@ println!("Job: {} - {}", meta.name, meta.description);
 
 // Access container configuration
 println!("Using Docker image: {}", meta.container.image);
-if meta.container.use_gpu {
-    println!("GPU support enabled");
-}
 
 // Generate default parameters
 let defaults = meta.generate_default_params();
@@ -72,7 +69,6 @@ description = "Train a machine learning model"
 
 [container]
 image = "python:3.11"
-use_gpu = true
 
 [scripts]
 pre = "setup.sh"
@@ -109,7 +105,7 @@ Note: Job dependencies are now defined at the workflow level in `workflow.toml`,
 
 ### Container Section (Required)
 
-Specify the container image and optional GPU support. The `image` field supports multiple sources:
+Specify the container image. The `image` field supports multiple sources:
 
 ```toml
 [container]
@@ -121,9 +117,9 @@ image = "./images/myimage.tar"
 
 # Option 3: Singularity/Apptainer SIF file
 image = "./containers/app.sif"
-
-use_gpu = false  # Default: false, set to true for GPU support
 ```
+
+**GPU Support**: GPU passthrough is auto-detected based on the Docker image environment variables (CUDA/ROCm) and host GPU availability. No manual configuration needed.
 
 The image source is automatically detected based on file extension:
 - `.tar` → Docker tar archive (loaded with `docker load`)
@@ -169,10 +165,11 @@ Container configuration:
 
 ```rust
 pub struct Container {
-    pub image: String,     // Docker image URL
-    pub use_gpu: bool,     // Enable GPU support (default: false)
+    pub image: String,     // Docker image URL or local file path
 }
 ```
+
+**Note**: GPU support is auto-detected at runtime — no configuration field needed.
 
 ### `JobMeta`
 
