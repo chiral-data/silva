@@ -113,6 +113,16 @@ impl ParamDefinition {
     }
 }
 
+/// Detects whether the host has an NVIDIA GPU available by checking `nvidia-smi`.
+/// This is a lightweight check that works for both Docker and Singularity hosts.
+pub fn has_nvidia_gpu() -> bool {
+    std::process::Command::new("nvidia-smi")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
 /// Represents the source of a container image.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ImageSource {
