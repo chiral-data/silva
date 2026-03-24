@@ -76,7 +76,7 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
 
     println!("Found {} job(s)", jobs.len());
 
-    // Load workflow metadata
+    // Load workflow metadata (dependencies are managed here, not in job.toml)
     let workflow_metadata = workflow_folder
         .load_workflow_metadata()
         .ok()
