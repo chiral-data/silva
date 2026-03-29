@@ -80,11 +80,12 @@ Specify a Docker image for the job:
 ```toml
 [container]
 image = "ubuntu:22.04"
-use_gpu = false  # optional, defaults to false
 
 [scripts]
 run = "run.sh"
 ```
+
+**GPU Support**: GPU passthrough is auto-detected. If the Docker image contains CUDA or ROCm environment variables and the host has a matching GPU runtime (NVIDIA Container Toolkit or AMD `/dev/kfd`), GPU access is automatically enabled. If the host has no GPU, the container runs on CPU (most GPU images degrade gracefully).
 
 ### Script Configuration
 

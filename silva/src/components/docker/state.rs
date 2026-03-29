@@ -164,6 +164,7 @@ impl State {
                     return;
                 }
             };
+            docker_executor.detect_host_gpu().await;
 
             // Create a temp workflow path
             let temp_workflow_dir = match create_tmp_workflow_folder(&workflow_folder.path) {

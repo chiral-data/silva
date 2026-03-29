@@ -76,7 +76,7 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
 
     println!("Found {} job(s)", jobs.len());
 
-    // Load workflow metadata
+    // Load workflow metadata (dependencies are managed here, not in job.toml)
     let workflow_metadata = workflow_folder
         .load_workflow_metadata()
         .ok()
@@ -158,6 +158,7 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
                 return Err(format!("Docker initialization failed: {e}"));
             }
         };
+        docker_executor.detect_host_gpu().await;
 
         let mut container_registry: HashMap<String, String> = HashMap::new();
         let mut workflow_failed = false;
@@ -169,7 +170,11 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
                 Ok(config) => {
                     docker_executor.set_job_idx(idx);
 
-                    let job_params = job.load_params().ok().flatten().unwrap_or_default();
+                    let job_params = job
+                        .load_params()
+                        .ok()
+                        .flatten()
+                        .unwrap_or_else(|| config.generate_default_params());
 
                     // Copy input files from dependencies before running
                     let job_deps = workflow_metadata.get_job_dependencies(&job.name);

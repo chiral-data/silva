@@ -360,10 +360,6 @@ pub struct JobConfig {
     pub container: Container,
     #[serde(default)]
     pub scripts: Scripts,
-    /// Enable GPU support for this job (requires NVIDIA Container Toolkit).
-    /// Defaults to false.
-    #[serde(default)]
-    pub use_gpu: bool,
     /// List of input file patterns to copy from dependent jobs.
     /// Supports glob patterns (e.g., "*.csv", "data_*.json").
     /// If empty, all output files from dependencies will be copied.
@@ -376,11 +372,6 @@ pub struct JobConfig {
     /// Defaults to empty vector.
     #[serde(default)]
     pub outputs: Vec<String>,
-    /// List of job names that this job depends on.
-    /// Jobs will execute in dependency order (topological sort).
-    /// Defaults to empty vector.
-    #[serde(default)]
-    pub depends_on: Vec<String>,
 }
 
 /// Error type for job configuration operations.
@@ -731,18 +722,8 @@ mod tests {
     }
 
     #[test]
-    fn test_gpu_disabled_by_default() {
-        let toml_str = r#"
-            [container]
-            docker_image = "ubuntu:22.04"
-        "#;
-
-        let config: JobConfig = toml::from_str(toml_str).unwrap();
-        assert!(!config.use_gpu);
-    }
-
-    #[test]
-    fn test_gpu_enabled() {
+    fn test_backward_compat_use_gpu_ignored() {
+        // Old config files with use_gpu should still parse (field is silently ignored)
         let toml_str = r#"
             use_gpu = true
 
@@ -751,24 +732,14 @@ mod tests {
         "#;
 
         let config: JobConfig = toml::from_str(toml_str).unwrap();
-        assert!(config.use_gpu);
+        assert_eq!(
+            config.container,
+            Container::DockerImage("nvidia/cuda:11.8.0-base-ubuntu22.04".to_string())
+        );
     }
 
     #[test]
-    fn test_gpu_explicitly_disabled() {
-        let toml_str = r#"
-            use_gpu = false
-
-            [container]
-            docker_image = "ubuntu:22.04"
-        "#;
-
-        let config: JobConfig = toml::from_str(toml_str).unwrap();
-        assert!(!config.use_gpu);
-    }
-
-    #[test]
-    fn test_inputs_outputs_depends_on_defaults() {
+    fn test_inputs_outputs_defaults() {
         let toml_str = r#"
             [container]
             docker_image = "ubuntu:22.04"
@@ -777,7 +748,6 @@ mod tests {
         let config: JobConfig = toml::from_str(toml_str).unwrap();
         assert!(config.inputs.is_empty());
         assert!(config.outputs.is_empty());
-        assert!(config.depends_on.is_empty());
     }
 
     #[test]
@@ -812,27 +782,10 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_config_with_depends_on() {
-        let toml_str = r#"
-            depends_on = ["job1", "job2", "preprocessing"]
-
-            [container]
-            docker_image = "alpine:latest"
-        "#;
-
-        let config: JobConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.depends_on.len(), 3);
-        assert_eq!(config.depends_on[0], "job1");
-        assert_eq!(config.depends_on[1], "job2");
-        assert_eq!(config.depends_on[2], "preprocessing");
-    }
-
-    #[test]
-    fn test_parse_config_with_all_new_fields() {
+    fn test_parse_config_with_all_io_fields() {
         let toml_str = r#"
             inputs = ["*.csv"]
             outputs = ["results/*.json", "summary.txt"]
-            depends_on = ["data_preparation"]
 
             [container]
             docker_image = "ubuntu:22.04"
@@ -844,16 +797,14 @@ mod tests {
         let config: JobConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.inputs, vec!["*.csv"]);
         assert_eq!(config.outputs, vec!["results/*.json", "summary.txt"]);
-        assert_eq!(config.depends_on, vec!["data_preparation"]);
         assert_eq!(config.scripts.run, "process.sh");
     }
 
     #[test]
-    fn test_empty_inputs_outputs_depends_on() {
+    fn test_empty_inputs_outputs() {
         let toml_str = r#"
             inputs = []
             outputs = []
-            depends_on = []
 
             [container]
             docker_image = "ubuntu:22.04"
@@ -862,7 +813,6 @@ mod tests {
         let config: JobConfig = toml::from_str(toml_str).unwrap();
         assert!(config.inputs.is_empty());
         assert!(config.outputs.is_empty());
-        assert!(config.depends_on.is_empty());
     }
 
     #[test]
