@@ -128,6 +128,9 @@ pub fn has_nvidia_gpu() -> bool {
 pub enum ImageSource {
     /// Pull image from a Docker registry (e.g., "ubuntu:22.04").
     Registry(String),
+    /// Use a locally-built Docker image — skip registry resolution entirely.
+    /// Set via `registry = "local"` in `[container]`.
+    LocalImage(String),
     /// Load image from a local tar file (e.g., "./image.tar").
     TarFile(String),
     /// Load image from a Singularity/Apptainer SIF file (e.g., "./image.sif").
@@ -141,20 +144,30 @@ pub struct Container {
     /// Docker image source: either a registry URL (e.g., "ubuntu:22.04")
     /// or a local file path (.tar for Docker, .sif for Singularity/Apptainer).
     pub image: String,
+    /// Optional registry hint. Set to `"local"` to bypass default_registry resolution
+    /// for images that are built locally and do not exist in any remote registry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry: Option<String>,
 }
 
 impl Container {
     /// Creates a new container configuration with the given image.
     pub fn new(image: String) -> Self {
-        Self { image }
+        Self {
+            image,
+            registry: None,
+        }
     }
 
-    /// Returns the image source type based on the image string.
-    /// - Paths ending with ".tar" are treated as Docker tar archives.
-    /// - Paths ending with ".sif" are treated as Singularity/Apptainer images.
-    /// - Everything else is treated as a Docker registry URL.
+    /// Returns the image source type based on the image string and registry hint.
+    /// - `registry = "local"` → LocalImage (skip registry prefix resolution)
+    /// - Paths ending with ".tar" → TarFile
+    /// - Paths ending with ".sif" → SifFile
+    /// - Everything else → Registry
     pub fn get_image_source(&self) -> ImageSource {
-        if self.image.ends_with(".tar") {
+        if self.registry.as_deref() == Some("local") {
+            ImageSource::LocalImage(self.image.clone())
+        } else if self.image.ends_with(".tar") {
             ImageSource::TarFile(self.image.clone())
         } else if self.image.ends_with(".sif") {
             ImageSource::SifFile(self.image.clone())
@@ -507,6 +520,54 @@ mod tests {
         // Now returns JSON values
         assert_eq!(defaults.get("name").unwrap().as_str().unwrap(), "test");
         assert_eq!(defaults.get("count").unwrap().as_i64().unwrap(), 10);
+    }
+
+    #[test]
+    fn test_parse_container_with_registry_local() {
+        let toml_str = r#"
+            name = "ASO RNA Job"
+            description = "Local image job"
+
+            [container]
+            image = "aso-rna:latest"
+            registry = "local"
+        "#;
+
+        let meta: JobMeta = toml::from_str(toml_str).unwrap();
+        assert_eq!(meta.container.image, "aso-rna:latest");
+        assert_eq!(meta.container.registry, Some("local".to_string()));
+        assert_eq!(
+            meta.container.get_image_source(),
+            ImageSource::LocalImage("aso-rna:latest".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_container_without_registry_field() {
+        let toml_str = r#"
+            name = "Test Job"
+            description = "A test job"
+
+            [container]
+            image = "admet-pipeline:latest"
+        "#;
+
+        let meta: JobMeta = toml::from_str(toml_str).unwrap();
+        assert_eq!(meta.container.registry, None);
+        assert_eq!(
+            meta.container.get_image_source(),
+            ImageSource::Registry("admet-pipeline:latest".to_string())
+        );
+    }
+
+    #[test]
+    fn test_image_source_local_image() {
+        let mut container = Container::new("aso-rna:latest".to_string());
+        container.registry = Some("local".to_string());
+        assert_eq!(
+            container.get_image_source(),
+            ImageSource::LocalImage("aso-rna:latest".to_string())
+        );
     }
 
     #[test]
