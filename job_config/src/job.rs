@@ -153,7 +153,10 @@ pub struct Container {
 impl Container {
     /// Creates a new container configuration with the given image.
     pub fn new(image: String) -> Self {
-        Self { image, registry: None }
+        Self {
+            image,
+            registry: None,
+        }
     }
 
     /// Returns the image source type based on the image string and registry hint.
