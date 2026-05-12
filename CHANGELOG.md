@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2]
+
+### Added
+
+- `job_config`: `registry = "local"` field in `[container]` — opt-out of default registry resolution (#80)
+  - Locally-built Docker images (e.g. `aso-rna:latest`) that do not exist in any remote registry can now be marked with `registry = "local"` to bypass the worker's `default_registry` prefix logic and skip `docker pull`
+  - Introduces `ImageSource::LocalImage` variant alongside existing `Registry`, `TarFile`, and `SifFile`
+
 ## [0.4.0]
 
 ### Changed
