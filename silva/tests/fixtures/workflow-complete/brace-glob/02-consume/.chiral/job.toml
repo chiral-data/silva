@@ -1,0 +1,10 @@
+name = "Consume"
+description = "Reads only sequence files via brace expansion pattern"
+inputs = ["*.{fasta,fa,faa}"]
+outputs = ["result.txt"]
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"
