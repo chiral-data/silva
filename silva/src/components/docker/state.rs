@@ -671,10 +671,10 @@ async fn copy_input_files_from_dependencies(
     tx: &mpsc::Sender<(usize, JobStatus, LogLine)>,
     job_idx: usize,
 ) {
+    use globset::GlobSetBuilder;
     use std::collections::HashSet;
     use std::fs;
     use std::path::PathBuf;
-    use globset::GlobSetBuilder;
 
     if dependencies.is_empty() {
         return;
@@ -724,7 +724,9 @@ async fn copy_input_files_from_dependencies(
             let mut builder = GlobSetBuilder::new();
             for pattern in &config.inputs {
                 match globset::Glob::new(pattern) {
-                    Ok(g) => { builder.add(g); }
+                    Ok(g) => {
+                        builder.add(g);
+                    }
                     Err(e) => {
                         let log_line = LogLine::new(
                             LogSource::Stderr,
@@ -739,11 +741,7 @@ async fn copy_input_files_from_dependencies(
                     Ok(entries) => entries
                         .filter_map(|e| e.ok())
                         .map(|e| e.path())
-                        .filter(|p| {
-                            p.file_name()
-                                .map(|n| matcher.is_match(n))
-                                .unwrap_or(false)
-                        })
+                        .filter(|p| p.file_name().map(|n| matcher.is_match(n)).unwrap_or(false))
                         .collect(),
                     Err(e) => {
                         let log_line = LogLine::new(

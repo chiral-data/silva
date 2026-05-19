@@ -477,7 +477,9 @@ fn copy_input_files_from_dependencies(
             let mut builder = GlobSetBuilder::new();
             for pattern in &config.inputs {
                 match globset::Glob::new(pattern) {
-                    Ok(g) => { builder.add(g); }
+                    Ok(g) => {
+                        builder.add(g);
+                    }
                     Err(e) => println!("Invalid glob pattern '{pattern}': {e}"),
                 }
             }
@@ -486,11 +488,7 @@ fn copy_input_files_from_dependencies(
                     Ok(entries) => entries
                         .filter_map(|e| e.ok())
                         .map(|e| e.path())
-                        .filter(|p| {
-                            p.file_name()
-                                .map(|n| matcher.is_match(n))
-                                .unwrap_or(false)
-                        })
+                        .filter(|p| p.file_name().map(|n| matcher.is_match(n)).unwrap_or(false))
                         .collect(),
                     Err(e) => {
                         println!("Error reading outputs from '{dep_job_name}': {e}");
@@ -716,16 +714,30 @@ mod tests {
     fn brace_pattern_copies_matching_extensions() {
         let tmp = tempfile::tempdir().unwrap();
         let wf = tmp.path();
-        setup_dep_outputs(wf, "01-produce", &["seq.fasta", "ref.fa", "proteins.faa", "notes.txt"]);
+        setup_dep_outputs(
+            wf,
+            "01-produce",
+            &["seq.fasta", "ref.fa", "proteins.faa", "notes.txt"],
+        );
 
         let producer = JobFolder::new("01-produce".to_string(), wf.join("01-produce"));
         let consumer = JobFolder::new("02-consume".to_string(), wf.join("02-consume"));
         let config = make_job_meta(vec!["*.{fasta,fa,faa}"]);
 
-        let n = copy_input_files_from_dependencies(wf, &consumer, &[producer], &config, &["01-produce".to_string()]).unwrap();
+        let n = copy_input_files_from_dependencies(
+            wf,
+            &consumer,
+            &[producer],
+            &config,
+            &["01-produce".to_string()],
+        )
+        .unwrap();
 
         assert_eq!(n, 3);
-        assert_eq!(list_inputs(wf, "02-consume"), vec!["proteins.faa", "ref.fa", "seq.fasta"]);
+        assert_eq!(
+            list_inputs(wf, "02-consume"),
+            vec!["proteins.faa", "ref.fa", "seq.fasta"]
+        );
     }
 
     #[test]
@@ -738,7 +750,14 @@ mod tests {
         let consumer = JobFolder::new("02-consume".to_string(), wf.join("02-consume"));
         let config = make_job_meta(vec!["*.{fasta,fa,faa}"]);
 
-        let n = copy_input_files_from_dependencies(wf, &consumer, &[producer], &config, &["01-produce".to_string()]).unwrap();
+        let n = copy_input_files_from_dependencies(
+            wf,
+            &consumer,
+            &[producer],
+            &config,
+            &["01-produce".to_string()],
+        )
+        .unwrap();
 
         assert_eq!(n, 1);
         assert_eq!(list_inputs(wf, "02-consume"), vec!["c.fasta"]);
@@ -748,16 +767,30 @@ mod tests {
     fn plain_pattern_still_works() {
         let tmp = tempfile::tempdir().unwrap();
         let wf = tmp.path();
-        setup_dep_outputs(wf, "01-produce", &["data.csv", "metadata.json", "other.txt"]);
+        setup_dep_outputs(
+            wf,
+            "01-produce",
+            &["data.csv", "metadata.json", "other.txt"],
+        );
 
         let producer = JobFolder::new("01-produce".to_string(), wf.join("01-produce"));
         let consumer = JobFolder::new("02-consume".to_string(), wf.join("02-consume"));
         let config = make_job_meta(vec!["*.csv", "*.json"]);
 
-        let n = copy_input_files_from_dependencies(wf, &consumer, &[producer], &config, &["01-produce".to_string()]).unwrap();
+        let n = copy_input_files_from_dependencies(
+            wf,
+            &consumer,
+            &[producer],
+            &config,
+            &["01-produce".to_string()],
+        )
+        .unwrap();
 
         assert_eq!(n, 2);
-        assert_eq!(list_inputs(wf, "02-consume"), vec!["data.csv", "metadata.json"]);
+        assert_eq!(
+            list_inputs(wf, "02-consume"),
+            vec!["data.csv", "metadata.json"]
+        );
     }
 
     #[test]
@@ -770,9 +803,19 @@ mod tests {
         let consumer = JobFolder::new("02-consume".to_string(), wf.join("02-consume"));
         let config = make_job_meta(vec![]);
 
-        let n = copy_input_files_from_dependencies(wf, &consumer, &[producer], &config, &["01-produce".to_string()]).unwrap();
+        let n = copy_input_files_from_dependencies(
+            wf,
+            &consumer,
+            &[producer],
+            &config,
+            &["01-produce".to_string()],
+        )
+        .unwrap();
 
         assert_eq!(n, 3);
-        assert_eq!(list_inputs(wf, "02-consume"), vec!["a.txt", "b.csv", "c.fasta"]);
+        assert_eq!(
+            list_inputs(wf, "02-consume"),
+            vec!["a.txt", "b.csv", "c.fasta"]
+        );
     }
 }
