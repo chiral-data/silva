@@ -225,3 +225,30 @@ fn test_failed_job_not_moved() {
     // Cleanup
     let _ = std::fs::remove_dir_all(&temp);
 }
+
+#[test]
+fn test_brace_glob_pattern_copies_only_matching_files() {
+    require_docker();
+
+    let (success, _stdout, temp_path) = run_silva("brace-glob");
+    assert!(success, "Workflow should succeed with brace expansion pattern");
+
+    let temp = temp_path.expect("Should have temp folder path");
+
+    let result = std::fs::read_to_string(
+        temp.join("@complete/02-consume/outputs/result.txt"),
+    )
+    .expect("result.txt should exist");
+
+    assert!(
+        result.contains("sequence_files=3"),
+        "Exactly 3 sequence files should be copied into inputs/. Output:\n{result}"
+    );
+    assert!(result.contains("seq.fasta"), "seq.fasta should be in inputs/");
+    assert!(result.contains("ref.fa"), "ref.fa should be in inputs/");
+    assert!(result.contains("proteins.faa"), "proteins.faa should be in inputs/");
+    assert!(!result.contains("notes.txt"), "notes.txt must not be in inputs/");
+
+    // Cleanup
+    let _ = std::fs::remove_dir_all(&temp);
+}

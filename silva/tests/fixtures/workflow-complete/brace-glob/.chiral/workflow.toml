@@ -1,0 +1,5 @@
+name = "brace-glob"
+description = "Test that brace expansion in inputs patterns works"
+
+[dependencies]
+02-consume = ["01-produce"]

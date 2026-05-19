@@ -1,0 +1,9 @@
+name = "Produce"
+description = "Produces sequence files and an unrelated text file"
+outputs = ["seq.fasta", "ref.fa", "proteins.faa", "notes.txt"]
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"

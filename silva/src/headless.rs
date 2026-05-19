@@ -669,3 +669,110 @@ fn copy_input_files_to_dependency_free_jobs(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use job_config::job::{Container, JobMeta, Scripts};
+    use std::collections::HashMap;
+    use std::fs;
+
+    fn make_job_meta(inputs: Vec<&str>) -> JobMeta {
+        JobMeta {
+            name: "test".to_string(),
+            description: String::new(),
+            container: Container::new("ubuntu:latest".to_string()),
+            scripts: Scripts {
+                pre: String::new(),
+                run: "run.sh".to_string(),
+                post: String::new(),
+            },
+            inputs: inputs.into_iter().map(String::from).collect(),
+            outputs: vec![],
+            params: HashMap::new(),
+        }
+    }
+
+    fn setup_dep_outputs(workflow: &Path, dep_name: &str, files: &[&str]) {
+        let outputs_dir = workflow.join(dep_name).join("outputs");
+        fs::create_dir_all(&outputs_dir).unwrap();
+        for f in files {
+            fs::write(outputs_dir.join(f), f).unwrap();
+        }
+    }
+
+    fn list_inputs(workflow: &Path, job_name: &str) -> Vec<String> {
+        let inputs_dir = workflow.join(job_name).join("inputs");
+        let mut names: Vec<String> = fs::read_dir(inputs_dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn brace_pattern_copies_matching_extensions() {
+        let tmp = tempfile::tempdir().unwrap();
+        let wf = tmp.path();
+        setup_dep_outputs(wf, "01-produce", &["seq.fasta", "ref.fa", "proteins.faa", "notes.txt"]);
+
+        let producer = JobFolder::new("01-produce".to_string(), wf.join("01-produce"));
+        let consumer = JobFolder::new("02-consume".to_string(), wf.join("02-consume"));
+        let config = make_job_meta(vec!["*.{fasta,fa,faa}"]);
+
+        let n = copy_input_files_from_dependencies(wf, &consumer, &[producer], &config, &["01-produce".to_string()]).unwrap();
+
+        assert_eq!(n, 3);
+        assert_eq!(list_inputs(wf, "02-consume"), vec!["proteins.faa", "ref.fa", "seq.fasta"]);
+    }
+
+    #[test]
+    fn brace_pattern_excludes_non_matching_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let wf = tmp.path();
+        setup_dep_outputs(wf, "01-produce", &["a.txt", "b.log", "c.fasta"]);
+
+        let producer = JobFolder::new("01-produce".to_string(), wf.join("01-produce"));
+        let consumer = JobFolder::new("02-consume".to_string(), wf.join("02-consume"));
+        let config = make_job_meta(vec!["*.{fasta,fa,faa}"]);
+
+        let n = copy_input_files_from_dependencies(wf, &consumer, &[producer], &config, &["01-produce".to_string()]).unwrap();
+
+        assert_eq!(n, 1);
+        assert_eq!(list_inputs(wf, "02-consume"), vec!["c.fasta"]);
+    }
+
+    #[test]
+    fn plain_pattern_still_works() {
+        let tmp = tempfile::tempdir().unwrap();
+        let wf = tmp.path();
+        setup_dep_outputs(wf, "01-produce", &["data.csv", "metadata.json", "other.txt"]);
+
+        let producer = JobFolder::new("01-produce".to_string(), wf.join("01-produce"));
+        let consumer = JobFolder::new("02-consume".to_string(), wf.join("02-consume"));
+        let config = make_job_meta(vec!["*.csv", "*.json"]);
+
+        let n = copy_input_files_from_dependencies(wf, &consumer, &[producer], &config, &["01-produce".to_string()]).unwrap();
+
+        assert_eq!(n, 2);
+        assert_eq!(list_inputs(wf, "02-consume"), vec!["data.csv", "metadata.json"]);
+    }
+
+    #[test]
+    fn empty_inputs_copies_all_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let wf = tmp.path();
+        setup_dep_outputs(wf, "01-produce", &["a.txt", "b.csv", "c.fasta"]);
+
+        let producer = JobFolder::new("01-produce".to_string(), wf.join("01-produce"));
+        let consumer = JobFolder::new("02-consume".to_string(), wf.join("02-consume"));
+        let config = make_job_meta(vec![]);
+
+        let n = copy_input_files_from_dependencies(wf, &consumer, &[producer], &config, &["01-produce".to_string()]).unwrap();
+
+        assert_eq!(n, 3);
+        assert_eq!(list_inputs(wf, "02-consume"), vec!["a.txt", "b.csv", "c.fasta"]);
+    }
+}
