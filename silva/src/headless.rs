@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::time::SystemTime;
 
+use globset::GlobSetBuilder;
+
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 
@@ -472,21 +474,34 @@ fn copy_input_files_from_dependencies(
             }
         } else {
             // Copy only matching files based on input patterns
-            let mut matching_files = Vec::new();
+            let mut builder = GlobSetBuilder::new();
             for pattern in &config.inputs {
-                let glob_pattern = dep_outputs_dir.join(pattern).to_string_lossy().to_string();
-                match glob::glob(&glob_pattern) {
-                    Ok(paths) => {
-                        for path in paths.flatten() {
-                            matching_files.push(path);
-                        }
-                    }
-                    Err(e) => {
-                        println!("Invalid glob pattern '{pattern}': {e}");
-                    }
+                match globset::Glob::new(pattern) {
+                    Ok(g) => { builder.add(g); }
+                    Err(e) => println!("Invalid glob pattern '{pattern}': {e}"),
                 }
             }
-            matching_files
+            match builder.build() {
+                Ok(matcher) => match fs::read_dir(&dep_outputs_dir) {
+                    Ok(entries) => entries
+                        .filter_map(|e| e.ok())
+                        .map(|e| e.path())
+                        .filter(|p| {
+                            p.file_name()
+                                .map(|n| matcher.is_match(n))
+                                .unwrap_or(false)
+                        })
+                        .collect(),
+                    Err(e) => {
+                        println!("Error reading outputs from '{dep_job_name}': {e}");
+                        continue;
+                    }
+                },
+                Err(e) => {
+                    println!("Failed to build glob matcher for '{dep_job_name}': {e}");
+                    continue;
+                }
+            }
         };
 
         // Copy files to inputs/ directory
