@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4]
+
+### Added
+
+- `job_config`: `env_passthrough` field in `workflow.toml` — forward host environment variables into the container exec environment (#86)
+  - Host env vars listed by name (e.g. `NGC_API_KEY`, `HF_TOKEN`) are read via `std::env::var()` and appended to the container's env vars alongside the existing `PARAM_*` values
+  - Lets a workflow require API keys or secrets without hardcoding them into `global_params.json`
+  - A listed variable not set in the host environment is silently skipped
+
 ## [0.5.3]
 
 ### Fixed

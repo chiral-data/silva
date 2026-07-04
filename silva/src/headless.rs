@@ -141,7 +141,6 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
 
     let jobs_len = jobs.len();
     let sorted_jobs_clone = sorted_jobs.clone();
-    let workflow_folder_clone = workflow_folder.clone();
     let temp_workflow_path_clone = temp_workflow_path.clone();
 
     // Spawn workflow execution task
@@ -197,7 +196,7 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
                     match docker_executor
                         .run_job(
                             (
-                                &workflow_folder_clone.name,
+                                &workflow_metadata,
                                 &temp_workflow_path_clone,
                                 &workflow_params,
                             ),

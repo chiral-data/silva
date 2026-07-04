@@ -313,7 +313,7 @@ impl State {
 
                         match docker_executor
                             .run_job(
-                                (&workflow_folder.name, &temp_workflow_dir, &workflow_params),
+                                (&workflow_metadata, &temp_workflow_dir, &workflow_params),
                                 (job, &config, &job_params),
                                 &mut container_registry,
                                 &mut cancel_rx,

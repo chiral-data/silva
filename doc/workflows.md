@@ -67,7 +67,12 @@ hint = "Data source environment"
 type = "integer"
 default = 1000
 hint = "Number of records per batch"
+
+# Host environment variables to forward into every job's container
+env_passthrough = ["NGC_API_KEY", "HF_TOKEN"]
 ```
+
+**`env_passthrough`**: Lists host environment variable names (set in the terminal running `silva`, e.g. via `export NGC_API_KEY=...`) to forward into the container exec environment, alongside the `PARAM_*` variables. This lets a workflow require API keys or secrets without hardcoding them into `global_params.json`. A listed variable that isn't set in the host environment is silently skipped.
 
 ## Job Configuration
 

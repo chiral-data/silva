@@ -22,6 +22,9 @@ pub struct WorkflowMeta {
     /// Global parameter definitions for this workflow.
     #[serde(default)]
     pub params: HashMap<String, ParamDefinition>,
+    /// Host environment variable names to forward into the container exec environment.
+    #[serde(default)]
+    pub env_passthrough: Option<Vec<String>>,
 }
 
 impl WorkflowMeta {
@@ -32,6 +35,7 @@ impl WorkflowMeta {
             description,
             dependencies: HashMap::new(),
             params: HashMap::new(),
+            env_passthrough: None,
         }
     }
 
@@ -122,6 +126,22 @@ mod tests {
         let metadata: WorkflowMeta = toml::from_str(toml_str).unwrap();
         assert_eq!(metadata.name, "ML Pipeline");
         assert_eq!(metadata.description, "A machine learning pipeline");
+        assert!(metadata.env_passthrough.is_none());
+    }
+
+    #[test]
+    fn test_workflow_meta_with_env_passthrough() {
+        let toml_str = r#"
+            name = "ML Pipeline"
+            description = "A machine learning pipeline"
+            env_passthrough = ["NGC_API_KEY", "HF_TOKEN"]
+        "#;
+
+        let metadata: WorkflowMeta = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            metadata.env_passthrough.unwrap(),
+            vec!["NGC_API_KEY".to_string(), "HF_TOKEN".to_string()]
+        );
     }
 
     #[test]
