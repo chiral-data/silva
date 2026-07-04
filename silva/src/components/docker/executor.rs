@@ -141,6 +141,7 @@ use tokio::sync::mpsc;
 
 use crate::components::workflow;
 use job_config::job::JobMeta;
+use job_config::workflow::WorkflowMeta;
 
 use super::error::DockerError;
 use super::job::JobStatus;
@@ -500,8 +501,8 @@ impl DockerExecutor {
     /// **Note**: The container is left running. Call `cleanup_containers()` after all jobs complete.
     pub async fn run_job(
         &self,
-        (_workflow_name, workflow_folder, workflow_params): (
-            &str,
+        (workflow_meta, workflow_folder, workflow_params): (
+            &WorkflowMeta,
             &Path,
             &job_config::params::WorkflowParams,
         ),
@@ -699,6 +700,13 @@ impl DockerExecutor {
             };
             // Add with PARAM_ prefix to avoid conflicts
             env_vars.push(format!("PARAM_{}={}", param_name.to_uppercase(), value_str));
+        }
+
+        // Forward selected host environment variables into the container exec environment.
+        for key in workflow_meta.env_passthrough.as_deref().unwrap_or(&[]) {
+            if let Ok(val) = std::env::var(key) {
+                env_vars.push(format!("{key}={val}"));
+            }
         }
 
         if !env_vars.is_empty() {

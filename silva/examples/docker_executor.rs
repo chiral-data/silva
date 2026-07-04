@@ -2,6 +2,7 @@ use std::path::Path;
 
 use job_config::job::JobMeta;
 use job_config::params::WorkflowParams;
+use job_config::workflow::WorkflowMeta;
 use silva::components::{
     docker::{executor::DockerExecutor, job::JobStatus, logs::LogLine},
     workflow,
@@ -77,6 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (cancel_tx, mut cancel_rx) = mpsc::channel::<()>(1);
 
         let workflow_params = WorkflowParams::new();
+        let workflow_meta = WorkflowMeta::new("workflow_1".to_string(), String::new());
         let job = workflow::JobFolder::new(job_name.clone(), job_folder_path.clone());
         let job_params = job.load_params().ok().flatten().unwrap_or_default();
 
@@ -104,7 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut container_registry = std::collections::HashMap::new();
             let container_id = executor
                 .run_job(
-                    ("workflow_1", &workflow_path, &workflow_params),
+                    (&workflow_meta, &workflow_path, &workflow_params),
                     (&job, &config, &job_params),
                     &mut container_registry,
                     &mut cancel_rx,
