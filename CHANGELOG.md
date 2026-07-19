@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6]
+
+### Added
+
+- `infra::dok` (headless mode only): automatic bundle preparation for `RUN_MODE=use_dok` jobs (#91)
+  - Detects `RUN_MODE=use_dok` in a job's resolved env vars, tars the job's own directory (script files + its already-merged `inputs/` subdirectory, excluding only `outputs/`), and submits a tiny prep task to Sakura's DOK API whose `command` decodes and deposits the payload as a DOK artifact
+  - Injects the resulting presigned `DOK_BUNDLE_URL` into the job's env vars before launching it — no manual bundle construction needed
+  - Payload travels via `command`, not `environment` — DOK's `environment` field is capped at 8192 total characters (confirmed live), which even a small bundle's base64 payload exceeds; `command` was confirmed live to accept 200KB+
+  - Requires silva's own `SAKURA_ACCESS_TOKEN`/`SAKURA_ACCESS_TOKEN_SECRET` (read from silva's host environment)
+  - Verified live end-to-end against the real DOK API: a full 5-node dependency chain, including a 3-way dependency merge, all through the real `silva` binary
+
 ## [0.5.5]
 
 ### Added

@@ -84,6 +84,43 @@ silva workflows/my-workflow -e RUN_MODE=use_gpu -e FOO=bar
 
 Each `-e KEY=VALUE` is injected unprefixed into every job's container exec environment for this run — independent of, and not restricted by, the `env_passthrough` allowlist. Malformed entries (missing `=`) fail immediately, before any container runs.
 
+### Automatic bundling for `RUN_MODE=use_dok` (headless mode)
+
+Some workflows dispatch to a remote GPU cloud (Sakura's 高火力 DOK managed-container
+API) instead of computing in-container, via a `run_dok.sh` sibling script that
+each job's own `run.sh` calls when `RUN_MODE=use_dok`. DOK's task API has no
+bind-mount or upload endpoint — it only accepts `image` + `command` +
+`environment` — so `run_dok.sh` needs a presigned URL (`DOK_BUNDLE_URL`) to a
+tar.gz of the job's own directory (script files, plus its already-merged
+`inputs/` subdirectory) that it has no way to produce itself.
+
+When silva detects `RUN_MODE=use_dok` for a job (checked after `PARAM_*`,
+`env_passthrough`, and `-e/--env` are all merged), it prepares this
+automatically: tars the job's directory (excluding `outputs/`), submits a
+tiny prep task to DOK whose `command` decodes and deposits the payload as a
+DOK artifact, then injects the resulting presigned `DOK_BUNDLE_URL` into the
+job's env vars before launching it — no manual bundle construction needed.
+
+This requires silva's own `SAKURA_ACCESS_TOKEN`/`SAKURA_ACCESS_TOKEN_SECRET`
+(read from silva's host environment, same convention as `DOCKER_HOST`) —
+separate from whatever gets forwarded into the job's container for
+`run_dok.sh`'s own use of the same credentials:
+
+```bash
+export SAKURA_ACCESS_TOKEN=...
+export SAKURA_ACCESS_TOKEN_SECRET=...
+silva workflows/my-workflow \
+  -e RUN_MODE=use_dok \
+  -e DOK_PLAN=v100-32gb \
+  -e SAKURA_ACCESS_TOKEN=$SAKURA_ACCESS_TOKEN \
+  -e SAKURA_ACCESS_TOKEN_SECRET=$SAKURA_ACCESS_TOKEN_SECRET
+```
+
+Headless mode only — TUI has no natural place to configure DOK credentials
+without dedicated UI work. This is a workflow-specific integration (only
+workflows that ship a `run_dok.sh` use it); most workflows never touch this
+code path at all.
+
 ## Job Configuration
 
 Each job requires a `.chiral/job.toml` configuration file that defines:
