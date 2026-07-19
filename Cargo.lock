@@ -2176,10 +2176,12 @@ name = "silva"
 version = "0.5.5"
 dependencies = [
  "arboard",
+ "base64",
  "bollard",
  "chrono",
  "clap",
  "crossterm",
+ "flate2",
  "flume",
  "fs_extra",
  "futures-util",

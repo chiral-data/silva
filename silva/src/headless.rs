@@ -196,6 +196,29 @@ pub async fn run_workflow(workflow_path: &Path, cli_env_vars: &[String]) -> Resu
                         let _ = tx.send((idx, JobStatus::Running, log_line)).await;
                     }
 
+                    // If this job runs with RUN_MODE=use_dok, prepare and inject the
+                    // presigned bundle URLs run_dok.sh needs (script dir + the inputs/
+                    // dir copy_input_files_from_dependencies just populated above).
+                    let mut job_env_vars = cli_env_vars.clone();
+                    let run_mode = crate::infra::dok::resolve_run_mode(
+                        &cli_env_vars,
+                        workflow_metadata.env_passthrough.as_deref().unwrap_or(&[]),
+                    );
+                    if run_mode.as_deref() == Some("use_dok") {
+                        match crate::infra::dok::prepare_bundle_env_vars(&job.path).await {
+                            Ok(extra) => job_env_vars.extend(extra),
+                            Err(e) => {
+                                let log_line = LogLine::new(
+                                    LogSource::Stderr,
+                                    format!("DOK bundle preparation failed: {e}"),
+                                );
+                                let _ = tx.send((idx, JobStatus::Failed, log_line)).await;
+                                workflow_failed = true;
+                                break;
+                            }
+                        }
+                    }
+
                     match docker_executor
                         .run_job(
                             (
@@ -204,7 +227,7 @@ pub async fn run_workflow(workflow_path: &Path, cli_env_vars: &[String]) -> Resu
                                 &workflow_params,
                             ),
                             (job, &config, &job_params),
-                            &cli_env_vars,
+                            &job_env_vars,
                             &mut container_registry,
                             &mut cancel_rx,
                         )
