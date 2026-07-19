@@ -721,10 +721,7 @@ impl DockerExecutor {
         if !cli_env_vars.is_empty() {
             let log_line = LogLine::new(
                 LogSource::Stdout,
-                format!(
-                    "Setting {} CLI env var(s) via -e/--env",
-                    cli_env_vars.len()
-                ),
+                format!("Setting {} CLI env var(s) via -e/--env", cli_env_vars.len()),
             );
             self.tx_send(JobStatus::CreatingContainer, log_line).await?;
         }
