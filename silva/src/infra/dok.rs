@@ -1,14 +1,19 @@
 //! Sakura 高火力 DOK bundle preparation for `RUN_MODE=use_dok` jobs.
 //!
-//! `run_dok.sh` (inside a job's own script tree) consumes two presigned URLs —
-//! `DOK_SCRIPT_BUNDLE_URL` and `DOK_INPUT_BUNDLE_URL` — that it has no way to
-//! produce itself, since DOK's task API has no upload/mount endpoint. This
-//! module produces them: tar+gzip the job's script folder (and its already-
-//! merged `inputs/` folder, if non-empty — populated by the existing
-//! `copy_input_files_from_dependencies` step before this runs), base64-encode
-//! each, submit a tiny prep task per bundle whose command decodes and
-//! extracts it directly into `$SAKURA_ARTIFACT_DIR`, then fetch a fresh
-//! presigned download URL for the resulting DOK artifact.
+//! `run_dok.sh` (inside a job's own script tree) consumes a presigned
+//! `DOK_BUNDLE_URL` it has no way to produce itself, since DOK's task API has
+//! no upload/mount endpoint. This module produces it: tar+gzip the job's own
+//! directory (script files plus its already-merged `inputs/` subdirectory,
+//! populated by the existing `copy_input_files_from_dependencies` step before
+//! this runs — excluding only `outputs/`), base64-encode it, submit a tiny
+//! prep task whose `command` embeds the payload and decodes+extracts it
+//! directly into `$SAKURA_ARTIFACT_DIR`, then fetch a fresh presigned
+//! download URL for the resulting DOK artifact.
+//!
+//! The payload travels in `command`, not `environment` — DOK's `environment`
+//! field is capped at 8192 total characters across all keys+values (confirmed
+//! live), which even a small script bundle exceeds. `command` was confirmed
+//! live to accept 200KB+ with no rejection.
 
 use std::path::Path;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -23,15 +28,6 @@ const PREP_IMAGE: &str = "python:3.12-slim";
 const PREP_PLAN: &str = "v100-32gb";
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
 const POLL_TIMEOUT: Duration = Duration::from_secs(300);
-
-/// Decodes `BUNDLE_B64` and extracts it directly into `$SAKURA_ARTIFACT_DIR`,
-/// so DOK's own auto-packaged `artifact.tar.gz` output *is* exactly the
-/// original bundle content — matching what `run_dok.sh` already expects.
-const DECODE_SCRIPT: &str = r#"import base64, os, tarfile, io
-data = base64.b64decode(os.environ["BUNDLE_B64"])
-with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
-    tar.extractall(os.environ["SAKURA_ARTIFACT_DIR"])
-"#;
 
 /// Reads `RUN_MODE` from `-e/--env` CLI values, or (if listed in
 /// `env_passthrough`) from silva's own host environment.
@@ -49,9 +45,8 @@ pub fn resolve_run_mode(cli_env_vars: &[String], env_passthrough: &[String]) -> 
     None
 }
 
-/// Prepares `DOK_SCRIPT_BUNDLE_URL` and (if `inputs/` is non-empty)
-/// `DOK_INPUT_BUNDLE_URL` for a job about to run with `RUN_MODE=use_dok`,
-/// returning them as ready-to-use `KEY=VALUE` env var strings.
+/// Prepares `DOK_BUNDLE_URL` for a job about to run with `RUN_MODE=use_dok`,
+/// returning it as a ready-to-use `KEY=VALUE` env var string.
 pub async fn prepare_bundle_env_vars(job_path: &Path) -> Result<Vec<String>, String> {
     let token = std::env::var("SAKURA_ACCESS_TOKEN").map_err(|_| {
         "RUN_MODE=use_dok requires SAKURA_ACCESS_TOKEN in silva's own environment".to_string()
@@ -66,31 +61,16 @@ pub async fn prepare_bundle_env_vars(job_path: &Path) -> Result<Vec<String>, Str
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
 
-    let mut env_vars = Vec::new();
+    let bundle_tar = build_tar_gz(job_path, &["outputs"])?;
+    let bundle_url = prepare_bundle(&client, &token, &secret, bundle_tar).await?;
 
-    let script_tar = build_tar_gz(job_path, &["inputs", "outputs"])?;
-    let script_url = prepare_bundle(&client, &token, &secret, script_tar).await?;
-    env_vars.push(format!("DOK_SCRIPT_BUNDLE_URL={script_url}"));
-
-    let inputs_dir = job_path.join("inputs");
-    if dir_has_entries(&inputs_dir) {
-        let input_tar = build_tar_gz(&inputs_dir, &[])?;
-        let input_url = prepare_bundle(&client, &token, &secret, input_tar).await?;
-        env_vars.push(format!("DOK_INPUT_BUNDLE_URL={input_url}"));
-    }
-
-    Ok(env_vars)
+    Ok(vec![format!("DOK_BUNDLE_URL={bundle_url}")])
 }
 
-fn dir_has_entries(dir: &Path) -> bool {
-    std::fs::read_dir(dir)
-        .map(|mut entries| entries.next().is_some())
-        .unwrap_or(false)
-}
-
-/// Builds an in-memory gzip tar archive of `dir`'s contents (flat — matching
-/// what `run_dok.sh`'s remote `tar xz` expects), skipping any top-level
-/// entries named in `exclude`.
+/// Builds an in-memory gzip tar archive of `dir`'s contents (flat, including
+/// any nested subdirectories like `inputs/` — matching what `run_dok.sh`'s
+/// remote `tar xz` expects), skipping any top-level entries named in
+/// `exclude`.
 fn build_tar_gz(dir: &Path, exclude: &[&str]) -> Result<Vec<u8>, String> {
     let encoder = GzEncoder::new(Vec::new(), Compression::default());
     let mut builder = tar::Builder::new(encoder);
@@ -125,9 +105,31 @@ fn build_tar_gz(dir: &Path, exclude: &[&str]) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("Failed to finalize gzip: {e}"))
 }
 
-/// Submits a prep task that decodes+extracts a base64 tar.gz payload directly
-/// into `$SAKURA_ARTIFACT_DIR`, polls it to completion, and returns a fresh
-/// presigned download URL for the resulting artifact.
+/// Sends a request and parses its JSON body, including the response text in
+/// the error on a non-2xx status or a parse failure — `reqwest`'s own
+/// `error_for_status()` discards the body, which is exactly where the DOK
+/// API's actual validation detail lives.
+async fn api_json(request: reqwest::RequestBuilder) -> Result<serde_json::Value, String> {
+    let resp = request
+        .send()
+        .await
+        .map_err(|e| format!("DOK API request failed: {e}"))?;
+    let status = resp.status();
+    let text = resp
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read DOK API response body: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("DOK API request rejected ({status}): {text}"));
+    }
+    serde_json::from_str(&text)
+        .map_err(|e| format!("Failed to parse DOK API response: {e} (body: {text})"))
+}
+
+/// Submits a prep task whose `command` embeds a base64 tar.gz payload and
+/// decodes+extracts it directly into `$SAKURA_ARTIFACT_DIR`, polls it to
+/// completion, and returns a fresh presigned download URL for the resulting
+/// artifact.
 async fn prepare_bundle(
     client: &reqwest::Client,
     token: &str,
@@ -135,30 +137,30 @@ async fn prepare_bundle(
     tar_gz: Vec<u8>,
 ) -> Result<String, String> {
     let payload_b64 = base64::engine::general_purpose::STANDARD.encode(&tar_gz);
+    let decode_script = format!(
+        "import base64, os, tarfile, io\n\
+         data = base64.b64decode(\"{payload_b64}\")\n\
+         with tarfile.open(fileobj=io.BytesIO(data), mode=\"r:gz\") as tar:\n    \
+             tar.extractall(os.environ[\"SAKURA_ARTIFACT_DIR\"])\n"
+    );
 
     let task_name = format!("silva-dok-bundle-{}", unique_suffix());
     let body = json!({
         "name": task_name,
         "containers": [{
             "image": PREP_IMAGE,
-            "command": ["python3", "-c", DECODE_SCRIPT],
-            "environment": {"BUNDLE_B64": payload_b64},
+            "command": ["python3", "-c", decode_script],
             "plan": PREP_PLAN,
         }]
     });
 
-    let task: serde_json::Value = client
-        .post(format!("{API_BASE}/tasks/"))
-        .basic_auth(token, Some(secret))
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to submit DOK prep task: {e}"))?
-        .error_for_status()
-        .map_err(|e| format!("DOK prep task submission rejected: {e}"))?
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse DOK task response: {e}"))?;
+    let task = api_json(
+        client
+            .post(format!("{API_BASE}/tasks/"))
+            .basic_auth(token, Some(secret))
+            .json(&body),
+    )
+    .await?;
 
     let task_id = task["id"]
         .as_str()
@@ -167,15 +169,12 @@ async fn prepare_bundle(
 
     let deadline = Instant::now() + POLL_TIMEOUT;
     let final_task = loop {
-        let t: serde_json::Value = client
-            .get(format!("{API_BASE}/tasks/{task_id}/"))
-            .basic_auth(token, Some(secret))
-            .send()
-            .await
-            .map_err(|e| format!("Failed to poll DOK task {task_id}: {e}"))?
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse DOK task poll response: {e}"))?;
+        let t = api_json(
+            client
+                .get(format!("{API_BASE}/tasks/{task_id}/"))
+                .basic_auth(token, Some(secret)),
+        )
+        .await?;
 
         let status = t["status"].as_str().unwrap_or("");
         if matches!(status, "done" | "error" | "aborted" | "canceled") {
@@ -199,15 +198,12 @@ async fn prepare_bundle(
         .as_str()
         .ok_or_else(|| format!("DOK prep task {task_id} has no artifact"))?;
 
-    let download: serde_json::Value = client
-        .get(format!("{API_BASE}/artifacts/{artifact_id}/download/"))
-        .basic_auth(token, Some(secret))
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch DOK artifact download URL: {e}"))?
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse DOK artifact download response: {e}"))?;
+    let download = api_json(
+        client
+            .get(format!("{API_BASE}/artifacts/{artifact_id}/download/"))
+            .basic_auth(token, Some(secret)),
+    )
+    .await?;
 
     download["url"]
         .as_str()
@@ -265,14 +261,15 @@ mod tests {
     }
 
     #[test]
-    fn build_tar_gz_excludes_named_entries_and_preserves_files() {
+    fn build_tar_gz_excludes_outputs_but_keeps_nested_inputs() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join("run_gpu.sh"), b"echo hi").unwrap();
         std::fs::create_dir(tmp.path().join("inputs")).unwrap();
         std::fs::write(tmp.path().join("inputs").join("upstream.txt"), b"data").unwrap();
         std::fs::create_dir(tmp.path().join("outputs")).unwrap();
+        std::fs::write(tmp.path().join("outputs").join("stale.txt"), b"old").unwrap();
 
-        let archive = build_tar_gz(tmp.path(), &["inputs", "outputs"]).unwrap();
+        let archive = build_tar_gz(tmp.path(), &["outputs"]).unwrap();
 
         let decoder = flate2::read::GzDecoder::new(&archive[..]);
         let mut tar = tar::Archive::new(decoder);
@@ -283,20 +280,25 @@ mod tests {
             .collect();
 
         assert!(names.contains(&"run_gpu.sh".to_string()));
-        assert!(!names.iter().any(|n| n.starts_with("inputs")));
+        assert!(names.iter().any(|n| n.starts_with("inputs")));
         assert!(!names.iter().any(|n| n.starts_with("outputs")));
     }
 
     #[test]
-    fn dir_has_entries_detects_empty_vs_populated() {
+    fn build_tar_gz_handles_no_inputs_dir() {
         let tmp = tempfile::tempdir().unwrap();
-        let empty = tmp.path().join("empty");
-        std::fs::create_dir(&empty).unwrap();
-        assert!(!dir_has_entries(&empty));
+        std::fs::write(tmp.path().join("build_cell.py"), b"pass").unwrap();
 
-        std::fs::write(empty.join("file.txt"), b"x").unwrap();
-        assert!(dir_has_entries(&empty));
+        let archive = build_tar_gz(tmp.path(), &["outputs"]).unwrap();
 
-        assert!(!dir_has_entries(&tmp.path().join("does-not-exist")));
+        let decoder = flate2::read::GzDecoder::new(&archive[..]);
+        let mut tar = tar::Archive::new(decoder);
+        let names: Vec<String> = tar
+            .entries()
+            .unwrap()
+            .map(|e| e.unwrap().path().unwrap().to_string_lossy().to_string())
+            .collect();
+
+        assert_eq!(names, vec!["build_cell.py".to_string()]);
     }
 }
