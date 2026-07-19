@@ -315,6 +315,7 @@ impl State {
                             .run_job(
                                 (&workflow_metadata, &temp_workflow_dir, &workflow_params),
                                 (job, &config, &job_params),
+                                &[],
                                 &mut container_registry,
                                 &mut cancel_rx,
                             )

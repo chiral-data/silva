@@ -20,6 +20,14 @@ struct Args {
     /// If not provided, the TUI application will start.
     #[arg(value_name = "WORKFLOW_PATH")]
     workflow_path: Option<PathBuf>,
+
+    /// Set an environment variable in every job's container (headless mode only)
+    ///
+    /// Repeatable, format KEY=VALUE (e.g. `-e RUN_MODE=use_gpu`). Injected as-is,
+    /// unprefixed, into every job's container exec environment for this run —
+    /// independent of workflow.toml's `env_passthrough` allowlist.
+    #[arg(short = 'e', long = "env", value_name = "KEY=VALUE")]
+    env: Vec<String>,
 }
 
 #[tokio::main]
@@ -35,8 +43,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Check if workflow path is provided
     if let Some(workflow_path) = args.workflow_path {
+        // Validate and parse -e/--env KEY=VALUE entries before running anything
+        let cli_env_vars = match parse_cli_env_vars(&args.env) {
+            Ok(vars) => vars,
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        };
+
         // Headless mode: run workflow directly
-        if let Err(e) = silva::headless::run_workflow(&workflow_path).await {
+        if let Err(e) = silva::headless::run_workflow(&workflow_path, &cli_env_vars).await {
             eprintln!("{e}");
             std::process::exit(1);
         }
@@ -45,6 +62,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // TUI mode: start the terminal UI with update info
         run_tui(update_result.deferred_update).await
     }
+}
+
+/// Validates `-e/--env` entries and returns them unchanged as `KEY=VALUE` strings.
+///
+/// Rejects entries missing a `=` or with an empty key, so malformed flags fail
+/// before any container runs rather than producing a confusing env var later.
+fn parse_cli_env_vars(entries: &[String]) -> Result<Vec<String>, String> {
+    for entry in entries {
+        match entry.split_once('=') {
+            Some((key, _)) if !key.is_empty() => {}
+            _ => {
+                return Err(format!(
+                    "Invalid -e/--env value '{entry}': expected KEY=VALUE"
+                ));
+            }
+        }
+    }
+    Ok(entries.to_vec())
 }
 
 /// Runs the TUI application

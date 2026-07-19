@@ -26,12 +26,14 @@ use job_config::job::JobMeta;
 /// # Arguments
 ///
 /// * `workflow_path` - Path to the workflow directory
+/// * `cli_env_vars` - `KEY=VALUE` strings from `-e/--env`, injected unprefixed into
+///   every job's container exec environment, independent of `env_passthrough`
 ///
 /// # Returns
 ///
 /// * `Ok(())` - Workflow completed successfully
 /// * `Err(String)` - Error message if workflow failed
-pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
+pub async fn run_workflow(workflow_path: &Path, cli_env_vars: &[String]) -> Result<(), String> {
     // Validate workflow path
     let workflow_path = workflow_path
         .canonicalize()
@@ -142,6 +144,7 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
     let jobs_len = jobs.len();
     let sorted_jobs_clone = sorted_jobs.clone();
     let temp_workflow_path_clone = temp_workflow_path.clone();
+    let cli_env_vars = cli_env_vars.to_vec();
 
     // Spawn workflow execution task
     let exec_handle = tokio::spawn(async move {
@@ -201,6 +204,7 @@ pub async fn run_workflow(workflow_path: &Path) -> Result<(), String> {
                                 &workflow_params,
                             ),
                             (job, &config, &job_params),
+                            &cli_env_vars,
                             &mut container_registry,
                             &mut cancel_rx,
                         )

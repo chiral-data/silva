@@ -481,6 +481,8 @@ impl DockerExecutor {
     ///
     /// * `job_folder` - Path to the job folder (mounted as /workspace in container)
     /// * `config` - Job configuration specifying container image/Dockerfile and scripts
+    /// * `cli_env_vars` - `KEY=VALUE` strings from `-e/--env`, injected unprefixed
+    ///   regardless of `workflow_meta.env_passthrough`
     /// * `cancel_rx` - Channel receiver for cancellation signals
     ///
     /// # Returns
@@ -511,6 +513,7 @@ impl DockerExecutor {
             &JobMeta,
             &job_config::params::JobParams,
         ),
+        cli_env_vars: &[String],
         container_registry: &mut std::collections::HashMap<String, String>,
         cancel_rx: &mut mpsc::Receiver<()>,
     ) -> Result<String, DockerError> {
@@ -707,6 +710,23 @@ impl DockerExecutor {
             if let Ok(val) = std::env::var(key) {
                 env_vars.push(format!("{key}={val}"));
             }
+        }
+
+        // Inject -e/--env CLI values unconditionally, unprefixed — independent of
+        // (and taking precedence over) the env_passthrough allowlist above.
+        for entry in cli_env_vars {
+            env_vars.push(entry.clone());
+        }
+
+        if !cli_env_vars.is_empty() {
+            let log_line = LogLine::new(
+                LogSource::Stdout,
+                format!(
+                    "Setting {} CLI env var(s) via -e/--env",
+                    cli_env_vars.len()
+                ),
+            );
+            self.tx_send(JobStatus::CreatingContainer, log_line).await?;
         }
 
         if !env_vars.is_empty() {

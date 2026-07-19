@@ -108,6 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .run_job(
                     (&workflow_meta, &workflow_path, &workflow_params),
                     (&job, &config, &job_params),
+                    &[],
                     &mut container_registry,
                     &mut cancel_rx,
                 )
