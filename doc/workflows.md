@@ -74,6 +74,16 @@ env_passthrough = ["NGC_API_KEY", "HF_TOKEN"]
 
 **`env_passthrough`**: Lists host environment variable names (set in the terminal running `silva`, e.g. via `export NGC_API_KEY=...`) to forward into the container exec environment, alongside the `PARAM_*` variables. This lets a workflow require API keys or secrets without hardcoding them into `global_params.json`. A listed variable that isn't set in the host environment is silently skipped.
 
+### Ad-hoc env vars via `-e`/`--env`
+
+For a one-off value that doesn't belong in `global_params.json` or `env_passthrough`, pass it directly on the CLI (headless mode only):
+
+```bash
+silva workflows/my-workflow -e RUN_MODE=use_gpu -e FOO=bar
+```
+
+Each `-e KEY=VALUE` is injected unprefixed into every job's container exec environment for this run — independent of, and not restricted by, the `env_passthrough` allowlist. Malformed entries (missing `=`) fail immediately, before any container runs.
+
 ## Job Configuration
 
 Each job requires a `.chiral/job.toml` configuration file that defines:
