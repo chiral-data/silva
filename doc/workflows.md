@@ -79,7 +79,7 @@ env_passthrough = ["NGC_API_KEY", "HF_TOKEN"]
 For a one-off value that doesn't belong in `global_params.json` or `env_passthrough`, pass it directly on the CLI (headless mode only):
 
 ```bash
-silva workflows/my-workflow -e RUN_MODE=use_gpu -e FOO=bar
+silva run workflows/my-workflow -e RUN_MODE=use_gpu -e FOO=bar
 ```
 
 Each `-e KEY=VALUE` is injected unprefixed into every job's container exec environment for this run — independent of, and not restricted by, the `env_passthrough` allowlist. Malformed entries (missing `=`) fail immediately, before any container runs.
@@ -109,7 +109,7 @@ separate from whatever gets forwarded into the job's container for
 ```bash
 export SAKURA_ACCESS_TOKEN=...
 export SAKURA_ACCESS_TOKEN_SECRET=...
-silva workflows/my-workflow \
+silva run workflows/my-workflow \
   -e RUN_MODE=use_dok \
   -e DOK_PLAN=v100-32gb \
   -e SAKURA_ACCESS_TOKEN=$SAKURA_ACCESS_TOKEN \

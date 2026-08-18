@@ -20,7 +20,8 @@ struct Args {
 
     /// Path to a workflow folder to run directly (headless mode)
     ///
-    /// If not provided, the TUI application will start.
+    /// Deprecated: use `silva run <WORKFLOW_PATH>` instead. If neither this nor
+    /// a subcommand is given, the TUI application starts.
     #[arg(value_name = "WORKFLOW_PATH")]
     workflow_path: Option<PathBuf>,
 
@@ -35,6 +36,21 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Command {
+    /// Run a workflow folder headlessly (no TUI)
+    Run {
+        /// Path to the workflow folder
+        #[arg(value_name = "WORKFLOW_PATH")]
+        path: PathBuf,
+
+        /// Set an environment variable in every job's container
+        ///
+        /// Repeatable, format KEY=VALUE (e.g. `-e RUN_MODE=use_gpu`). Injected as-is,
+        /// unprefixed, into every job's container exec environment for this run —
+        /// independent of workflow.toml's `env_passthrough` allowlist.
+        #[arg(short = 'e', long = "env", value_name = "KEY=VALUE")]
+        env: Vec<String>,
+    },
+
     /// Check a workflow folder without running it
     ///
     /// Parses workflow.toml and every job.toml, checks the dependency graph and
@@ -76,10 +92,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    // Check if workflow path is provided
-    if let Some(workflow_path) = args.workflow_path {
+    // `silva run <path>` is the explicit form; a bare `silva <path>` is the
+    // deprecated alias kept for existing scripts.
+    let (workflow_path, env) = match args.command {
+        Some(Command::Run { path, env }) => (Some(path), env),
+        Some(Command::Validate { .. }) => unreachable!("handled above"),
+        None => {
+            if args.workflow_path.is_some() {
+                eprintln!(
+                    "warning: `silva <WORKFLOW_PATH>` is deprecated, use `silva run <WORKFLOW_PATH>` instead"
+                );
+            }
+            (args.workflow_path, args.env)
+        }
+    };
+
+    if let Some(workflow_path) = workflow_path {
         // Validate and parse -e/--env KEY=VALUE entries before running anything
-        let cli_env_vars = match parse_cli_env_vars(&args.env) {
+        let cli_env_vars = match parse_cli_env_vars(&env) {
             Ok(vars) => vars,
             Err(e) => {
                 eprintln!("{e}");
