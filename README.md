@@ -76,6 +76,36 @@ Configure health checks:
 
 - `r` - Refresh health checking status
 
+## Machine-Readable Runs
+
+`silva run <WORKFLOW_PATH> --json` emits the run as newline-delimited JSON on
+stdout instead of human-formatted text — one object per line, flushed as it
+happens, so a script, a CI job or another tool can follow a run without
+scraping prose:
+
+```json
+{"event":"workflow","status":"started","workflow":"Protein Pocket Analysis","jobs":["01-download","02-pocket"],"at":"..."}
+{"event":"job","job":"01-download","index":0,"status":"pulling_image","at":"..."}
+{"event":"log","job":"01-download","index":0,"stream":"stdout","text":"Downloading 3 PDB file(s)","at":"..."}
+{"event":"job","job":"01-download","index":0,"status":"completed","error":null,"at":"..."}
+{"event":"job","job":"02-pocket","index":1,"status":"failed","error":"Script 'run.sh' failed with exit code 1","at":"..."}
+{"event":"workflow","status":"failed","error":"Workflow failed","outputDir":"/tmp/silva-...","at":"..."}
+```
+
+Four event types:
+
+| `event` | |
+| --- | --- |
+| `workflow` | `started`, then `completed` or `failed` with the output folder |
+| `job` | phase changes (`pulling_image`, `building_image`, `creating_container`, `running`), then exactly one terminal `completed` or `failed`; jobs an aborted run never reached are reported as `skipped` rather than omitted |
+| `log` | one container output line, attributed to its job and `stream` |
+| `note` | silva's own diagnostics, which would otherwise be bare text on the stream |
+
+Every line on stdout is a JSON object, including diagnostics and warnings, so a
+consumer never has to skip unparseable lines. The startup update check is
+skipped in this mode. The process exit code is unchanged: `0` on success, `1` on
+failure.
+
 ## Checking a Workflow
 
 `silva validate <WORKFLOW_PATH>` checks a workflow folder without running it —

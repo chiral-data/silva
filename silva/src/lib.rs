@@ -5,6 +5,7 @@ use ratatui::Terminal;
 
 pub mod app;
 pub mod components;
+pub mod events;
 pub mod headless;
 pub mod infra;
 mod layout;

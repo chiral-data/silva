@@ -18,6 +18,7 @@ use crate::components::docker::{
     logs::{LogLine, LogSource},
 };
 use crate::components::workflow::{JobFolder, JobScanner, WorkflowFolder};
+use crate::events::{Emitter, OutputFormat};
 use crate::utils::copy_dir_recursive;
 use job_config::job::JobMeta;
 
@@ -28,12 +29,19 @@ use job_config::job::JobMeta;
 /// * `workflow_path` - Path to the workflow directory
 /// * `cli_env_vars` - `KEY=VALUE` strings from `-e/--env`, injected unprefixed into
 ///   every job's container exec environment, independent of `env_passthrough`
+/// * `output` - human text, or newline-delimited JSON events for a caller
+///   driving the run programmatically
 ///
 /// # Returns
 ///
 /// * `Ok(())` - Workflow completed successfully
 /// * `Err(String)` - Error message if workflow failed
-pub async fn run_workflow(workflow_path: &Path, cli_env_vars: &[String]) -> Result<(), String> {
+pub async fn run_workflow(
+    workflow_path: &Path,
+    cli_env_vars: &[String],
+    output: OutputFormat,
+) -> Result<(), String> {
+    let mut emitter = Emitter::new(output);
     // Validate workflow path
     let workflow_path = workflow_path
         .canonicalize()
@@ -66,9 +74,7 @@ pub async fn run_workflow(workflow_path: &Path, cli_env_vars: &[String]) -> Resu
 
     let docker_socket =
         std::env::var("DOCKER_HOST").unwrap_or_else(|_| "unix:///var/run/docker.sock".to_string());
-    println!("Docker socket: {docker_socket}");
-    println!("Running workflow: {workflow_name}");
-    println!("Temp folder: {}", temp_workflow_path.display());
+    emitter.preamble(&docker_socket, &workflow_name, &temp_workflow_path);
 
     // Scan for jobs in temp folder
     let jobs = JobScanner::scan_jobs(&temp_workflow_path)
@@ -78,7 +84,7 @@ pub async fn run_workflow(workflow_path: &Path, cli_env_vars: &[String]) -> Resu
         return Err("No jobs found in workflow".to_string());
     }
 
-    println!("Found {} job(s)", jobs.len());
+    emitter.jobs_found(jobs.len());
 
     // Load workflow metadata (dependencies are managed here, not in job.toml)
     let workflow_metadata = workflow_folder
@@ -96,24 +102,13 @@ pub async fn run_workflow(workflow_path: &Path, cli_env_vars: &[String]) -> Resu
         .flatten()
         .unwrap_or_default();
 
-    if !workflow_params.is_empty() {
-        println!(
-            "Loaded {} global workflow parameter(s)",
-            workflow_params.len()
-        );
-    }
+    emitter.global_params_loaded(workflow_params.len());
 
     // Sort jobs in dependency order
     let sorted_jobs = topological_sort_jobs(&jobs, &workflow_metadata)?;
 
-    println!(
-        "Execution order: {}",
-        sorted_jobs
-            .iter()
-            .map(|j| j.name.as_str())
-            .collect::<Vec<_>>()
-            .join(" -> ")
-    );
+    let execution_order: Vec<String> = sorted_jobs.iter().map(|j| j.name.clone()).collect();
+    emitter.execution_order(&execution_order);
 
     // Pre-checks: reject workflows that violate conventions
     crate::precheck::check_install_commands(&sorted_jobs)?;
@@ -128,7 +123,10 @@ pub async fn run_workflow(workflow_path: &Path, cli_env_vars: &[String]) -> Resu
         &workflow_metadata,
     );
 
-    println!();
+    // The started event waits until prechecks have passed and inputs are
+    // staged, so a workflow rejected before this point never reports itself as
+    // started.
+    emitter.workflow_started(workflow_metadata.name.as_str(), &execution_order);
 
     // Create message channel for logs
     let (tx, mut rx) = mpsc::channel::<(usize, JobStatus, LogLine)>(32);
@@ -141,6 +139,8 @@ pub async fn run_workflow(workflow_path: &Path, cli_env_vars: &[String]) -> Resu
         .map(|(idx, job)| (job.name.clone(), idx))
         .collect();
 
+    // The reporting side needs these after the executor task takes ownership.
+    let job_index_by_name = job_name_to_idx.clone();
     let jobs_len = jobs.len();
     let sorted_jobs_clone = sorted_jobs.clone();
     let temp_workflow_path_clone = temp_workflow_path.clone();
@@ -289,9 +289,14 @@ pub async fn run_workflow(workflow_path: &Path, cli_env_vars: &[String]) -> Resu
         }
     });
 
-    // Process log messages and output to stdout/stderr
-    let mut current_job: Option<String> = None;
+    // Process messages and produce output
     let mut workflow_result = Ok(());
+    // The job currently being reported, and whether it has already failed —
+    // a job's terminal state is decided by the run moving on, not by any one
+    // message, because the executor reports `Completed` once per script.
+    let mut open_job: Option<(usize, String)> = None;
+    let mut open_job_failed: Option<String> = None;
+    let mut finished: Vec<String> = Vec::new();
 
     while let Some((idx, status, log_line)) = rx.recv().await {
         // Check if workflow is complete
@@ -303,31 +308,70 @@ pub async fn run_workflow(workflow_path: &Path, cli_env_vars: &[String]) -> Resu
         }
 
         // Get job name
-        let job_name = jobs.get(idx).map(|j| j.name.as_str()).unwrap_or("unknown");
+        let job_name = jobs
+            .get(idx)
+            .map(|j| j.name.clone())
+            .unwrap_or_else(|| "unknown".to_string());
 
-        // Print job header when switching jobs
-        if current_job.as_deref() != Some(job_name) {
-            if current_job.is_some() {
-                println!();
-            }
-            println!("=== Job: {job_name} ===");
-            current_job = Some(job_name.to_string());
+        // The run has moved on: close the previous job before reporting this one.
+        if let Some((open_idx, open_name)) = open_job.clone()
+            && open_idx != idx
+        {
+            emitter.job_finished(
+                &open_name,
+                open_idx,
+                open_job_failed.is_some(),
+                open_job_failed.as_deref(),
+            );
+            finished.push(open_name);
+            open_job_failed = None;
         }
+        open_job = Some((idx, job_name.clone()));
 
-        // Print log line
+        emitter.job_phase(&job_name, idx, &status, log_line.timestamp);
+
         if !log_line.content.is_empty() {
-            match log_line.source {
-                LogSource::Stdout => println!("{}", log_line.content),
-                LogSource::Stderr => eprintln!("{}", log_line.content),
-            }
+            emitter.log(
+                &job_name,
+                idx,
+                log_line.source,
+                &log_line.content,
+                log_line.timestamp,
+            );
         }
 
-        // Print status changes
-        if status == JobStatus::Completed {
-            println!("[{job_name}] Completed");
-        } else if status == JobStatus::Failed {
-            eprintln!("[{job_name}] Failed");
+        emitter.job_status_line(&job_name, &status);
+
+        if status == JobStatus::Failed {
+            // Keep silva's own message as the reason, so a caller never has to
+            // read it back out of the log stream.
+            let reason = if log_line.content.is_empty() {
+                format!("Job '{job_name}' failed")
+            } else {
+                log_line.content.clone()
+            };
+            open_job_failed = Some(reason);
             workflow_result = Err(format!("Job '{job_name}' failed"));
+        }
+    }
+
+    // Close the last job the run reached.
+    if let Some((open_idx, open_name)) = open_job {
+        emitter.job_finished(
+            &open_name,
+            open_idx,
+            open_job_failed.is_some(),
+            open_job_failed.as_deref(),
+        );
+        finished.push(open_name);
+    }
+
+    // Anything left in the execution order never ran. Reported explicitly:
+    // absence cannot be told apart from "not part of this workflow".
+    if workflow_result.is_err() {
+        for name in execution_order.iter().filter(|n| !finished.contains(n)) {
+            let idx = job_index_by_name.get(name).copied().unwrap_or(0);
+            emitter.job_skipped(name, idx, "an earlier job failed");
         }
     }
 
@@ -337,21 +381,7 @@ pub async fn run_workflow(workflow_path: &Path, cli_env_vars: &[String]) -> Resu
     // Keep the temp folder for user inspection
     let temp_path = temp_workflow_dir.keep();
 
-    println!();
-    match &workflow_result {
-        Ok(()) => {
-            println!("Workflow completed successfully");
-            println!();
-            println!("Output folder: {}", temp_path.display());
-            println!("  (This folder will persist until you delete it manually)");
-        }
-        Err(e) => {
-            eprintln!("Workflow failed: {e}");
-            println!();
-            println!("Working folder: {}", temp_path.display());
-            println!("  (You can inspect this folder to debug the issue)");
-        }
-    }
+    emitter.workflow_finished(&workflow_result, &temp_path);
 
     workflow_result
 }
@@ -469,7 +499,7 @@ fn copy_input_files_from_dependencies(
         // Find the dependency job
         let dep_job = all_jobs.iter().find(|j| &j.name == dep_job_name);
         if dep_job.is_none() {
-            println!("Warning: Dependency job '{dep_job_name}' not found");
+            crate::note!("Warning: Dependency job '{dep_job_name}' not found");
             continue;
         }
 
@@ -484,7 +514,7 @@ fn copy_input_files_from_dependencies(
             workflow_path.join(dep_job_name).join("outputs")
         };
         if !dep_outputs_dir.exists() {
-            println!("No outputs found for dependency '{dep_job_name}', skipping");
+            crate::note!("No outputs found for dependency '{dep_job_name}', skipping");
             continue;
         }
 
@@ -494,7 +524,7 @@ fn copy_input_files_from_dependencies(
             match fs::read_dir(&dep_outputs_dir) {
                 Ok(entries) => entries.filter_map(|e| e.ok()).map(|e| e.path()).collect(),
                 Err(e) => {
-                    println!("Error reading outputs from '{dep_job_name}': {e}");
+                    crate::note!("Error reading outputs from '{dep_job_name}': {e}");
                     continue;
                 }
             }
@@ -506,7 +536,7 @@ fn copy_input_files_from_dependencies(
                     Ok(g) => {
                         builder.add(g);
                     }
-                    Err(e) => println!("Invalid glob pattern '{pattern}': {e}"),
+                    Err(e) => crate::note!("Invalid glob pattern '{pattern}': {e}"),
                 }
             }
             match builder.build() {
@@ -517,12 +547,12 @@ fn copy_input_files_from_dependencies(
                         .filter(|p| p.file_name().map(|n| matcher.is_match(n)).unwrap_or(false))
                         .collect(),
                     Err(e) => {
-                        println!("Error reading outputs from '{dep_job_name}': {e}");
+                        crate::note!("Error reading outputs from '{dep_job_name}': {e}");
                         continue;
                     }
                 },
                 Err(e) => {
-                    println!("Failed to build glob matcher for '{dep_job_name}': {e}");
+                    crate::note!("Failed to build glob matcher for '{dep_job_name}': {e}");
                     continue;
                 }
             }
@@ -536,7 +566,7 @@ fn copy_input_files_from_dependencies(
 
                 // Check for conflicts
                 if copied_files.contains(&filename_str) {
-                    println!(
+                    crate::note!(
                         "Warning: File '{filename_str}' already copied, skipping from '{dep_job_name}'"
                     );
                     continue;
@@ -547,22 +577,22 @@ fn copy_input_files_from_dependencies(
                     match fs::copy(&source_path, &dest_path) {
                         Ok(_) => {
                             copied_files.insert(filename_str.clone());
-                            println!("Copied '{filename_str}' from '{dep_job_name}'");
+                            crate::note!("Copied '{filename_str}' from '{dep_job_name}'");
                         }
                         Err(e) => {
-                            println!("Error copying '{filename_str}': {e}");
+                            crate::note!("Error copying '{filename_str}': {e}");
                         }
                     }
                 } else if source_path.is_dir() {
                     match copy_dir_recursive(&source_path, &dest_path) {
                         Ok(count) => {
                             copied_files.insert(filename_str.clone());
-                            println!(
+                            crate::note!(
                                 "Copied directory '{filename_str}/' ({count} files) from '{dep_job_name}'"
                             );
                         }
                         Err(e) => {
-                            println!("Error copying directory '{filename_str}': {e}");
+                            crate::note!("Error copying directory '{filename_str}': {e}");
                         }
                     }
                 }
@@ -611,7 +641,7 @@ fn move_job_to_complete(workflow_path: &Path, job_name: &str) -> Result<(), Stri
     fs::rename(&source, &dest)
         .map_err(|e| format!("Failed to move '{job_name}' to @complete: {e}"))?;
 
-    println!("[{job_name}] Moved to @complete/");
+    crate::note!("[{job_name}] Moved to @complete/");
     Ok(())
 }
 
@@ -630,7 +660,7 @@ fn copy_input_files_to_dependency_free_jobs(
     let input_files_path = workflow_path.join("input_files");
 
     if !input_files_path.is_dir() {
-        println!("Hint: No 'input_files' folder found in workflow");
+        crate::note!("Hint: No 'input_files' folder found in workflow");
         return;
     }
 
@@ -641,7 +671,7 @@ fn copy_input_files_to_dependency_free_jobs(
         .collect();
 
     if jobs_without_deps.is_empty() {
-        println!("Warning: No jobs to copy input files to");
+        crate::note!("Warning: No jobs to copy input files to");
         return;
     }
 
@@ -650,7 +680,7 @@ fn copy_input_files_to_dependency_free_jobs(
         // Copy to inputs/ subfolder for clear separation
         let inputs_dir = temp_workflow_path.join(&job.name).join("inputs");
         if let Err(e) = fs::create_dir_all(&inputs_dir) {
-            eprintln!("Error creating inputs folder for '{}': {e}", job.name);
+            crate::warn_note!("Error creating inputs folder for '{}': {e}", job.name);
             continue;
         }
 
@@ -658,7 +688,7 @@ fn copy_input_files_to_dependency_free_jobs(
         let entries = match fs::read_dir(&input_files_path) {
             Ok(entries) => entries,
             Err(e) => {
-                eprintln!("Error reading input_files folder: {e}");
+                crate::warn_note!("Error reading input_files folder: {e}");
                 return;
             }
         };
@@ -678,7 +708,7 @@ fn copy_input_files_to_dependency_free_jobs(
 
             match result {
                 Ok(()) => copied_count += 1,
-                Err(e) => eprintln!(
+                Err(e) => crate::warn_note!(
                     "Error copying '{}': {e}",
                     entry.file_name().to_string_lossy()
                 ),
@@ -686,9 +716,10 @@ fn copy_input_files_to_dependency_free_jobs(
         }
 
         if copied_count > 0 {
-            println!(
+            crate::note!(
                 "Copied {} item(s) from 'input_files/' to '{}/inputs/'",
-                copied_count, job.name
+                copied_count,
+                job.name
             );
         }
     }
