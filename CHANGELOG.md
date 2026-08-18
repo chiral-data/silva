@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.7]
+
+### Added
+
+- CLI: `silva validate <WORKFLOW_PATH>` — check a workflow folder without running it (#93)
+  - Parses `workflow.toml` and every `job.toml`, resolves the dependency graph and reports the execution order, validates `global_params.json` and each job's `params.json` against their `[params]` definitions, and applies the existing prechecks (install commands, cross-node `../` references, `input_files/`)
+  - Reuses `precheck` and the headless topological sort, so validation cannot disagree with what a run enforces
+  - Reports every unresolvable dependency name rather than only the first, and excludes a job whose `job.toml` does not parse from later checks so one broken file does not cascade
+  - Exit `0` when sound, `1` when not; `--json` emits a structured report with a `kind` taxonomy (`workflow`, `job`, `dependency`, `params`, `script`, `inputs`)
+  - Reads the folder in place rather than the temp copy a run uses, so paths in messages are the paths being edited
+  - Performs no update check, needs no Docker daemon and no network — usable in CI
+
 ## [0.5.6]
 
 ### Added

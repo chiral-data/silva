@@ -76,6 +76,48 @@ Configure health checks:
 
 - `r` - Refresh health checking status
 
+## Checking a Workflow
+
+`silva validate <WORKFLOW_PATH>` checks a workflow folder without running it —
+no Docker daemon, no containers, no network:
+
+```bash
+$ silva validate ./workflow-007
+Protein Pocket Analysis: 3 job(s) ok
+Execution order: 01-download -> 02-pocket -> 03-visualize
+```
+
+It parses `workflow.toml` and every `job.toml`, resolves the dependency graph,
+validates `global_params.json` and each `params.json` against their `[params]`
+definitions, and applies the same conventions a run applies (no install commands
+in scripts, no cross-node `../` references, `input_files/` present when
+dependency-free jobs exist).
+
+The exit code is `0` when the folder is sound and non-zero when it is not, so it
+works as a CI gate on a repository of workflows. `--json` emits the report as
+structured data:
+
+```bash
+$ silva validate --json ./broken
+{
+  "valid": false,
+  "workflow": "Broken",
+  "jobs": ["01-download", "02-pocket"],
+  "order": [],
+  "findings": [
+    {
+      "kind": "dependency",
+      "file": ".chiral/workflow.toml",
+      "job": "02-pocket",
+      "message": "Job '02-pocket' depends on '01-fetch', which is not a job folder here."
+    }
+  ]
+}
+```
+
+`kind` is one of `workflow`, `job`, `dependency`, `params`, `script` or
+`inputs`.
+
 ## Running Workflows
 
 1. Navigate to the **Workflows** tab using `→`

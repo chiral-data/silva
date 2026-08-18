@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::{error::Error, io};
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
@@ -15,6 +15,9 @@ use silva::run_app;
 #[command(name = "silva")]
 #[command(version, about, long_about = None)]
 struct Args {
+    #[command(subcommand)]
+    command: Option<Command>,
+
     /// Path to a workflow folder to run directly (headless mode)
     ///
     /// If not provided, the TUI application will start.
@@ -30,9 +33,41 @@ struct Args {
     env: Vec<String>,
 }
 
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Check a workflow folder without running it
+    ///
+    /// Parses workflow.toml and every job.toml, checks the dependency graph and
+    /// parameter files, and applies the same conventions a headless run applies.
+    /// Needs no Docker and starts no containers.
+    Validate {
+        /// Path to the workflow folder
+        #[arg(value_name = "WORKFLOW_PATH")]
+        path: PathBuf,
+
+        /// Emit the report as JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
+
+    // Validation is a local, offline check: no update probe, no network, no
+    // Docker — so it stays usable in CI and inside another tool.
+    if let Some(Command::Validate { path, json }) = args.command {
+        let report = silva::validate::validate_workflow(&path);
+        if json {
+            println!("{}", report.to_json());
+        } else if report.is_valid() {
+            print!("{}", report.render());
+        } else {
+            eprint!("{}", report.render());
+        }
+        std::process::exit(if report.is_valid() { 0 } else { 1 });
+    }
 
     // Check for updates on startup
     let update_result = silva::update::run_update_check().await;

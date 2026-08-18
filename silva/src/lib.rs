@@ -12,6 +12,7 @@ pub mod precheck;
 mod style;
 pub mod update;
 pub mod utils;
+pub mod validate;
 
 pub async fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
