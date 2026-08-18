@@ -357,7 +357,7 @@ pub async fn run_workflow(workflow_path: &Path, cli_env_vars: &[String]) -> Resu
 }
 
 /// Performs topological sort on jobs based on their dependencies.
-fn topological_sort_jobs(
+pub(crate) fn topological_sort_jobs(
     jobs: &[JobFolder],
     workflow_metadata: &job_config::workflow::WorkflowMeta,
 ) -> Result<Vec<JobFolder>, String> {
