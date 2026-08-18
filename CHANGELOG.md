@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8]
+
+### Added
+
+- CLI: `silva run <WORKFLOW_PATH>` — explicit subcommand for headless mode, alongside `silva validate` (#95)
+  - `silva <WORKFLOW_PATH>` (bare positional) still works but is deprecated; it now prints a one-line warning pointing at `silva run`
+
 ## [0.5.7]
 
 ### Added

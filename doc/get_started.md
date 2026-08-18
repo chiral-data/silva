@@ -56,11 +56,13 @@ silva
 
 ### Headless Mode
 
-Run a workflow directly from the command line by providing the workflow path:
+Run a workflow directly from the command line with `silva run`:
 
 ```bash
-silva /path/to/workflow
+silva run /path/to/workflow
 ```
+
+(`silva /path/to/workflow` without `run` still works but is deprecated.)
 
 This executes the workflow and outputs logs to stdout/stderr, useful for:
 - CI/CD pipelines
