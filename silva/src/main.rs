@@ -25,6 +25,14 @@ struct Args {
     #[arg(value_name = "WORKFLOW_PATH")]
     workflow_path: Option<PathBuf>,
 
+    /// Emit the run as newline-delimited JSON events instead of human output
+    ///
+    /// Headless mode only. Every line on stdout is one JSON object: workflow
+    /// start and end, each job's state changes, and every log line attributed
+    /// to the job and stream that produced it.
+    #[arg(long)]
+    json: bool,
+
     /// Set an environment variable in every job's container (headless mode only)
     ///
     /// Repeatable, format KEY=VALUE (e.g. `-e RUN_MODE=use_gpu`). Injected as-is,
@@ -41,6 +49,14 @@ enum Command {
         /// Path to the workflow folder
         #[arg(value_name = "WORKFLOW_PATH")]
         path: PathBuf,
+
+        /// Emit the run as newline-delimited JSON events instead of human output
+        ///
+        /// Every line on stdout is one JSON object: workflow start and end, each
+        /// job's state changes, silva's own diagnostics, and every log line
+        /// attributed to the job and stream that produced it.
+        #[arg(long)]
+        json: bool,
 
         /// Set an environment variable in every job's container
         ///
@@ -85,8 +101,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
         std::process::exit(if report.is_valid() { 0 } else { 1 });
     }
 
-    // Check for updates on startup
-    let update_result = silva::update::run_update_check().await;
+    // Whether this invocation wants machine-readable output, in either form:
+    // `silva run <path> --json` or the deprecated `silva <path> --json`.
+    let json = args.json || matches!(&args.command, Some(Command::Run { json: true, .. }));
+
+    silva::events::set_json_mode(json);
+
+    // Check for updates on startup. Skipped for --json: it prints human text
+    // onto the stream a caller is parsing, prompts for input, and reaches the
+    // network besides.
+    let update_result = if json {
+        silva::update::UpdateCheckResult {
+            should_exit: false,
+            deferred_update: None,
+        }
+    } else {
+        silva::update::run_update_check().await
+    };
     if update_result.should_exit {
         // Update was performed, exit
         return Ok(());
@@ -95,12 +126,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // `silva run <path>` is the explicit form; a bare `silva <path>` is the
     // deprecated alias kept for existing scripts.
     let (workflow_path, env) = match args.command {
-        Some(Command::Run { path, env }) => (Some(path), env),
+        Some(Command::Run { path, env, .. }) => (Some(path), env),
         Some(Command::Validate { .. }) => unreachable!("handled above"),
         None => {
             if args.workflow_path.is_some() {
-                eprintln!(
+                silva::events::warn_line(
                     "warning: `silva <WORKFLOW_PATH>` is deprecated, use `silva run <WORKFLOW_PATH>` instead"
+                        .to_string(),
                 );
             }
             (args.workflow_path, args.env)
@@ -118,8 +150,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         };
 
         // Headless mode: run workflow directly
-        if let Err(e) = silva::headless::run_workflow(&workflow_path, &cli_env_vars).await {
-            eprintln!("{e}");
+        let output = if json {
+            silva::events::OutputFormat::Json
+        } else {
+            silva::events::OutputFormat::Human
+        };
+        if let Err(e) = silva::headless::run_workflow(&workflow_path, &cli_env_vars, output).await {
+            // In JSON mode the terminal workflow event already carries this,
+            // and stdout must stay parseable.
+            if !json {
+                eprintln!("{e}");
+            }
             std::process::exit(1);
         }
         Ok(())

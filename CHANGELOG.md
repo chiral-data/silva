@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9]
+
+### Added
+
+- CLI: `--json` on `silva run` — emit a headless run as newline-delimited JSON events instead of human output (#97)
+  - Four event types: `workflow` (started/completed/failed with the output folder), `job` (phase changes, then exactly one terminal state), `log` (one container line, attributed to its job and stream), and `note` (silva's own diagnostics)
+  - Jobs an aborted run never reached are reported as `skipped`, so "never ran" is distinguishable from "not part of this workflow"
+  - Exactly one terminal event per job: the executor reports `Completed` once per script, which is progress rather than a job finishing, so terminal state is decided by the run moving on
+  - Every line on stdout is a JSON object — diagnostics that used to be printed directly, including the `silva <WORKFLOW_PATH>` deprecation warning, become `note` events rather than unparseable lines
+  - The startup update check is skipped: it prints human text onto the stream, prompts for input, and reaches the network
+  - Flushed per event, so a consumer following a long run sees progress as it happens
+  - Human output is unchanged, verified line for line against a run on the previous build
+
+### Known limitations
+
+- Job events carry silva's own failure message in `error` but not a numeric exit code. `DockerError::ScriptExecutionFailed` holds one, but the channel between the executor and the reporting side carries `(index, JobStatus, LogLine)` and has no field for it; adding one touches every send site in the TUI as well. Deferred deliberately rather than inferred from log text.
+
 ## [0.5.8]
 
 ### Added
