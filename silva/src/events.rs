@@ -308,6 +308,29 @@ impl Emitter {
         }));
     }
 
+    /// The run was interrupted (Ctrl-C in headless mode) rather than completing
+    /// or failing on its own. Kept distinct from [`Emitter::workflow_finished`]
+    /// so a consumer reading the event stream can tell a deliberate interrupt
+    /// apart from a crash instead of just seeing the stream stop mid-job.
+    pub fn workflow_cancelled(&self, output_dir: &Path) {
+        if self.is_json() {
+            self.write(serde_json::json!({
+                "event": "workflow",
+                "status": "cancelled",
+                "error": serde_json::Value::Null,
+                "outputDir": output_dir.display().to_string(),
+                "at": Self::now(),
+            }));
+            return;
+        }
+
+        println!();
+        eprintln!("Workflow cancelled");
+        println!();
+        println!("Working folder: {}", output_dir.display());
+        println!("  (You can inspect this folder to debug the issue)");
+    }
+
     pub fn workflow_finished(&self, result: &Result<(), String>, output_dir: &Path) {
         if self.is_json() {
             self.write(serde_json::json!({

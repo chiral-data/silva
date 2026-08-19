@@ -5,6 +5,8 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
 use globset::GlobSetBuilder;
@@ -130,7 +132,26 @@ pub async fn run_workflow(
 
     // Create message channel for logs
     let (tx, mut rx) = mpsc::channel::<(usize, JobStatus, LogLine)>(32);
-    let (_cancel_tx, mut cancel_rx) = mpsc::channel::<()>(1);
+    let (cancel_tx, mut cancel_rx) = mpsc::channel::<()>(1);
+
+    // Headless runs have no other cancellation path, so Ctrl-C is wired
+    // straight to the sender `run_job`/`exec_script` already know how to
+    // honour. A second Ctrl-C is a hard exit: if cleanup itself gets stuck on
+    // a container that will not stop, the user needs a way out that doesn't
+    // require another terminal.
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let cancelled_for_signal = Arc::clone(&cancelled);
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_err() {
+            return;
+        }
+        cancelled_for_signal.store(true, Ordering::SeqCst);
+        let _ = cancel_tx.send(()).await;
+
+        if tokio::signal::ctrl_c().await.is_ok() {
+            std::process::exit(130);
+        }
+    });
 
     // Create job name to index map
     let job_name_to_idx: HashMap<String, usize> = jobs
@@ -380,6 +401,14 @@ pub async fn run_workflow(
 
     // Keep the temp folder for user inspection
     let temp_path = temp_workflow_dir.keep();
+
+    // Ctrl-C unwinds through the same job loop a failure does, which already
+    // ends in `cleanup_containers` — but the run should report itself as
+    // cancelled rather than merely failed.
+    if cancelled.load(Ordering::SeqCst) {
+        emitter.workflow_cancelled(&temp_path);
+        return Err("Workflow cancelled".to_string());
+    }
 
     emitter.workflow_finished(&workflow_result, &temp_path);
 

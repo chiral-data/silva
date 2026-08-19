@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.10]
+
+### Fixed
+
+- Headless mode (`silva run`): Ctrl-C during a run now stops and removes the containers the run created, instead of leaving them behind (#99)
+  - Headless discarded the cancel sender it created, so the cancellation support `DockerExecutor::run_job`/`exec_script` already honour was unreachable — SIGINT just killed the process before `cleanup_containers` could run
+  - Ctrl-C is now wired to a real sender via a `tokio::signal::ctrl_c()` handler, so it unwinds through the existing job loop into cleanup, and the run reports itself as cancelled (rather than failed) — in human output and as a terminal `{"event":"workflow","status":"cancelled",...}` line under `--json`
+  - A second Ctrl-C hard-exits immediately, in case cleanup itself is stuck on a container that will not stop
+
 ## [0.5.9]
 
 ### Added
