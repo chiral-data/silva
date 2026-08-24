@@ -110,7 +110,36 @@ function Install-Silva {
         $installedPath = Join-Path $installDir "${BINARY_NAME}.exe"
 
         Write-Info "Installing to $installedPath..."
-        Copy-Item $binaryPath $installedPath -Force
+
+        # Windows refuses to overwrite an executable that is currently running
+        # (Copy-Item -Force fails with a sharing violation), which is exactly
+        # the case when a running silva triggers its own update. It does allow
+        # the running image to be *renamed*, so move the old binary aside first
+        # and then copy the new one into the freed name. The running process
+        # keeps executing from the renamed file; the next invocation picks up
+        # the new one.
+        $retiredPath = "$installedPath.old-$PID"
+
+        if (Test-Path $installedPath) {
+            Move-Item $installedPath $retiredPath -Force
+        }
+
+        try {
+            Copy-Item $binaryPath $installedPath -Force
+        } catch {
+            # Put the previous binary back rather than leaving nothing on PATH.
+            if (Test-Path $retiredPath) {
+                Move-Item $retiredPath $installedPath -Force
+            }
+            Write-Error "Error: Failed to install to $installedPath"
+            exit 1
+        }
+
+        # The retired binary is still mapped while the old process runs, so this
+        # is best-effort; a leftover is cleaned up by the next install.
+        Get-ChildItem -Path $installDir -Filter "${BINARY_NAME}.exe.old-*" -ErrorAction SilentlyContinue |
+            ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+
         Write-Success "Installation completed"
         Write-Output ""
 

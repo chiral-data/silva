@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.11]
+
+### Fixed
+
+- Self-update no longer fails on its own running binary, and no longer prompts inside a batch run (#101)
+  - `install.sh` replaced its target with `cp`, which cannot write an executable that is currently running (`ETXTBSY`, "Text file busy") — so an update triggered from a running silva always failed. The new binary is now staged as a dotfile in the destination directory and `mv`'d over the target: the rename is atomic, the running process keeps its unlinked inode, and the next invocation is the new version
+  - `install.ps1` had the same defect in Windows form (`Copy-Item -Force` hits a sharing violation on a running image). Windows does allow the running image to be renamed, so the old binary is moved aside first, then the new one is copied into the freed name, with the previous binary restored if that copy fails
+  - The startup check was gated on `--json` alone, so a scripted human-output run (`silva run <dir>` with stdin piped) still printed `Update now? [Y/n]:` and read the pipe as an answer — then tried to install a new binary over the one about to run the workflow
+
+### Changed
+
+- What an invocation may do about updates is now decided before the check runs, from the shape of the invocation (#101)
+  - A workflow run reports an available version and proceeds on the current one — it never prompts and never installs, so the version that starts a run is the version that finishes it
+  - Stdin not being a terminal disables the check outright, rather than leaving a prompt to be answered by whatever the pipe happens to contain
+  - New `--no-update` flag and `SILVA_NO_UPDATE_CHECK` / `NO_UPDATE` / `CI` env opt-outs skip the check entirely, so silva makes no outbound request of its own — relevant to workflows whose premise is local execution with an accounted-for network ledger
+  - Unchanged for the case the feature was built for: starting the TUI on a terminal still checks, prompts, and installs
+
 ## [0.5.10]
 
 ### Fixed

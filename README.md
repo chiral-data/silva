@@ -29,6 +29,30 @@ The script will:
 - Install the binary to an appropriate location
 - Add to PATH (Windows only)
 
+Re-running it upgrades an existing install, including one whose binary is
+currently running: the new binary is staged next to the old one and renamed into
+place, so the running process is undisturbed and the next invocation is the new
+version.
+
+### Updating
+
+Starting the TUI checks for a new release and offers to install it. Everything
+else is deliberately quieter:
+
+| Invocation | Behaviour |
+| --- | --- |
+| TUI on a terminal | Checks, offers to install |
+| `silva run <dir>` on a terminal | Checks, prints that a new version exists, runs on the current one |
+| Anything with stdin not a terminal | No check, no network request |
+| `--json` | No check, no network request |
+
+A workflow run never installs an update: the version that starts a run is the
+version that finishes it.
+
+Pass `--no-update`, or set `SILVA_NO_UPDATE_CHECK=1` (or `NO_UPDATE`, or `CI`),
+to switch the check off entirely — silva then makes no outbound request of its
+own, which matters when a workflow's network traffic is being accounted for.
+
 ### Manual Download
 
 Download pre-built binaries from the [Releases](https://github.com/chiral-data/silva/releases) page:

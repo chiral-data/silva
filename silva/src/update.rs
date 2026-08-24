@@ -2,8 +2,13 @@
 //!
 //! This module provides version checking against GitHub Releases API
 //! and interactive update prompts.
+//!
+//! What an invocation is allowed to do about updates is decided up front by
+//! [`UpdatePolicy`], not by the check itself: a batch invocation must never stop
+//! on a prompt, a running workflow must never replace the binary executing it,
+//! and a caller that opted out must not see an outbound request at all.
 
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::process::Command;
 use std::time::Duration;
 
@@ -12,6 +17,83 @@ use serde::Deserialize;
 
 const GITHUB_REPO: &str = "chiral-data/silva";
 const UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Environment variables that switch the update check off entirely.
+///
+/// `SILVA_NO_UPDATE_CHECK` is the tool's own opt-out; `NO_UPDATE` and `CI` are
+/// honoured because automation sets them already and a runner has no business
+/// making an unrequested network call in either setting.
+const OPT_OUT_VARS: [&str; 3] = ["SILVA_NO_UPDATE_CHECK", "NO_UPDATE", "CI"];
+
+/// What this invocation may do about an available update.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdatePolicy {
+    /// Do nothing at all — not even the version probe, so no network traffic.
+    Disabled,
+    /// Probe and report an available update, but never prompt and never install.
+    NotifyOnly,
+    /// Probe, prompt, and install if the user agrees.
+    Interactive,
+}
+
+/// The facts about one invocation that decide its [`UpdatePolicy`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UpdateContext {
+    /// `--no-update` was passed.
+    pub no_update_flag: bool,
+    /// One of [`OPT_OUT_VARS`] is set to something other than `0`/empty.
+    pub opted_out_by_env: bool,
+    /// Output is machine-readable, so human text would corrupt the stream.
+    pub json: bool,
+    /// Stdin is a terminal, so there is somebody to answer a prompt.
+    pub stdin_is_tty: bool,
+    /// This invocation is about to run a workflow.
+    pub is_workflow_run: bool,
+}
+
+impl UpdateContext {
+    /// Reads the parts of the context that come from the environment.
+    pub fn new(no_update_flag: bool, json: bool, is_workflow_run: bool) -> Self {
+        Self {
+            no_update_flag,
+            opted_out_by_env: env_opt_out(),
+            json,
+            stdin_is_tty: io::stdin().is_terminal(),
+            is_workflow_run,
+        }
+    }
+}
+
+/// True if any opt-out variable is set to a value other than empty or `0`.
+fn env_opt_out() -> bool {
+    OPT_OUT_VARS.iter().any(|var| match std::env::var(var) {
+        Ok(value) => {
+            let value = value.trim();
+            !value.is_empty() && value != "0" && !value.eq_ignore_ascii_case("false")
+        }
+        Err(_) => false,
+    })
+}
+
+impl UpdatePolicy {
+    /// Decides what an invocation may do about updates.
+    ///
+    /// Anything that cannot answer a prompt gets [`UpdatePolicy::Disabled`]: a
+    /// non-TTY stdin is not an interlocutor, and reading a piped stdin as
+    /// consent is how a scripted run ended up trying to overwrite itself
+    /// mid-workflow. A workflow run that *could* prompt still only gets
+    /// [`UpdatePolicy::NotifyOnly`] — the version that starts a workflow should
+    /// be the version that finishes it.
+    pub fn resolve(ctx: UpdateContext) -> Self {
+        if ctx.no_update_flag || ctx.opted_out_by_env || ctx.json || !ctx.stdin_is_tty {
+            Self::Disabled
+        } else if ctx.is_workflow_run {
+            Self::NotifyOnly
+        } else {
+            Self::Interactive
+        }
+    }
+}
 
 /// Information about an available update.
 #[derive(Debug, Clone)]
@@ -156,11 +238,46 @@ pub struct UpdateCheckResult {
     pub deferred_update: Option<String>,
 }
 
-/// Run the complete update check and prompt flow.
+impl UpdateCheckResult {
+    /// The "nothing happened" result: carry on, on this version.
+    fn inert() -> Self {
+        Self {
+            should_exit: false,
+            deferred_update: None,
+        }
+    }
+}
+
+/// Run the update flow permitted by `policy`.
 ///
 /// This is the main entry point for the update feature.
 /// Returns UpdateCheckResult indicating whether to exit and any deferred update info.
-pub async fn run_update_check() -> UpdateCheckResult {
+pub async fn run_update_check(policy: UpdatePolicy) -> UpdateCheckResult {
+    match policy {
+        UpdatePolicy::Disabled => UpdateCheckResult::inert(),
+        UpdatePolicy::NotifyOnly => run_notify_only().await,
+        UpdatePolicy::Interactive => run_interactive().await,
+    }
+}
+
+/// Report an available update and carry on, without prompting or installing.
+///
+/// Stays silent unless there is something to report: this runs alongside a
+/// workflow's own output, and "already on latest version" is noise there. A
+/// failed check is silent for the same reason — nothing was asked of the user.
+async fn run_notify_only() -> UpdateCheckResult {
+    if let Ok(Some(info)) = check_for_updates().await {
+        println!(
+            "New version available: v{} (current: v{}). Continuing on v{} for this run.",
+            info.latest_version, info.current_version, info.current_version
+        );
+        io::stdout().flush().ok();
+    }
+    UpdateCheckResult::inert()
+}
+
+/// Check, prompt, and install on confirmation.
+async fn run_interactive() -> UpdateCheckResult {
     print!("Checking for updates... ");
     io::stdout().flush().ok();
 
@@ -201,10 +318,7 @@ pub async fn run_update_check() -> UpdateCheckResult {
             println!("skipped ({e})");
         }
     }
-    UpdateCheckResult {
-        should_exit: false,
-        deferred_update: None,
-    }
+    UpdateCheckResult::inert()
 }
 
 #[cfg(test)]
@@ -220,5 +334,72 @@ mod tests {
         assert!(v2 > v1);
         assert!(v1 < v2);
         assert!(v1 == v3);
+    }
+
+    /// An interactive TUI start on a terminal: the only case that may install.
+    fn tui_on_a_terminal() -> UpdateContext {
+        UpdateContext {
+            no_update_flag: false,
+            opted_out_by_env: false,
+            json: false,
+            stdin_is_tty: true,
+            is_workflow_run: false,
+        }
+    }
+
+    #[test]
+    fn interactive_only_for_a_tui_start_on_a_terminal() {
+        assert_eq!(
+            UpdatePolicy::resolve(tui_on_a_terminal()),
+            UpdatePolicy::Interactive
+        );
+    }
+
+    #[test]
+    fn a_workflow_run_never_installs_even_on_a_terminal() {
+        let ctx = UpdateContext {
+            is_workflow_run: true,
+            ..tui_on_a_terminal()
+        };
+        assert_eq!(UpdatePolicy::resolve(ctx), UpdatePolicy::NotifyOnly);
+    }
+
+    /// The reported bug: a scripted run with stdin piped must not reach a prompt.
+    #[test]
+    fn a_piped_run_is_disabled_not_merely_unprompted() {
+        let ctx = UpdateContext {
+            stdin_is_tty: false,
+            is_workflow_run: true,
+            ..tui_on_a_terminal()
+        };
+        assert_eq!(UpdatePolicy::resolve(ctx), UpdatePolicy::Disabled);
+    }
+
+    #[test]
+    fn each_opt_out_disables_the_check_on_its_own() {
+        for ctx in [
+            UpdateContext {
+                no_update_flag: true,
+                ..tui_on_a_terminal()
+            },
+            UpdateContext {
+                opted_out_by_env: true,
+                ..tui_on_a_terminal()
+            },
+            UpdateContext {
+                json: true,
+                ..tui_on_a_terminal()
+            },
+            UpdateContext {
+                stdin_is_tty: false,
+                ..tui_on_a_terminal()
+            },
+        ] {
+            assert_eq!(
+                UpdatePolicy::resolve(ctx),
+                UpdatePolicy::Disabled,
+                "expected Disabled for {ctx:?}"
+            );
+        }
     }
 }

@@ -115,18 +115,44 @@ install_binary() {
 
     echo "${YELLOW}Installing to $INSTALL_DIR...${NC}"
 
-    # Copy binary
+    # Install by staging into the destination directory and renaming into place.
+    #
+    # A plain `cp` onto the destination fails with ETXTBSY ("Text file busy")
+    # whenever the binary being replaced is currently executing — which is
+    # exactly the case when a running silva triggers its own update. Writing a
+    # temporary file alongside the target and rename(2)-ing it over the target
+    # always works: the running process keeps its now-unlinked inode, and the
+    # next invocation picks up the new binary. The rename is atomic, so an
+    # interrupted install can never leave a half-written binary on PATH.
     if [ "$OS_TYPE" = "windows" ]; then
-        cp "$BINARY_PATH" "$INSTALL_DIR/${BINARY_NAME}.exe"
         INSTALLED_PATH="$INSTALL_DIR/${BINARY_NAME}.exe"
     else
-        # Use sudo if needed for /usr/local/bin
-        if [ "$INSTALL_DIR" = "/usr/local/bin" ] && [ ! -w "/usr/local/bin" ]; then
-            sudo cp "$BINARY_PATH" "$INSTALL_DIR/$BINARY_NAME"
-        else
-            cp "$BINARY_PATH" "$INSTALL_DIR/$BINARY_NAME"
-        fi
         INSTALLED_PATH="$INSTALL_DIR/$BINARY_NAME"
+    fi
+
+    STAGED_PATH="$INSTALL_DIR/.${BINARY_NAME}.new.$$"
+
+    # Use sudo if needed for /usr/local/bin
+    if [ "$INSTALL_DIR" = "/usr/local/bin" ] && [ ! -w "/usr/local/bin" ]; then
+        SUDO="sudo"
+    else
+        SUDO=""
+    fi
+
+    if ! $SUDO cp "$BINARY_PATH" "$STAGED_PATH"; then
+        echo "${RED}Error: Failed to write to $INSTALL_DIR${NC}"
+        $SUDO rm -f "$STAGED_PATH"
+        rm -rf "$TMP_DIR"
+        exit 1
+    fi
+
+    $SUDO chmod +x "$STAGED_PATH"
+
+    if ! $SUDO mv -f "$STAGED_PATH" "$INSTALLED_PATH"; then
+        echo "${RED}Error: Failed to install to $INSTALLED_PATH${NC}"
+        $SUDO rm -f "$STAGED_PATH"
+        rm -rf "$TMP_DIR"
+        exit 1
     fi
 
     echo "${GREEN}Installation completed: $INSTALLED_PATH${NC}"
