@@ -41,13 +41,24 @@ struct Args {
     #[arg(short = 'e', long = "env", value_name = "KEY=VALUE")]
     env: Vec<String>,
 
-    /// Never check for a new version on startup
+    /// Never check for or install a new version
     ///
-    /// The check is also skipped when stdin is not a terminal, under `--json`,
-    /// and when `SILVA_NO_UPDATE_CHECK`, `NO_UPDATE` or `CI` is set — so a
-    /// scripted run makes no outbound request silva was not asked to make.
+    /// Updating is otherwise automatic and needs no confirmation: it is verified
+    /// against the release checksum, applies only within a patch series, and
+    /// takes effect on the next start rather than the current one.
+    /// `SILVA_UPDATE=off|notify|auto` sets the same thing per environment, and
+    /// `SILVA_NO_UPDATE_CHECK`, `NO_UPDATE` or `CI` also switch it off — with no
+    /// outbound request at all.
     #[arg(long, global = true)]
     no_update: bool,
+
+    /// Restore the binary that the last automatic update replaced
+    ///
+    /// Updates keep the outgoing binary alongside the new one, so a release that
+    /// misbehaves can be undone without a network round trip. Acts immediately
+    /// and exits.
+    #[arg(long)]
+    rollback: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -95,6 +106,21 @@ enum Command {
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
+    // Rolling back is a local file operation and the reason for it is usually
+    // that this version misbehaves, so it runs before anything else does.
+    if args.rollback {
+        match silva::update::rollback() {
+            Ok(message) => {
+                println!("{message}");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     // Validation is a local, offline check: no update probe, no network, no
     // Docker — so it stays usable in CI and inside another tool.
     if let Some(Command::Validate { path, json }) = args.command {
@@ -115,6 +141,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     silva::events::set_json_mode(json);
 
+    // An update installed by an earlier invocation becomes the running version
+    // here, so this is where it is worth saying so. Reading a small cache file
+    // is all it costs, and it means an automatic update is never silent.
+    silva::update::announce_completed_update();
+
+    // Updating runs alongside the work and takes effect on the next start, so it
+    // is started before the work rather than gating it: nothing it does can
+    // disturb the version already executing.
+    let updater =
+        silva::update::UpdateTask::spawn(silva::update::UpdateMode::resolve(args.no_update));
+
     // `silva run <path>` is the explicit form; a bare `silva <path>` is the
     // deprecated alias kept for existing scripts.
     let (workflow_path, env) = match args.command {
@@ -130,20 +167,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             (args.workflow_path, args.env)
         }
     };
-
-    // The update check comes after the shape of the invocation is known, because
-    // that is what decides how far it may go. A run gets told about a new
-    // version and nothing more: the version that starts a workflow is the
-    // version that finishes it, and a binary cannot be replaced while it is
-    // executing the run anyway.
-    let update_result = silva::update::run_update_check(silva::update::UpdatePolicy::resolve(
-        silva::update::UpdateContext::new(args.no_update, json, workflow_path.is_some()),
-    ))
-    .await;
-    if update_result.should_exit {
-        // Update was performed, exit
-        return Ok(());
-    }
 
     if let Some(workflow_path) = workflow_path {
         // Validate and parse -e/--env KEY=VALUE entries before running anything
@@ -167,12 +190,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
             if !json {
                 eprintln!("{e}");
             }
+            // The run failed, which is what the caller needs to hear about;
+            // an update still in flight is abandoned rather than waited for.
             std::process::exit(1);
         }
+        updater.finish().await;
         Ok(())
     } else {
-        // TUI mode: start the terminal UI with update info
-        run_tui(update_result.deferred_update).await
+        // TUI mode: the badge comes from the last check rather than a fresh one,
+        // so the first frame is not behind a network request.
+        let result = run_tui(silva::update::cached_available_version()).await;
+        updater.finish().await;
+        result
     }
 }
 
