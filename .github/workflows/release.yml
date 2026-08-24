@@ -11,7 +11,9 @@
 #   1. Creates a GitHub release
 #   2. Builds binaries for all 6 platform combinations
 #   3. Packages them (.tar.gz for Unix, .zip for Windows)
-#   4. Uploads as release assets
+#   4. Publishes a .sha256 next to each archive, which is what silva's
+#      automatic update verifies a download against before installing it
+#   5. Uploads as release assets
 
 name: Release
 
@@ -117,11 +119,31 @@ jobs:
           tar czf ${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
           mv ${{ matrix.asset_name }}.tar.gz ../../../
 
+      # The digest is what an unattended update trusts, so it is published as
+      # its own asset rather than left to the release notes.
+      - name: Checksum artifact (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
+          else
+            shasum -a 256 ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
+          fi
+          cat ${{ matrix.asset_name }}.tar.gz.sha256
+
       - name: Prepare artifact (Windows)
         if: matrix.os == 'windows-latest'
         run: |
           cd target/${{ matrix.target }}/release
           7z a ../../../${{ matrix.asset_name }}.zip ${{ matrix.artifact_name }}
+
+      - name: Checksum artifact (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          $asset = "${{ matrix.asset_name }}.zip"
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $asset).Hash.ToLower()
+          "$hash  $asset" | Out-File -Encoding ascii -NoNewline "$asset.sha256"
+          Get-Content "$asset.sha256"
 
       - name: Upload Release Asset (Unix)
         if: matrix.os != 'windows-latest'
@@ -144,3 +166,25 @@ jobs:
           asset_path: ./${{ matrix.asset_name }}.zip
           asset_name: ${{ matrix.asset_name }}.zip
           asset_content_type: application/zip
+
+      - name: Upload Checksum (Unix)
+        if: matrix.os != 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.asset_name }}.tar.gz.sha256
+          asset_name: ${{ matrix.asset_name }}.tar.gz.sha256
+          asset_content_type: text/plain
+
+      - name: Upload Checksum (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.asset_name }}.zip.sha256
+          asset_name: ${{ matrix.asset_name }}.zip.sha256
+          asset_content_type: text/plain

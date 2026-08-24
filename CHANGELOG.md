@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.12]
+
+### Added
+
+- Updates install themselves, without asking (#101)
+  - A patch release is fetched in the background, verified, and renamed into place while the current binary keeps running; it becomes the running version on the next start, which says `Now running silva v0.5.12, updated from v0.5.11.` once. Separating install from activation is what makes an unattended update safe — nothing changes underneath a workflow, so the version that starts a run is still the version that finishes it
+  - `silva --rollback` restores the binary the last update replaced. It is kept next to the new one (a hard link, so it costs nothing), and restoring it needs no network
+  - `SILVA_UPDATE=auto|notify|off` sets the policy; `auto` is the default for every kind of invocation — TUI, `silva run`, `--json`, terminal or pipe. `--no-update` and the existing `SILVA_NO_UPDATE_CHECK`/`NO_UPDATE`/`CI` opt-outs still switch it off entirely, and an explicit `SILVA_UPDATE` overrides them
+  - `release.yml` now publishes a `.sha256` beside every release asset, which is what an update verifies against
+
+### Changed
+
+- The confirmation prompt is gone, along with the reasons it existed (#101)
+  - Nothing is asked of the user at any point, and no invocation self-modifies mid-run
+  - Installing no longer shells out to `curl … install.sh | sh`. The release asset is downloaded directly and checked against its published SHA-256, so the trust anchor is a digest rather than whatever is on the default branch at that moment. A download that does not match is discarded
+  - Only within a patch series: a minor or major release is reported rather than installed, since that is the boundary where behaviour is allowed to change
+  - Only when silva's own binary is writable, so a packaged or system-wide install is left to whoever owns it
+  - The version check is cached for a day, so it costs roughly one request a day rather than one per invocation. The TUI's update badge is read from that cache, so the first frame no longer waits on a network request
+  - Under `--json`, an update reports itself as a `note` event, which may arrive after the terminal `workflow` event
+
 ## [0.5.11]
 
 ### Fixed
