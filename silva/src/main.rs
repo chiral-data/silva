@@ -40,6 +40,14 @@ struct Args {
     /// independent of workflow.toml's `env_passthrough` allowlist.
     #[arg(short = 'e', long = "env", value_name = "KEY=VALUE")]
     env: Vec<String>,
+
+    /// Never check for a new version on startup
+    ///
+    /// The check is also skipped when stdin is not a terminal, under `--json`,
+    /// and when `SILVA_NO_UPDATE_CHECK`, `NO_UPDATE` or `CI` is set — so a
+    /// scripted run makes no outbound request silva was not asked to make.
+    #[arg(long, global = true)]
+    no_update: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -107,22 +115,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     silva::events::set_json_mode(json);
 
-    // Check for updates on startup. Skipped for --json: it prints human text
-    // onto the stream a caller is parsing, prompts for input, and reaches the
-    // network besides.
-    let update_result = if json {
-        silva::update::UpdateCheckResult {
-            should_exit: false,
-            deferred_update: None,
-        }
-    } else {
-        silva::update::run_update_check().await
-    };
-    if update_result.should_exit {
-        // Update was performed, exit
-        return Ok(());
-    }
-
     // `silva run <path>` is the explicit form; a bare `silva <path>` is the
     // deprecated alias kept for existing scripts.
     let (workflow_path, env) = match args.command {
@@ -138,6 +130,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
             (args.workflow_path, args.env)
         }
     };
+
+    // The update check comes after the shape of the invocation is known, because
+    // that is what decides how far it may go. A run gets told about a new
+    // version and nothing more: the version that starts a workflow is the
+    // version that finishes it, and a binary cannot be replaced while it is
+    // executing the run anyway.
+    let update_result = silva::update::run_update_check(silva::update::UpdatePolicy::resolve(
+        silva::update::UpdateContext::new(args.no_update, json, workflow_path.is_some()),
+    ))
+    .await;
+    if update_result.should_exit {
+        // Update was performed, exit
+        return Ok(());
+    }
 
     if let Some(workflow_path) = workflow_path {
         // Validate and parse -e/--env KEY=VALUE entries before running anything
