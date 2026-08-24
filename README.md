@@ -36,22 +36,45 @@ version.
 
 ### Updating
 
-Starting the TUI checks for a new release and offers to install it. Everything
-else is deliberately quieter:
+Silva keeps itself up to date and never asks. A patch release is downloaded in
+the background, verified, and put in place while the current version carries on
+running — it becomes the running version the next time you start silva, which
+then says so once:
 
-| Invocation | Behaviour |
+```
+Now running silva v0.5.12, updated from v0.5.11.
+```
+
+Nothing changes underneath a workflow: the version that starts a run is the
+version that finishes it, whatever gets installed while it runs.
+
+What is and is not installed automatically:
+
+| Situation | Behaviour |
 | --- | --- |
-| TUI on a terminal | Checks, offers to install |
-| `silva run <dir>` on a terminal | Checks, prints that a new version exists, runs on the current one |
-| Anything with stdin not a terminal | No check, no network request |
-| `--json` | No check, no network request |
+| A patch release (`0.5.11` → `0.5.12`) | Verified and installed, active next start |
+| A minor or major release (`0.5.11` → `0.6.0`) | Reported, not installed — behaviour is allowed to change across that boundary |
+| The release publishes no SHA-256 to verify against | Reported, not installed |
+| Silva's own binary is not writable (a system or packaged install) | Reported, not installed |
 
-A workflow run never installs an update: the version that starts a run is the
-version that finishes it.
+Every download is checked against the `.sha256` published alongside the release
+asset, and a mismatch is discarded rather than installed.
 
-Pass `--no-update`, or set `SILVA_NO_UPDATE_CHECK=1` (or `NO_UPDATE`, or `CI`),
-to switch the check off entirely — silva then makes no outbound request of its
-own, which matters when a workflow's network traffic is being accounted for.
+`silva --rollback` restores the binary the last update replaced — it is kept
+next to the new one, so this needs no network.
+
+To turn it down or off:
+
+| Setting | Effect |
+| --- | --- |
+| `SILVA_UPDATE=auto` | The default: check, verify, install |
+| `SILVA_UPDATE=notify` | Check and report, install nothing |
+| `SILVA_UPDATE=off`, `--no-update` | No check, no network request at all |
+| `SILVA_NO_UPDATE_CHECK`, `NO_UPDATE`, `CI` | Same as `off`, unless `SILVA_UPDATE` says otherwise |
+
+The check itself is cached for a day, so it costs roughly one request a day
+rather than one per invocation — and none at all when switched off, which
+matters when a workflow's network traffic is being accounted for.
 
 ### Manual Download
 
@@ -126,9 +149,10 @@ Four event types:
 | `note` | silva's own diagnostics, which would otherwise be bare text on the stream |
 
 Every line on stdout is a JSON object, including diagnostics and warnings, so a
-consumer never has to skip unparseable lines. The startup update check is
-skipped in this mode. The process exit code is unchanged: `0` on success, `1` on
-failure.
+consumer never has to skip unparseable lines — an automatic update reports
+itself as a `note` event like any other diagnostic, and may arrive after the
+terminal `workflow` event. The process exit code is unchanged: `0` on success,
+`1` on failure.
 
 ## Checking a Workflow
 
