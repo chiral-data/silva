@@ -5,6 +5,7 @@ use std::fmt;
 pub enum DockerError {
     BollardError(bollard::errors::Error),
     ImageBuildFailed(String),
+    ImagePullFailed(String),
     ContainerCreateFailed(String),
     ContainerStartFailed(String),
     ScriptExecutionFailed { script: String, exit_code: i64 },
@@ -19,6 +20,7 @@ impl fmt::Display for DockerError {
         match self {
             DockerError::BollardError(err) => write!(f, "Docker API error: {err}"),
             DockerError::ImageBuildFailed(msg) => write!(f, "Image build failed: {msg}"),
+            DockerError::ImagePullFailed(msg) => write!(f, "Image pull failed: {msg}"),
             DockerError::ContainerCreateFailed(msg) => {
                 write!(f, "Container creation failed: {msg}")
             }

@@ -124,6 +124,14 @@ pub fn has_nvidia_gpu() -> bool {
 }
 
 /// Represents the source of a container image.
+///
+/// ⚠️ **Do not remove this as dead code.** Nothing in this repository calls
+/// `get_image_source`, so a repo-local search — and `cargo check` — will both
+/// suggest the type is unused. It is not: `job_config` is consumed out of this
+/// repository through a path dependency, and that consumer matches every
+/// variant below, including routing `SifFile` to a different container runtime.
+///
+/// Verify against the downstream build, not against this workspace.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ImageSource {
     /// Pull image from a Docker registry (e.g., "ubuntu:22.04").
@@ -160,6 +168,10 @@ impl Container {
     }
 
     /// Returns the image source type based on the image string and registry hint.
+    ///
+    /// ⚠️ Called only from outside this repository — see the note on
+    /// [`ImageSource`] before concluding it is unused.
+    ///
     /// - `registry = "local"` → LocalImage (skip registry prefix resolution)
     /// - Paths ending with ".tar" → TarFile
     /// - Paths ending with ".sif" → SifFile
