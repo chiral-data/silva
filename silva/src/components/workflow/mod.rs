@@ -1,3 +1,4 @@
+pub mod apps;
 pub mod home;
 pub mod job_folder;
 pub mod manager;
@@ -5,6 +6,7 @@ pub mod param_source;
 pub mod params_editor;
 pub mod workflow_folder;
 
+pub use apps::{LocalApp, apps_to_build, discover_apps};
 pub use home::{WorkflowHome, WorkflowHomeError};
 pub use job_folder::{JobError, JobFolder, JobScanner};
 pub use manager::{WorkflowError, WorkflowManager};

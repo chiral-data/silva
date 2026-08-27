@@ -1,0 +1,2 @@
+name = "failing-app"
+description = "Test that a failing apps/ build aborts before any container starts"

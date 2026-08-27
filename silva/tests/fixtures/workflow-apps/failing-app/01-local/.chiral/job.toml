@@ -1,0 +1,9 @@
+name = "Never Runs"
+description = "Its image cannot be built, so this job must never start"
+outputs = ["never.txt"]
+
+[container]
+image = "silva-selftest-fail:2026_08_27"
+
+[scripts]
+run = "run.sh"

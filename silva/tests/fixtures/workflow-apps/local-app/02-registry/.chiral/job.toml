@@ -1,0 +1,10 @@
+name = "Registry Image"
+description = "A registry-qualified image, which must not be treated as a local app"
+inputs = ["proof.txt"]
+outputs = ["done.txt"]
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"

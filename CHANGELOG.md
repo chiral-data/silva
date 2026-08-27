@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.14]
+
+### Added
+
+- Workflows that ship their own `apps/` folder now have those images built before the run starts (#84). A workflow can carry one Dockerfile directory per image it needs, and the image tag is derived from the directory name by splitting on the last `_` followed by four digits — `admet_pipeline_2026_06_02` becomes `admet_pipeline:2026_06_02`. Images already present are skipped, so a second run rebuilds nothing, and a workflow with no `apps/` folder is untouched.
+
+  This is a correctness gap rather than a convenience. silva applies no default-registry prefix on the execution path — `full_image_name()` belongs to the `applications.json` catalog panel and only renders a display string — so a job naming a bare `p2rank:2026_07_10` went to `pull_image`, missed the local check, and was then requested from Docker Hub, where it does not exist. **Six workflows in collab-workflows — 023, 024, 028, 033, 034 and 035 — could not run from a clean machine**, requiring a manual `docker build` per app with the tag derived by hand.
+
+  Matching on the exact image string makes two cases fall out with no special handling. An app directory nothing references is not built: `workflow-023` ships two `admet_pipeline` versions and uses one. And a registry-qualified image can never equal a derived tag, so `workflow-028`'s `ghcr.io/chiral-data/boltz:2025_09_05` still goes to the pull path while its four local images are built.
+
+  ⚠️ The derivation is deliberately **not** the one in that repo's `apps/build.sh`, which cuts on the first underscore (`cut -d'_' -f1`) and so mis-derives six of the ten app directories that exist — `admet:pipeline_2026_06_02` rather than `admet_pipeline:2026_06_02`. The four it happens to get right are the single-word and hyphenated names. The convention implemented here is the one the job configs actually use, checked against all ten.
+
+  Wired into both run paths, since the TUI and headless modes each build their own executor and run their own pre-checks. Both resolve `apps/` against the source workflow folder rather than the temp copy, so a `.dockerignore` or symlink behaves as authored.
+
+  Covered by three new integration tests over committed fixtures in `silva/tests/fixtures/workflow-apps/`, which exercise the negative cases as well as the happy path: an app directory nothing references is not built, a registry-qualified image is not treated as a local app, a second run does not rebuild, a workflow with no `apps/` folder produces no pre-flight output at all, and a failing build aborts before any container starts.
+
+  ⚠️ The unreferenced fixture app's Dockerfile **fails on purpose** (`RUN ... && exit 7`). Nothing references it, so it must never be built — and if the referenced-only filter ever regresses, the build breaks loudly instead of the test passing quietly. Both that filter and the skip-if-present check were confirmed by mutation: disabling each one makes the test fail, at the assertion you would expect.
+
+  Note this covers the pre-execution build in #84. The TUI image badge and the on-demand build keybinding described there are not included.
+
+### Fixed
+
+- A failing image build now says why (#84). `build_image` moved `output.stream` into an `if let` guarded on `contains("Successfully built")`, discarding every other fragment — so nothing the build printed reached the log. Worse, bollard declares its stream error as `#[error("Docker stream error")]`, and `to_string()` therefore drops the inner string, which is exactly where Docker puts the failing command and its exit code. A build that failed reported `Image build failed: Docker stream error` and nothing else; it now streams the `Step` lines and the build's own output, and reports `The command '/bin/sh -c ...' returned a non-zero code: 3`.
+
+  `pull_image` has the same discarded-message bug one match arm away (`executor.rs:544`). Left alone here as it is on the pull path, and worth its own fix.
+
+- `build_image` can now tag an image something other than `:latest` (#84). It took a bare name and appended `":latest"`, so it could not produce `p2rank:2026_07_10`. It now takes the full `name:tag`. It had no callers, so nothing depended on the old shape.
+
+### Removed
+
+- Dropped the `mkdir -p .../workflow-007/input_files` workaround from the `workflow-e2e` CI job (#106). It papered over `workflow-007` having no tracked `input_files/` folder, which is now fixed at the source with an `input_files/.gitkeep` in collab-workflows. ⚠️ That change must land there first, or this job goes red on `main` with no silva change.
+
+- Deleted `silva/src/components/workflow/job.rs`, which was byte-identical to the live `job_folder.rs` (#105). It was left behind by the `job.rs` → `job_folder.rs` rename in v0.3.7, which added the new name without removing the old file, and `mod.rs` never declared it. An exact duplicate of a live file is worse than ordinary dead code: editing it silently does nothing, and nothing indicates which copy is authoritative. Pulled forward from #105 because #84 adds a module to that same directory.
+
 ## [0.5.13]
 
 ### Changed
