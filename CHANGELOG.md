@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Wired into both run paths, since the TUI and headless modes each build their own executor and run their own pre-checks. Both resolve `apps/` against the source workflow folder rather than the temp copy, so a `.dockerignore` or symlink behaves as authored.
 
+  Covered by three new integration tests over committed fixtures in `silva/tests/fixtures/workflow-apps/`, which exercise the negative cases as well as the happy path: an app directory nothing references is not built, a registry-qualified image is not treated as a local app, a second run does not rebuild, a workflow with no `apps/` folder produces no pre-flight output at all, and a failing build aborts before any container starts.
+
+  ⚠️ The unreferenced fixture app's Dockerfile **fails on purpose** (`RUN ... && exit 7`). Nothing references it, so it must never be built — and if the referenced-only filter ever regresses, the build breaks loudly instead of the test passing quietly. Both that filter and the skip-if-present check were confirmed by mutation: disabling each one makes the test fail, at the assertion you would expect.
+
   Note this covers the pre-execution build in #84. The TUI image badge and the on-demand build keybinding described there are not included.
 
 ### Fixed
@@ -30,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `build_image` can now tag an image something other than `:latest` (#84). It took a bare name and appended `":latest"`, so it could not produce `p2rank:2026_07_10`. It now takes the full `name:tag`. It had no callers, so nothing depended on the old shape.
 
 ### Removed
+
+- Dropped the `mkdir -p .../workflow-007/input_files` workaround from the `workflow-e2e` CI job (#106). It papered over `workflow-007` having no tracked `input_files/` folder, which is now fixed at the source with an `input_files/.gitkeep` in collab-workflows. ⚠️ That change must land there first, or this job goes red on `main` with no silva change.
 
 - Deleted `silva/src/components/workflow/job.rs`, which was byte-identical to the live `job_folder.rs` (#105). It was left behind by the `job.rs` → `job_folder.rs` rename in v0.3.7, which added the new name without removing the old file, and `mod.rs` never declared it. An exact duplicate of a live file is worse than ordinary dead code: editing it silently does nothing, and nothing indicates which copy is authoritative. Pulled forward from #105 because #84 adds a module to that same directory.
 

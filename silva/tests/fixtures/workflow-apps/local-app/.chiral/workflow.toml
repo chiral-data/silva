@@ -1,0 +1,5 @@
+name = "local-app"
+description = "Test that images defined in apps/ are built before the run starts"
+
+[dependencies]
+02-registry = ["01-local"]

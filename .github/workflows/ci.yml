@@ -98,16 +98,6 @@ jobs:
           path: silva/target
           key: ${{ runner.os }}-cargo-e2e-target-${{ hashFiles('silva/Cargo.lock') }}
 
-      # workflow-007's pre-check requires an `input_files/` folder because
-      # 01-download has no dependencies. The folder is *empty* -- that node
-      # downloads its own data from RCSB -- and git cannot store an empty
-      # directory, so a fresh clone of collab-workflows does not have it. The
-      # script therefore only ever worked on machines where someone had created
-      # it by hand. Create it here; the durable fix is an `input_files/.gitkeep`
-      # in collab-workflows.
-      - name: Create the empty input_files/ the pre-check requires
-        run: mkdir -p collab-workflows/workflows/workflow-007/input_files
-
       # Runs workflow-007 headlessly: three nodes, all on
       # ghcr.io/chiral-data/pocketeer (public, ~1.26 GB, pulled once). silva exits
       # non-zero when a job fails, so this is a real gate.

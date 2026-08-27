@@ -1,0 +1,9 @@
+name = "Local App"
+description = "Runs on an image built from apps/, referenced by its derived tag"
+outputs = ["proof.txt"]
+
+[container]
+image = "silva-selftest:2026_08_27"
+
+[scripts]
+run = "run.sh"
