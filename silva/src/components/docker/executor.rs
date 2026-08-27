@@ -206,6 +206,18 @@ pub struct DockerExecutor {
     host_gpu: GpuRuntime,
 }
 
+/// Renders a bollard error, recovering the message its `Display` throws away.
+///
+/// `Error::DockerStreamError` is declared as `#[error("Docker stream error")]`,
+/// so the string Docker actually sent -- for a failing build, the command and
+/// its exit code -- never reaches the user through `to_string()`.
+fn stream_error_message(err: &bollard::errors::Error) -> String {
+    match err {
+        bollard::errors::Error::DockerStreamError { error } => error.trim().to_string(),
+        other => other.to_string(),
+    }
+}
+
 impl DockerExecutor {
     /// Creates a new Docker executor.
     ///
@@ -425,21 +437,42 @@ impl DockerExecutor {
         while let Some(result) = stream.next().await {
             match result {
                 Ok(output) => {
-                    if let Some(id) = output.stream
-                        && id.contains("Successfully built")
-                    {
-                        image_id = id
-                            .split_whitespace()
-                            .last()
-                            .unwrap_or("")
-                            .trim()
-                            .to_string();
-                    }
                     if let Some(error) = output.error {
-                        return Err(DockerError::ImageBuildFailed(error));
+                        let detail = output
+                            .error_detail
+                            .and_then(|d| d.message)
+                            .map(|m| m.trim().to_string())
+                            .filter(|m| !m.is_empty() && m != error.trim())
+                            .map(|m| format!(" ({m})"))
+                            .unwrap_or_default();
+                        return Err(DockerError::ImageBuildFailed(format!(
+                            "{}{detail}",
+                            error.trim()
+                        )));
+                    }
+
+                    if let Some(text) = output.stream {
+                        // Docker sends build output in fragments that may carry
+                        // several lines or just a newline. Stream the real
+                        // content through so a failing build is diagnosable
+                        // from the log alone.
+                        for line in text.lines().filter(|l| !l.trim().is_empty()) {
+                            let log_line =
+                                LogLine::new(LogSource::Stdout, line.trim_end().to_string());
+                            self.tx_send(JobStatus::BuildingImage, log_line).await?;
+                        }
+
+                        if text.contains("Successfully built") {
+                            image_id = text
+                                .split_whitespace()
+                                .last()
+                                .unwrap_or("")
+                                .trim()
+                                .to_string();
+                        }
                     }
                 }
-                Err(e) => return Err(DockerError::ImageBuildFailed(e.to_string())),
+                Err(e) => return Err(DockerError::ImageBuildFailed(stream_error_message(&e))),
             }
         }
 
@@ -1271,6 +1304,26 @@ impl DockerExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_stream_error_message_recovers_the_discarded_string() {
+        // bollard declares this variant as #[error("Docker stream error")], so
+        // to_string() drops the only useful part.
+        let err = bollard::errors::Error::DockerStreamError {
+            error: "  The command '/bin/sh -c false' returned a non-zero code: 1\n".to_string(),
+        };
+        assert_eq!(err.to_string(), "Docker stream error");
+        assert_eq!(
+            stream_error_message(&err),
+            "The command '/bin/sh -c false' returned a non-zero code: 1"
+        );
+    }
+
+    #[test]
+    fn test_stream_error_message_passes_other_variants_through() {
+        let err = bollard::errors::Error::RequestTimeoutError;
+        assert_eq!(stream_error_message(&err), err.to_string());
+    }
 
     #[test]
     fn test_docker_executor_creation() {
