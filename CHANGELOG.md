@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.13]
+
+### Changed
+
+- CI can now fail when tests fail (#106). The silva test step carried `continue-on-error: true`, justified in a comment as *"Silva has some pre-existing test failures"* — there are none. Measured under the exact command CI runs: **112 passing, 0 failing** (104 lib, 2 pre-check integration, 6 Docker integration). The setting was discarding a working signal, including the only tests that run a workflow end to end.
+- A real published workflow now runs on every build (#106). A new `workflow-e2e` job checks out `collab-workflows` beside silva and runs `test_workflows.sh`, which executes `workflow-007` headlessly — three dependent nodes, all on the public `ghcr.io/chiral-data/pocketeer` image, pulled once. silva exits non-zero when a job fails, so this is a real gate rather than a report.
+
+  Two deliberate trade-offs, recorded so they are not mistaken for oversights. `01-download` fetches from `files.rcsb.org`, so an outage there can fail the job with no silva change — and because the job is blocking on pull requests, it will block them while it lasts. If that becomes a problem the answer is a retry or a lighter fixture, **not** re-adding `continue-on-error`. And `collab-workflows` is tracked at its default branch rather than pinned, so silva is verified against the workflows users actually run, at the cost of an external commit being able to turn CI red.
+
+  Wiring it up exposed that the script had **never** been reproducible from a clean checkout: workflow-007's pre-check requires an `input_files/` folder, that folder is empty because `01-download` fetches its own data, and git cannot store an empty directory — so it only worked on machines where someone had created it by hand. CI creates it; the durable fix is an `input_files/.gitkeep` in collab-workflows.
+
+  Note what this gate does and does not prove: that silva loads a real workflow, resolves its dependency order, pulls the image, runs three containers and reports success. It does not check the scientific output — `03-visualize` currently collects zero files and still completes, which is the workflow's business rather than silva's.
+
+- The three-OS build matrix runs on push to main/master only, not on pull requests (#106). It was the slowest part of the workflow — windows ~274s, macos ~210s — and it re-compiles what `test` and `workflow-e2e` already build on Linux, so paying it per pull request bought little. Cross-platform breakage is caught on merge instead. Pull requests now run `test` and `workflow-e2e`, both blocking.
+
+### Fixed
+
+- A missing Docker daemon no longer reports the integration tests as passing (#106). `require_docker()` called `std::process::exit(0)`, which ended the whole test binary with a **success** status: the harness printed `running 6 tests`, one truncated line, then nothing — no summary, exit code 0, and `cargo test` reported a pass. Five of the six tests in `integration_complete.rs` called it, so one absent daemon silently took four others down with it.
+
+  It is now `docker_available() -> bool`, which each test branches on and returns from itself, so all six are reported — one running, five printing `[SKIP]`.
+
 ## [0.5.12]
 
 ### Added

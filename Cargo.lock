@@ -1318,7 +1318,7 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
 name = "job_config"
-version = "0.5.12"
+version = "0.5.13"
 dependencies = [
  "serde",
  "serde_json",
@@ -2232,7 +2232,7 @@ dependencies = [
 
 [[package]]
 name = "silva"
-version = "0.5.12"
+version = "0.5.13"
 dependencies = [
  "arboard",
  "base64",
