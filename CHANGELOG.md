@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Two deliberate trade-offs, recorded so they are not mistaken for oversights. `01-download` fetches from `files.rcsb.org`, so an outage there can fail the job with no silva change — and because the job is blocking on pull requests, it will block them while it lasts. If that becomes a problem the answer is a retry or a lighter fixture, **not** re-adding `continue-on-error`. And `collab-workflows` is tracked at its default branch rather than pinned, so silva is verified against the workflows users actually run, at the cost of an external commit being able to turn CI red.
 
+  Wiring it up exposed that the script had **never** been reproducible from a clean checkout: workflow-007's pre-check requires an `input_files/` folder, that folder is empty because `01-download` fetches its own data, and git cannot store an empty directory — so it only worked on machines where someone had created it by hand. CI creates it; the durable fix is an `input_files/.gitkeep` in collab-workflows.
+
   Note what this gate does and does not prove: that silva loads a real workflow, resolves its dependency order, pulls the image, runs three containers and reports success. It does not check the scientific output — `03-visualize` currently collects zero files and still completes, which is the workflow's business rather than silva's.
 
 ### Fixed
