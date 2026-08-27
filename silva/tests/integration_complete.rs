@@ -64,21 +64,27 @@ fn run_silva(fixture_name: &str) -> (bool, String, Option<PathBuf>) {
     (output.status.success(), stdout, temp_path)
 }
 
-/// Check if Docker is available, skip test if not
-fn require_docker() {
-    let output = Command::new("docker").arg("info").output();
-    match output {
-        Ok(o) if o.status.success() => {}
-        _ => {
-            eprintln!("Docker is not available, skipping integration test");
-            std::process::exit(0);
-        }
-    }
+/// Whether a Docker daemon is reachable.
+///
+/// Callers must branch on this and return themselves. This used to be
+/// `require_docker()`, which called `std::process::exit(0)` when Docker was
+/// missing -- ending the whole test binary with a *success* status, so every
+/// remaining test in this file was silently never run and `cargo test` reported
+/// a pass. Five of the six tests here call it, so one absent daemon took four
+/// others down with it.
+fn docker_available() -> bool {
+    matches!(
+        Command::new("docker").arg("info").output(),
+        Ok(o) if o.status.success()
+    )
 }
 
 #[test]
 fn test_completed_job_moved_to_complete() {
-    require_docker();
+    if !docker_available() {
+        eprintln!("[SKIP] test_completed_job_moved_to_complete — Docker not available");
+        return;
+    }
 
     let (success, _stdout, temp_path) = run_silva("two-node-basic");
     assert!(success, "Workflow should succeed");
@@ -137,7 +143,10 @@ fn test_cross_node_path_access_fails() {
 
 #[test]
 fn test_inputs_contract_still_works() {
-    require_docker();
+    if !docker_available() {
+        eprintln!("[SKIP] test_inputs_contract_still_works — Docker not available");
+        return;
+    }
 
     let (success, _stdout, temp_path) = run_silva("inputs-contract");
     assert!(success, "Workflow should succeed using inputs/ contract");
@@ -163,7 +172,10 @@ fn test_inputs_contract_still_works() {
 
 #[test]
 fn test_three_node_chain_all_moved() {
-    require_docker();
+    if !docker_available() {
+        eprintln!("[SKIP] test_three_node_chain_all_moved — Docker not available");
+        return;
+    }
 
     let (success, _stdout, temp_path) = run_silva("three-node-chain");
     assert!(success, "Three-node workflow should succeed");
@@ -192,7 +204,10 @@ fn test_three_node_chain_all_moved() {
 
 #[test]
 fn test_failed_job_not_moved() {
-    require_docker();
+    if !docker_available() {
+        eprintln!("[SKIP] test_failed_job_not_moved — Docker not available");
+        return;
+    }
 
     let (success, _stdout, temp_path) = run_silva("failed-job");
     assert!(
@@ -228,7 +243,12 @@ fn test_failed_job_not_moved() {
 
 #[test]
 fn test_brace_glob_pattern_copies_only_matching_files() {
-    require_docker();
+    if !docker_available() {
+        eprintln!(
+            "[SKIP] test_brace_glob_pattern_copies_only_matching_files — Docker not available"
+        );
+        return;
+    }
 
     let (success, _stdout, temp_path) = run_silva("brace-glob");
     assert!(

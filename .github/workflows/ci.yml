@@ -53,13 +53,61 @@ jobs:
 
       - name: Run tests (silva)
         run: cargo test -p silva --verbose -- --test-threads=1
-        continue-on-error: true  # Silva has some pre-existing test failures
 
       - name: Check formatting
         run: cargo fmt --all -- --check
 
       - name: Run clippy
         run: cargo clippy --workspace -- -D warnings
+
+  workflow-e2e:
+    name: Workflow E2E
+    runs-on: ubuntu-latest
+    steps:
+      # test_workflows.sh runs `silva run ../collab-workflows/workflows/workflow-007`,
+      # so the two checkouts must be siblings and the script must run from inside
+      # this one. Note this repo also contains a `silva/` crate directory, so the
+      # path below yields silva/silva/... -- the `cd silva` target is the outer one.
+      - name: Checkout silva
+        uses: actions/checkout@v4
+        with:
+          path: silva
+
+      # Tracked at the default branch on purpose: silva is verified against the
+      # workflows users actually run, rather than a pinned snapshot that drifts.
+      # The trade-off is real -- a commit in that repo can turn this red with
+      # nobody having touched silva.
+      - name: Checkout collab-workflows
+        uses: actions/checkout@v4
+        with:
+          repository: chiral-data/collab-workflows
+          path: collab-workflows
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('silva/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: silva/target
+          key: ${{ runner.os }}-cargo-e2e-target-${{ hashFiles('silva/Cargo.lock') }}
+
+      # Runs workflow-007 headlessly: three nodes, all on
+      # ghcr.io/chiral-data/pocketeer (public, ~1.26 GB, pulled once). silva exits
+      # non-zero when a job fails, so this is a real gate.
+      #
+      # 01-download fetches from files.rcsb.org, so an outage there can fail this
+      # job with no silva change. If that becomes a problem the answer is a retry
+      # or a lighter fixture -- not `continue-on-error`, which is what this same
+      # commit removes from the test job above.
+      - name: Run a real workflow end to end
+        run: cd silva && ./test_workflows.sh
 
   build:
     name: Build
