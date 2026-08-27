@@ -2,11 +2,10 @@
 // # This file demonstrates the job configuration format
 //
 // [container]
-// # Option 1: Use a Docker image
-// docker_image = "ubuntu:22.04"
-//
-// # Option 2: Use a Dockerfile (uncomment to use instead)
-// # dockerfile = "./Dockerfile"
+// image = "ubuntu:22.04"        # registry image
+// # image = "./image.tar"       # Docker tar archive
+// # image = "./container.sif"   # Singularity/Apptainer image
+// # registry = "local"          # locally-built; skip registry resolution
 //
 // [scripts]
 // # All script fields are optional with default values:
