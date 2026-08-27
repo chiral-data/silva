@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Note what this gate does and does not prove: that silva loads a real workflow, resolves its dependency order, pulls the image, runs three containers and reports success. It does not check the scientific output — `03-visualize` currently collects zero files and still completes, which is the workflow's business rather than silva's.
 
+- The three-OS build matrix runs on push to main/master only, not on pull requests (#106). It was the slowest part of the workflow — windows ~274s, macos ~210s — and it re-compiles what `test` and `workflow-e2e` already build on Linux, so paying it per pull request bought little. Cross-platform breakage is caught on merge instead. Pull requests now run `test` and `workflow-e2e`, both blocking.
+
 ### Fixed
 
 - A missing Docker daemon no longer reports the integration tests as passing (#106). `require_docker()` called `std::process::exit(0)`, which ended the whole test binary with a **success** status: the harness printed `running 6 tests`, one truncated line, then nothing — no summary, exit code 0, and `cargo test` reported a pass. Five of the six tests in `integration_complete.rs` called it, so one absent daemon silently took four others down with it.

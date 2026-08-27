@@ -119,8 +119,13 @@ jobs:
       - name: Run a real workflow end to end
         run: cd silva && ./test_workflows.sh
 
+  # Push to main/master only. The three-OS matrix is the slowest part of this
+  # workflow (windows ~274s, macos ~210s) and it re-checks what `test` and
+  # `workflow-e2e` already compile on Linux, so paying it on every pull request
+  # buys little. Cross-platform breakage is caught on merge instead.
   build:
     name: Build
+    if: github.event_name == 'push'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
