@@ -140,6 +140,7 @@ use std::path::Path;
 use tokio::sync::mpsc;
 
 use crate::components::workflow;
+use crate::components::workflow::LocalApp;
 use job_config::job::JobMeta;
 use job_config::workflow::WorkflowMeta;
 
@@ -323,19 +324,71 @@ impl DockerExecutor {
             })
     }
 
+    /// Returns true when `image` is already present in the local Docker daemon.
+    ///
+    /// Used to keep the local app image build idempotent: an image that exists
+    /// is not rebuilt. `pull_image` performs the same check for its own path.
+    pub async fn image_exists_locally(&self, image: &str) -> bool {
+        self.client.inspect_image(image).await.is_ok()
+    }
+
+    /// Builds the local app images a workflow ships in its `apps/` folder,
+    /// skipping any that are already present.
+    ///
+    /// These images exist in no registry, so a job referencing one cannot be
+    /// satisfied by a pull — see `components::workflow::apps` for how they are
+    /// discovered and which of them a given workflow needs.
+    ///
+    /// A workflow with no `apps/` folder yields an empty slice and this is a
+    /// no-op.
+    pub async fn ensure_local_app_images(&self, apps: &[LocalApp]) -> Result<(), DockerError> {
+        if apps.is_empty() {
+            return Ok(());
+        }
+
+        let log_line = LogLine::new(
+            LogSource::Stdout,
+            format!(
+                "Workflow ships {} local app image(s): {}",
+                apps.len(),
+                apps.iter()
+                    .map(|a| a.image.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        );
+        self.tx_send(JobStatus::BuildingImage, log_line).await?;
+
+        for app in apps {
+            if self.image_exists_locally(&app.image).await {
+                let log_line = LogLine::new(
+                    LogSource::Stdout,
+                    format!("Local app image already built, skipping: {}", app.image),
+                );
+                self.tx_send(JobStatus::BuildingImage, log_line).await?;
+                continue;
+            }
+
+            self.build_image(&app.image, &app.dockerfile).await?;
+        }
+
+        Ok(())
+    }
+
     /// Builds a Docker image from a Dockerfile.
     ///
     /// # Arguments
     ///
-    /// * `dockerfile_path` - Path to the Dockerfile
+    /// * `image_tag` - Full `name:tag` to apply to the built image
+    /// * `dockerfile_path` - Path to the Dockerfile; its parent is the build context
     ///
     /// # Returns
     ///
-    /// * `Ok(String)` - Image ID of the built image
+    /// * `Ok(String)` - The tag the image was built under
     /// * `Err(DockerError)` - Build error
     pub async fn build_image(
         &self,
-        image_name: &str,
+        image_tag: &str,
         dockerfile_path: &Path,
     ) -> Result<String, DockerError> {
         // update job entry
@@ -353,14 +406,13 @@ impl DockerExecutor {
 
         // Create tar archive of the build context
         let tar_file = self.create_tar_archive(context_path)?;
-        let image_tag = format!("{image_name}:latest");
 
         let build_options = BuildImageOptions {
             dockerfile: path
                 .file_name()
                 .and_then(|s| s.to_str())
                 .unwrap_or("Dockerfile"),
-            t: &image_tag,
+            t: image_tag,
             rm: true,
             ..Default::default()
         };
@@ -393,11 +445,11 @@ impl DockerExecutor {
 
         let log_line = LogLine::new(
             LogSource::Stdout,
-            format!("Building image complete with image id: {image_id}"),
+            format!("Built {image_tag} with image id: {image_id}"),
         );
         self.tx_send(JobStatus::BuildingImage, log_line).await?;
 
-        Ok(image_tag)
+        Ok(image_tag.to_string())
     }
 
     /// Pulls a Docker image from a registry.

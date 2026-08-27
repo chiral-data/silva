@@ -166,6 +166,7 @@ pub async fn run_workflow(
     let sorted_jobs_clone = sorted_jobs.clone();
     let temp_workflow_path_clone = temp_workflow_path.clone();
     let cli_env_vars = cli_env_vars.to_vec();
+    let source_workflow_path = workflow_path.clone();
 
     // Spawn workflow execution task
     let exec_handle = tokio::spawn(async move {
@@ -184,6 +185,24 @@ pub async fn run_workflow(
             }
         };
         docker_executor.detect_host_gpu().await;
+
+        // Build the local app images this workflow ships in apps/, if any.
+        // Their tags exist in no registry, so pulling cannot satisfy them.
+        // The build context is the source folder, not the temp copy, so a
+        // .dockerignore or symlink behaves as authored.
+        let local_apps =
+            crate::components::workflow::apps_to_build(&source_workflow_path, &sorted_jobs_clone);
+        if let Err(e) = docker_executor.ensure_local_app_images(&local_apps).await {
+            let log_line = LogLine::new(
+                LogSource::Stderr,
+                format!("Local app image build failed: {e}"),
+            );
+            let _ = tx.send((0, JobStatus::Failed, log_line)).await;
+            let _ = tx
+                .send((jobs_len, JobStatus::Failed, LogLine::empty()))
+                .await;
+            return Err(format!("Local app image build failed: {e}"));
+        }
 
         let mut container_registry: HashMap<String, String> = HashMap::new();
         let mut workflow_failed = false;

@@ -17,6 +17,7 @@
 //! definitions and works out which of them a given workflow actually needs, so
 //! the run can build them first.
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -114,7 +115,7 @@ pub fn discover_apps(workflow_path: &Path) -> Vec<LocalApp> {
 /// Jobs whose config fails to load are skipped rather than reported: the run
 /// path loads each config again and surfaces the error there, with the job
 /// index attached.
-fn referenced_images(jobs: &[JobFolder]) -> Vec<String> {
+fn referenced_images(jobs: &[JobFolder]) -> HashSet<String> {
     jobs.iter()
         .filter_map(|job| job.load_meta().ok())
         .map(|meta| meta.container.image)
@@ -137,7 +138,7 @@ pub fn apps_to_build(workflow_path: &Path, jobs: &[JobFolder]) -> Vec<LocalApp> 
 
     discover_apps(workflow_path)
         .into_iter()
-        .filter(|app| referenced.iter().any(|image| *image == app.image))
+        .filter(|app| referenced.contains(&app.image))
         .collect()
 }
 

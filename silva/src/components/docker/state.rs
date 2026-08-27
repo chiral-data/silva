@@ -273,6 +273,24 @@ impl State {
                 }
             }
 
+            // Build the local app images this workflow ships in apps/, if any.
+            // Their tags exist in no registry, so pulling cannot satisfy them.
+            // The build context is the source folder, not the temp copy, so a
+            // .dockerignore or symlink behaves as authored.
+            let local_apps =
+                crate::components::workflow::apps_to_build(&workflow_folder.path, &sorted_jobs);
+            if let Err(e) = docker_executor.ensure_local_app_images(&local_apps).await {
+                let log_line = LogLine::new(
+                    LogSource::Stderr,
+                    format!("Local app image build failed: {e}"),
+                );
+                tx.send((0, JobStatus::Failed, log_line)).await.unwrap();
+                tx.send((jobs.len(), JobStatus::Failed, LogLine::empty()))
+                    .await
+                    .unwrap();
+                return;
+            }
+
             // Execute jobs sequentially in dependency order
             let jobs_length = jobs.len();
 
