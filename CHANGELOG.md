@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.15]
+
+### Removed
+
+- Deleted `job_config/src/config.rs` (#105). 944 lines defining a second, parallel `Container` enum with `DockerImage`/`DockerFile` variants, a hand-rolled `Deserialize`, mutual-exclusivity validation, and its own tests that read as passing coverage — none of it compiled, because `lib.rs` never declared the module. `CHANGELOG.md` already recorded this module as removed back in 0.4.x; the declaration went and the file did not. Deleting it makes that entry true.
+
+  Together with the file below, it made Dockerfile-based image building look mostly finished and merely unwired. It was not, and #84 was ultimately implemented by an entirely different route — deriving image tags from `apps/` directory names rather than from a per-job config key.
+
+- Deleted `silva/src/components/workflow/global_params_editor.rs` (#105). 388 lines, never declared in `mod.rs`, and unable to compile even if it were: its first import is `job_config::config`, the module above. That is why the two were orphaned together.
+
+  ⚠️ **The global parameter editor feature is not removed.** It works through `ParamsEditorState<WorkflowParamSource>`, wired in `components/workflow/state.rs` and rendered from `layout.rs`. The live state field is still named `global_params_editor_state`, so the name overlap invites the opposite conclusion — this was a superseded earlier version, not a lost feature.
+
+### Fixed
+
+- A failed image **pull** no longer reports itself as a failed **build** (#105). Both error paths in `pull_image` constructed `DockerError::ImageBuildFailed`, whose `Display` is `"Image build failed: {msg}"`, and the enum had no pull variant at all. Before and after, on a tag that cannot resolve:
+
+  ```
+  Image build failed: Docker responded with status code 404: pull access denied for ...
+  Image pull failed:  Docker responded with status code 404: pull access denied for ...
+  ```
+
+  This was merely untidy while nothing in silva ever built an image. **0.5.14 made it actively misleading**: builds are now real, so a user whose pull fails was being sent to inspect a Dockerfile that is not the problem.
+
+- `pull_image` no longer discards what Docker said on a mid-stream failure (#105), applying the same fix 0.5.14 made in `build_image`. `bollard::errors::Error::DockerStreamError` is declared `#[error("Docker stream error")]`, so `to_string()` renders that literal and drops the `error` field. Note this path is latent rather than commonly hit — an unresolvable tag returns a 404 as `DockerResponseServerError`, whose `Display` works, which is why the message above survived intact. Covered by unit test rather than a live reproduction.
+
+- Corrected `job_config/src/lib.rs`'s header comment (#105), which documented `docker_image` and `dockerfile` keys the crate cannot parse. It now describes the shape `Container` actually has, including the `registry = "local"` hint.
+
+### Changed
+
+- Documented `ImageSource` and `get_image_source()` as **not dead code** (#105). Nothing in this repository calls `get_image_source`, so both a repo-local search and `cargo check` suggest the type is unused. It is not: `job_config` is consumed outside this repository through a path dependency, and that consumer matches every variant, including routing `SifFile` to a different container runtime.
+
+  ⚠️ This is the inverse of the rest of #105. Everywhere else in that issue, code looks alive and is dead; here it looks dead and is alive, so acting on the local signal would have deleted working code. The note now says so in place, and the downstream build was compiled against this branch to confirm — no command in this workspace can check it.
+
 ## [0.5.14]
 
 ### Added

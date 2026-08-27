@@ -94,6 +94,7 @@
 //! The system provides detailed error types:
 //! - `BollardError` - Docker API errors
 //! - `ImageBuildFailed` - Image build failures
+//! - `ImagePullFailed` - Image pull failures
 //! - `ContainerCreateFailed` - Container creation errors
 //! - `ScriptExecutionFailed` - Script execution failures with exit codes
 //! - `LogStreamError` - Log streaming issues
@@ -550,10 +551,13 @@ impl DockerExecutor {
 
                     // Check for errors in the response
                     if let Some(error) = &info.error {
-                        return Err(DockerError::ImageBuildFailed(error.clone()));
+                        return Err(DockerError::ImagePullFailed(error.clone()));
                     }
                 }
-                Err(e) => return Err(DockerError::ImageBuildFailed(e.to_string())),
+                // stream_error_message rather than to_string: a mid-stream pull
+                // failure arrives as Error::DockerStreamError, whose Display is
+                // the literal "Docker stream error" and drops what Docker said.
+                Err(e) => return Err(DockerError::ImagePullFailed(stream_error_message(&e))),
             }
         }
 
@@ -1316,6 +1320,21 @@ mod tests {
         assert_eq!(
             stream_error_message(&err),
             "The command '/bin/sh -c false' returned a non-zero code: 1"
+        );
+    }
+
+    #[test]
+    fn test_pull_and_build_failures_are_labelled_differently() {
+        // Both pull error paths used to construct ImageBuildFailed, so a failed
+        // pull told the user the build failed. Harmless while nothing ever built
+        // an image; actively misleading since 0.5.14, which made builds real.
+        assert_eq!(
+            DockerError::ImagePullFailed("pull access denied".to_string()).to_string(),
+            "Image pull failed: pull access denied"
+        );
+        assert_eq!(
+            DockerError::ImageBuildFailed("returned a non-zero code: 3".to_string()).to_string(),
+            "Image build failed: returned a non-zero code: 3"
         );
     }
 
