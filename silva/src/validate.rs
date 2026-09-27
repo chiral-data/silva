@@ -58,6 +58,8 @@ pub struct Report {
     /// Execution order, when the graph is sound enough to produce one.
     pub order: Vec<String>,
     pub findings: Vec<Finding>,
+    /// Worth telling the author, but not a reason the folder would not run.
+    pub notes: Vec<Finding>,
 }
 
 impl Report {
@@ -68,54 +70,67 @@ impl Report {
     /// Human output. Success names the execution order, because that is the
     /// thing a person actually wants confirmed.
     pub fn render(&self) -> String {
-        if self.is_valid() {
+        let mut out = if self.is_valid() {
             let name = self.workflow_name.as_deref().unwrap_or("workflow");
-            return format!(
+            format!(
                 "{name}: {} job(s) ok\nExecution order: {}\n",
                 self.jobs.len(),
                 self.order.join(" -> ")
-            );
-        }
+            )
+        } else {
+            let mut out = format!("{} problem(s) found:\n\n", self.findings.len());
+            for finding in &self.findings {
+                out.push_str(&render_item(finding));
+            }
+            out
+        };
 
-        let mut out = format!("{} problem(s) found:\n\n", self.findings.len());
-        for finding in &self.findings {
-            let where_ = match (&finding.file, &finding.job) {
-                (Some(file), _) => format!(" [{file}]"),
-                (None, Some(job)) => format!(" [{job}]"),
-                (None, None) => String::new(),
-            };
-            // The prechecks return multi-line messages; indent continuations so
-            // one finding still reads as one item.
-            let message = finding.message.trim_end().replace('\n', "\n    ");
-            out.push_str(&format!("  {}{}: {message}\n", finding.kind, where_));
+        if !self.notes.is_empty() {
+            out.push_str("\nNote(s):\n\n");
+            for note in &self.notes {
+                out.push_str(&render_item(note));
+            }
         }
         out
     }
 
     /// Machine output, for a caller that has to act on the result.
     pub fn to_json(&self) -> String {
-        let findings: Vec<serde_json::Value> = self
-            .findings
-            .iter()
-            .map(|f| {
-                serde_json::json!({
-                    "kind": f.kind,
-                    "file": f.file,
-                    "job": f.job,
-                    "message": f.message,
+        let items = |list: &[Finding]| -> Vec<serde_json::Value> {
+            list.iter()
+                .map(|f| {
+                    serde_json::json!({
+                        "kind": f.kind,
+                        "file": f.file,
+                        "job": f.job,
+                        "message": f.message,
+                    })
                 })
-            })
-            .collect();
+                .collect()
+        };
 
         serde_json::to_string_pretty(&serde_json::json!({
             "valid": self.is_valid(),
             "workflow": self.workflow_name,
             "jobs": self.jobs,
             "order": self.order,
-            "findings": findings,
+            "findings": items(&self.findings),
+            "notes": items(&self.notes),
         }))
         .unwrap_or_else(|e| format!("{{\"valid\":false,\"error\":\"{e}\"}}"))
     }
+}
+
+fn render_item(finding: &Finding) -> String {
+    let where_ = match (&finding.file, &finding.job) {
+        (Some(file), _) => format!(" [{file}]"),
+        (None, Some(job)) => format!(" [{job}]"),
+        (None, None) => String::new(),
+    };
+    // The prechecks return multi-line messages; indent continuations so one
+    // finding still reads as one item.
+    let message = finding.message.trim_end().replace('\n', "\n    ");
+    format!("  {}{}: {message}\n", finding.kind, where_)
 }
 
 /// Validates a workflow folder in place. Never runs anything and never needs
@@ -173,6 +188,10 @@ pub fn validate_workflow(workflow_path: &Path) -> Report {
             return report;
         }
     };
+
+    // 1b. The declared format version. Advisory within a major, since unknown
+    //     keys parse harmlessly; a newer major may change meaning, so it fails.
+    check_schema_version(&metadata, &mut report);
 
     // 2. Job folders.
     let jobs = match JobScanner::scan_jobs(&workflow_path) {
@@ -278,6 +297,42 @@ pub fn validate_workflow(workflow_path: &Path) -> Report {
     }
 
     report
+}
+
+fn check_schema_version(metadata: &job_config::workflow::WorkflowMeta, report: &mut Report) {
+    use job_config::workflow::{SCHEMA_VERSION, SchemaCompat};
+
+    let major = SCHEMA_VERSION.split('.').next().unwrap_or(SCHEMA_VERSION);
+    let at = ".chiral/workflow.toml";
+    match metadata.schema_compat() {
+        SchemaCompat::Supported => {}
+        SchemaCompat::NewerMinor(v) => report.notes.push(
+            Finding::new(
+                "workflow",
+                format!(
+                    "workflow targets format {v}; this silva speaks {SCHEMA_VERSION}, \
+                     so features newer than {SCHEMA_VERSION} are ignored."
+                ),
+            )
+            .at(at),
+        ),
+        SchemaCompat::UnsupportedMajor(v) => report.findings.push(
+            Finding::new(
+                "workflow",
+                format!("workflow requires format {v}; this silva speaks {major}.x — upgrade silva."),
+            )
+            .at(at),
+        ),
+        SchemaCompat::Malformed(v) => report.findings.push(
+            Finding::new(
+                "workflow",
+                format!(
+                    "schema_version \"{v}\" is not a format version; write MAJOR.MINOR, e.g. \"{SCHEMA_VERSION}\"."
+                ),
+            )
+            .at(at),
+        ),
+    }
 }
 
 /// `[dependencies]` may name a job that does not exist — the topological sort
@@ -506,5 +561,45 @@ mod tests {
 
         assert!(json.contains("\"valid\": true"));
         assert!(json.contains("01-first"));
+    }
+
+    #[test]
+    fn a_future_major_schema_version_fails_and_says_to_upgrade() {
+        let dir = workflow("schema_version = \"2.0\"\n");
+        let report = validate_workflow(dir.path());
+
+        assert!(!report.is_valid());
+        assert_eq!(report.findings.len(), 1);
+        assert_eq!(report.findings[0].kind, "workflow");
+        assert!(report.findings[0].message.contains("upgrade silva"));
+    }
+
+    #[test]
+    fn a_future_minor_schema_version_passes_with_a_note() {
+        let dir = workflow("schema_version = \"1.1\"\n");
+        let report = validate_workflow(dir.path());
+
+        assert!(report.is_valid(), "{:?}", report.findings);
+        assert_eq!(report.notes.len(), 1);
+        assert!(report.render().contains("format 1.1"));
+        assert!(report.to_json().contains("\"notes\": ["));
+    }
+
+    #[test]
+    fn a_malformed_schema_version_is_reported() {
+        let dir = workflow("schema_version = \"v1\"\n");
+        let report = validate_workflow(dir.path());
+
+        assert!(!report.is_valid());
+        assert!(report.findings[0].message.contains("MAJOR.MINOR"));
+    }
+
+    #[test]
+    fn a_known_or_absent_schema_version_adds_nothing() {
+        for header in ["", "schema_version = \"1.0\"\n"] {
+            let report = validate_workflow(workflow(header).path());
+            assert!(report.is_valid(), "{:?}", report.findings);
+            assert!(report.notes.is_empty());
+        }
     }
 }

@@ -49,6 +49,7 @@ $SILVA_WORKFLOW_HOME/
 Workflows can have a `.chiral/workflow.toml` file that defines workflow-level metadata, job dependencies, and global parameters:
 
 ```toml
+schema_version = "1.0"   # optional; absent means 1.0
 name = "My Workflow"
 description = "A multi-step data processing workflow"
 
@@ -73,6 +74,8 @@ env_passthrough = ["NGC_API_KEY", "HF_TOKEN"]
 ```
 
 **`env_passthrough`**: Lists host environment variable names (set in the terminal running `silva`, e.g. via `export NGC_API_KEY=...`) to forward into the container exec environment, alongside the `PARAM_*` variables. This lets a workflow require API keys or secrets without hardcoding them into `global_params.json`. A listed variable that isn't set in the host environment is silently skipped.
+
+**`schema_version`**: The version of the Silva Workflow Format the workflow is written against, as `"MAJOR.MINOR"`. It is independent of silva's own version, and omitting it means `1.0`. `silva validate` reports a newer minor version as a note only — the workflow still runs, and features newer than the silva build are ignored. It rejects a newer major version, whose meaning may differ, and anything not of the form `MAJOR.MINOR`. Like every scalar key, it must come before the first `[table]`.
 
 ### Ad-hoc env vars via `-e`/`--env`
 
