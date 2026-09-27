@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JobMeta",
+  "description": "Main configuration structure for a computation job.\nMerges the former JobConfig and NodeMetadata into a single TOML file.\n\nNote: Job dependencies are now defined at the workflow level in WorkflowMetadata,\nnot in individual job configurations.",
+  "type": "object",
+  "properties": {
+    "container": {
+      "description": "Container configuration (image source).",
+      "$ref": "#/$defs/Container"
+    },
+    "description": {
+      "description": "Job description.",
+      "type": "string"
+    },
+    "inputs": {
+      "description": "List of input file patterns to copy from dependent jobs.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "name": {
+      "description": "Job name for display purposes.",
+      "type": "string"
+    },
+    "outputs": {
+      "description": "List of output file patterns to collect from the job.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "params": {
+      "description": "Parameter definitions for this job.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/ParamDefinition"
+      },
+      "default": {}
+    },
+    "scripts": {
+      "description": "Scripts to execute.",
+      "$ref": "#/$defs/Scripts",
+      "default": {
+        "post": "./post_run.sh",
+        "pre": "./pre_run.sh",
+        "run": "./run.sh"
+      }
+    }
+  },
+  "required": [
+    "name",
+    "description",
+    "container"
+  ],
+  "x-schema-version": "1.0",
+  "$defs": {
+    "Container": {
+      "description": "Represents the container configuration for a job.\nThe `image` field can be a Docker registry URL or a local file path (.tar or .sif).",
+      "type": "object",
+      "properties": {
+        "image": {
+          "description": "Docker image source: either a registry URL (e.g., \"ubuntu:22.04\")\nor a local file path (.tar for Docker, .sif for Singularity/Apptainer).",
+          "type": "string"
+        },
+        "registry": {
+          "description": "Optional registry hint. Set to `\"local\"` to bypass default_registry resolution\nfor images that are built locally and do not exist in any remote registry.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "image"
+      ]
+    },
+    "ParamDefinition": {
+      "description": "Represents a parameter definition in job.toml.",
+      "type": "object",
+      "properties": {
+        "default": {
+          "description": "Any TOML value; not yet checked against `type`."
+        },
+        "enum_values": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "hint": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ParamType"
+        }
+      },
+      "required": [
+        "type",
+        "default",
+        "hint"
+      ]
+    },
+    "ParamType": {
+      "description": "Represents the type of a parameter.",
+      "type": "string",
+      "enum": [
+        "string",
+        "integer",
+        "float",
+        "boolean",
+        "file",
+        "directory",
+        "enum",
+        "array"
+      ]
+    },
+    "Scripts": {
+      "description": "Represents the scripts that will be executed for a job.\nAll fields are optional and have default values.",
+      "type": "object",
+      "properties": {
+        "post": {
+          "type": "string",
+          "default": "./post_run.sh"
+        },
+        "pre": {
+          "type": "string",
+          "default": "./pre_run.sh"
+        },
+        "run": {
+          "type": "string",
+          "default": "./run.sh"
+        }
+      }
+    }
+  }
+}

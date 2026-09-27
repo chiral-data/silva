@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorkflowMeta",
+  "description": "Represents the metadata for a workflow (workflow.toml).\nContains workflow-level configuration including global parameters and job dependencies.",
+  "type": "object",
+  "properties": {
+    "dependencies": {
+      "description": "Job dependencies mapping: job_name -> list of jobs it depends on.\nExample: { \"job_2\": [\"job_1\"], \"job_3\": [\"job_1\", \"job_2\"] }",
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "default": {}
+    },
+    "description": {
+      "type": "string"
+    },
+    "env_passthrough": {
+      "description": "Host environment variable names to forward into the container exec environment.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null,
+      "items": {
+        "type": "string"
+      }
+    },
+    "name": {
+      "type": "string"
+    },
+    "params": {
+      "description": "Global parameter definitions for this workflow.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/ParamDefinition"
+      },
+      "default": {}
+    },
+    "schema_version": {
+      "description": "Format version this workflow is written against; absent means 1.0.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^\\d+\\.\\d+$"
+    }
+  },
+  "required": [
+    "name",
+    "description"
+  ],
+  "x-schema-version": "1.0",
+  "$defs": {
+    "ParamDefinition": {
+      "description": "Represents a parameter definition in job.toml.",
+      "type": "object",
+      "properties": {
+        "default": {
+          "description": "Any TOML value; not yet checked against `type`."
+        },
+        "enum_values": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "hint": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ParamType"
+        }
+      },
+      "required": [
+        "type",
+        "default",
+        "hint"
+      ]
+    },
+    "ParamType": {
+      "description": "Represents the type of a parameter.",
+      "type": "string",
+      "enum": [
+        "string",
+        "integer",
+        "float",
+        "boolean",
+        "file",
+        "directory",
+        "enum",
+        "array"
+      ]
+    }
+  }
+}

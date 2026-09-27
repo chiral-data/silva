@@ -6,6 +6,7 @@ use std::path::Path;
 
 /// Represents the type of a parameter.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum ParamType {
     String,
@@ -35,9 +36,12 @@ impl fmt::Display for ParamType {
 
 /// Represents a parameter definition in job.toml.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ParamDefinition {
     #[serde(rename = "type")]
     pub param_type: ParamType,
+    /// Any TOML value; not yet checked against `type`.
+    #[cfg_attr(feature = "schema", schemars(with = "serde_json::Value"))]
     pub default: toml::Value,
     pub hint: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -148,6 +152,7 @@ pub enum ImageSource {
 /// Represents the container configuration for a job.
 /// The `image` field can be a Docker registry URL or a local file path (.tar or .sif).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Container {
     /// Docker image source: either a registry URL (e.g., "ubuntu:22.04")
     /// or a local file path (.tar for Docker, .sif for Singularity/Apptainer).
@@ -192,6 +197,7 @@ impl Container {
 /// Represents the scripts that will be executed for a job.
 /// All fields are optional and have default values.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Scripts {
     #[serde(default = "default_pre_script")]
     pub pre: String,
@@ -270,6 +276,7 @@ impl From<toml::de::Error> for JobError {
 /// Note: Job dependencies are now defined at the workflow level in WorkflowMetadata,
 /// not in individual job configurations.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct JobMeta {
     /// Job name for display purposes.
     pub name: String,

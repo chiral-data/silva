@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::{error::Error, io};
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
@@ -100,6 +100,25 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+
+    /// Print the JSON Schema for workflow.toml or job.toml
+    ///
+    /// Generated from the same structs silva parses with, so it never drifts
+    /// from what silva accepts. Describes structure only: the graph, file and
+    /// parameter checks are `silva validate`'s.
+    Schema {
+        /// Which file's schema to print
+        #[arg(value_enum)]
+        kind: SchemaKind,
+    },
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug)]
+enum SchemaKind {
+    /// .chiral/workflow.toml
+    Workflow,
+    /// .chiral/job.toml
+    Job,
 }
 
 #[tokio::main]
@@ -135,6 +154,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         std::process::exit(if report.is_valid() { 0 } else { 1 });
     }
 
+    // Offline for the same reason as validation.
+    if let Some(Command::Schema { kind }) = args.command {
+        print!(
+            "{}",
+            match kind {
+                SchemaKind::Workflow => job_config::schema::workflow_schema(),
+                SchemaKind::Job => job_config::schema::job_schema(),
+            }
+        );
+        std::process::exit(0);
+    }
+
     // Whether this invocation wants machine-readable output, in either form:
     // `silva run <path> --json` or the deprecated `silva <path> --json`.
     let json = args.json || matches!(&args.command, Some(Command::Run { json: true, .. }));
@@ -156,7 +187,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // deprecated alias kept for existing scripts.
     let (workflow_path, env) = match args.command {
         Some(Command::Run { path, env, .. }) => (Some(path), env),
-        Some(Command::Validate { .. }) => unreachable!("handled above"),
+        Some(Command::Validate { .. } | Command::Schema { .. }) => unreachable!("handled above"),
         None => {
             if args.workflow_path.is_some() {
                 silva::events::warn_line(

@@ -77,6 +77,8 @@ env_passthrough = ["NGC_API_KEY", "HF_TOKEN"]
 
 **`schema_version`**: The version of the Silva Workflow Format the workflow is written against, as `"MAJOR.MINOR"`. It is independent of silva's own version, and omitting it means `1.0`. `silva validate` reports a newer minor version as a note only — the workflow still runs, and features newer than the silva build are ignored. It rejects a newer major version, whose meaning may differ, and anything not of the form `MAJOR.MINOR`. Like every scalar key, it must come before the first `[table]`.
 
+**JSON Schema**: `schema/workflow.schema.json` and `schema/job.schema.json` describe both files' structure — keys, types, which are required — and are generated from the same structs silva parses with, so they cannot fall behind it. `silva schema workflow` or `silva schema job` prints them, and each release publishes them as assets. They cover structure only: the dependency graph, file and parameter checks are what `silva validate` adds.
+
 ### Ad-hoc env vars via `-e`/`--env`
 
 For a one-off value that doesn't belong in `global_params.json` or `env_passthrough`, pass it directly on the CLI (headless mode only):

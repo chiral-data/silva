@@ -34,10 +34,12 @@ fn parse_version(v: &str) -> Option<(u32, u32)> {
 /// Represents the metadata for a workflow (workflow.toml).
 /// Contains workflow-level configuration including global parameters and job dependencies.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct WorkflowMeta {
     /// Format version this workflow is written against; absent means 1.0.
-    /// First because `to_string_pretty` rejects a scalar after a table.
+    // First because `to_string_pretty` rejects a scalar after a table.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "schema", schemars(regex(pattern = r"^\d+\.\d+$")))]
     pub schema_version: Option<String>,
     pub name: String,
     pub description: String,
