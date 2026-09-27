@@ -9,10 +9,36 @@ use crate::params::{WorkflowParams, json_to_toml, toml_to_json};
 // Re-export WorkflowParams from params module for convenience
 pub use crate::params::WorkflowParams as WorkflowParamsType;
 
+/// The Silva Workflow Format version this build speaks. Independent of silva's
+/// own version: a workflow that omits `schema_version` is this format's 1.0.
+pub const SCHEMA_VERSION: &str = "1.0";
+
+/// How a workflow's declared `schema_version` relates to [`SCHEMA_VERSION`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SchemaCompat {
+    /// Absent, or a version this build fully understands.
+    Supported,
+    /// Same major, newer minor: runs, but the newer features are ignored.
+    NewerMinor(String),
+    /// A newer major: its meaning may differ, so this build must not run it.
+    UnsupportedMajor(String),
+    /// Not a `MAJOR.MINOR` version of this format.
+    Malformed(String),
+}
+
+fn parse_version(v: &str) -> Option<(u32, u32)> {
+    let (major, minor) = v.split_once('.')?;
+    Some((major.parse().ok()?, minor.parse().ok()?))
+}
+
 /// Represents the metadata for a workflow (workflow.toml).
 /// Contains workflow-level configuration including global parameters and job dependencies.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkflowMeta {
+    /// Format version this workflow is written against; absent means 1.0.
+    /// First because `to_string_pretty` rejects a scalar after a table.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema_version: Option<String>,
     pub name: String,
     pub description: String,
     /// Job dependencies mapping: job_name -> list of jobs it depends on.
@@ -31,11 +57,26 @@ impl WorkflowMeta {
     /// Creates a new workflow metadata with the given name and description.
     pub fn new(name: String, description: String) -> Self {
         Self {
+            schema_version: None,
             name,
             description,
             dependencies: HashMap::new(),
             params: HashMap::new(),
             env_passthrough: None,
+        }
+    }
+
+    /// Classifies `schema_version` against the format this build speaks.
+    pub fn schema_compat(&self) -> SchemaCompat {
+        let Some(declared) = &self.schema_version else {
+            return SchemaCompat::Supported;
+        };
+        let (major, minor) = parse_version(SCHEMA_VERSION).expect("SCHEMA_VERSION is MAJOR.MINOR");
+        match parse_version(declared) {
+            Some((m, n)) if m == major && n <= minor => SchemaCompat::Supported,
+            Some((m, _)) if m == major => SchemaCompat::NewerMinor(declared.clone()),
+            Some((m, _)) if m > major => SchemaCompat::UnsupportedMajor(declared.clone()),
+            _ => SchemaCompat::Malformed(declared.clone()),
         }
     }
 
@@ -114,6 +155,50 @@ mod tests {
         assert_eq!(metadata.description, "A test workflow");
         assert!(metadata.params.is_empty());
         assert!(metadata.dependencies.is_empty());
+    }
+
+    fn with_version(v: &str) -> WorkflowMeta {
+        toml::from_str(&format!(
+            "schema_version = \"{v}\"\nname = \"w\"\ndescription = \"d\"\n"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn test_schema_version_absent_is_supported_and_not_saved() {
+        let metadata = WorkflowMeta::new("w".to_string(), "d".to_string());
+        assert_eq!(metadata.schema_compat(), SchemaCompat::Supported);
+        let saved = toml::to_string_pretty(&metadata).unwrap();
+        assert!(!saved.contains("schema_version"), "{saved}");
+    }
+
+    #[test]
+    fn test_schema_version_round_trips_ahead_of_tables() {
+        let mut metadata = with_version("1.0");
+        metadata.set_job_dependencies("b".to_string(), vec!["a".to_string()]);
+        let saved = toml::to_string_pretty(&metadata).unwrap();
+        assert!(saved.starts_with("schema_version = \"1.0\""), "{saved}");
+        assert_eq!(toml::from_str::<WorkflowMeta>(&saved).unwrap(), metadata);
+    }
+
+    #[test]
+    fn test_schema_compat_classifies_each_case() {
+        assert_eq!(with_version("1.0").schema_compat(), SchemaCompat::Supported);
+        assert_eq!(
+            with_version("1.1").schema_compat(),
+            SchemaCompat::NewerMinor("1.1".to_string())
+        );
+        assert_eq!(
+            with_version("2.0").schema_compat(),
+            SchemaCompat::UnsupportedMajor("2.0".to_string())
+        );
+        for bad in ["1", "v1.0", "latest", "0.9", "1.0.0"] {
+            assert_eq!(
+                with_version(bad).schema_compat(),
+                SchemaCompat::Malformed(bad.to_string()),
+                "{bad}"
+            );
+        }
     }
 
     #[test]

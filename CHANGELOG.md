@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `schema_version` on `workflow.toml` (#114): a workflow can now state which version of the Silva Workflow Format it is written for. It is optional and independent of silva's version; absent means `1.0`, so no existing workflow changes, and a save omits it when unset. `job_config` exports `SCHEMA_VERSION` and `WorkflowMeta::schema_compat()` so every consumer classifies it the same way.
+
+  `silva validate` fails a newer major version ("workflow requires format 2.0; this silva speaks 1.x — upgrade silva") or a value that is not `MAJOR.MINOR`. A newer minor version is reported as a **note** and stays valid: unknown keys already parse harmlessly, so a 1.1 workflow does run on a 1.0 build, minus the new behaviour. Notes are new — human output lists them after the result, and `--json` gains a `"notes"` array alongside `"findings"`.
+
 ## [0.5.15]
 
 ### Removed
