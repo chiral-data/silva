@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   `silva validate` fails a newer major version ("workflow requires format 2.0; this silva speaks 1.x — upgrade silva") or a value that is not `MAJOR.MINOR`. A newer minor version is reported as a **note** and stays valid: unknown keys already parse harmlessly, so a 1.1 workflow does run on a 1.0 build, minus the new behaviour. Notes are new — human output lists them after the result, and `--json` gains a `"notes"` array alongside `"findings"`.
 
+- A JSON Schema for `workflow.toml` and `job.toml` (#115), generated from `job_config`'s structs with `schemars`: `silva schema workflow|job` prints it, `schema/` holds the committed copies, and each release publishes both as assets. A `job_config` test compares the committed files with the generated output, so a struct change that skips regeneration fails `cargo test`. The schema is stamped with `"x-schema-version": "1.0"`, and `schema_version` carries its `MAJOR.MINOR` pattern. The derive sits behind a default-on `schema` feature, so a consumer that only parses can build `job_config` without `schemars`.
+
 ## [0.5.15]
 
 ### Removed
