@@ -54,7 +54,7 @@ hint = "The word the report starts with"
 - `[params.greeting]` declares a parameter every job can read. `type`, `default` and `hint` are all required.
 - Scalar keys (`schema_version`, `name`, `description`) must come before the first `[table]`. That is TOML, not silva: anything after a table header belongs to that table.
 
-The declared `default` is not yet what a run uses ([#118](https://github.com/chiral-data/silva/issues/118)), so give the value in `global_params.json`:
+A run uses the declared `default` unless a file gives a value. To set it for this workflow, use `global_params.json`:
 
 ```bash
 echo '{ "greeting": "Hello" }' > global_params.json
@@ -164,7 +164,7 @@ cat /tmp/silva-.../@complete/02-report/outputs/report.txt
 ## Where to go next
 
 - **More inputs.** A job with two dependencies receives the outputs of both. If both produce a file with the same name, the first dependency listed wins.
-- **Job-only params.** Declare `[params.x]` in a `job.toml` and give its value in that job's `params.json`. Without `params.json`, `silva run` uses the declared defaults.
+- **Job-only params.** Declare `[params.x]` in a `job.toml` and give its value in that job's `params.json`. Any param `params.json` leaves out takes its declared default.
 - **Other scripts.** `[scripts]` takes `pre`, `run` and `post` file names. A missing `pre` or `post` file is skipped.
 - **Real examples.** [collab-workflows](https://github.com/chiral-data/collab-workflows) has more than thirty, from a three-job pocket analysis (workflow-007) to multi-stage docking pipelines.
 

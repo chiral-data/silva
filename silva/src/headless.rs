@@ -98,11 +98,11 @@ pub async fn run_workflow(
             job_config::workflow::WorkflowMeta::new(workflow_name.clone(), String::new())
         });
 
-    // Load workflow parameters
+    // Raw values only: run_job fills in the declared defaults. A broken file
+    // must not silently become "use the defaults".
     let workflow_params = workflow_folder
         .load_workflow_params()
-        .ok()
-        .flatten()
+        .map_err(|e| format!("Cannot read global_params.json: {e}"))?
         .unwrap_or_default();
 
     emitter.global_params_loaded(workflow_params.len());
@@ -216,11 +216,18 @@ pub async fn run_workflow(
                 Ok(config) => {
                     docker_executor.set_job_idx(idx);
 
-                    let job_params = job
-                        .load_params()
-                        .ok()
-                        .flatten()
-                        .unwrap_or_else(|| config.generate_default_params());
+                    let job_params = match job.load_params() {
+                        Ok(params) => params.unwrap_or_default(),
+                        Err(e) => {
+                            let log_line = LogLine::new(
+                                LogSource::Stderr,
+                                format!("Cannot read {}/params.json: {e}", job.name),
+                            );
+                            let _ = tx.send((idx, JobStatus::Failed, log_line)).await;
+                            workflow_failed = true;
+                            break;
+                        }
+                    };
 
                     // Copy input files from dependencies before running
                     let job_deps = workflow_metadata.get_job_dependencies(&job.name);

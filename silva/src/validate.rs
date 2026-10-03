@@ -252,7 +252,25 @@ pub fn validate_workflow(workflow_path: &Path) -> Report {
         check_input_ports(&report.jobs, &metas, &metadata, &mut report.findings);
     }
 
-    // 5. Parameter files, where they exist, against their definitions. This is
+    // 5. Declared defaults against their types: a default is the value a run
+    //    uses whenever no file names the param.
+    check_default_types(
+        &metadata.params,
+        ".chiral/workflow.toml",
+        None,
+        &mut report.findings,
+    );
+    for job in &parsed {
+        check_default_types(
+            &metas[&job.name].params,
+            &format!("{}/.chiral/job.toml", job.name),
+            Some(&job.name),
+            &mut report.findings,
+        );
+    }
+    check_param_fallbacks(&parsed, &metas, &metadata, &mut report.notes);
+
+    //    Parameter files, where they exist, against their definitions. This is
     //    what catches a generated params.json that names a parameter the job
     //    does not have.
     if let Ok(Some(params)) = folder.load_workflow_params()
@@ -363,6 +381,88 @@ fn check_env_passthrough(
             );
         }
     }
+}
+
+/// One finding per declared default that does not match its own `type`.
+fn check_default_types(
+    params: &HashMap<String, job_config::job::ParamDefinition>,
+    file: &str,
+    job: Option<&str>,
+    findings: &mut Vec<Finding>,
+) {
+    let mut names: Vec<&String> = params.keys().collect();
+    names.sort();
+    for name in names {
+        if let Err(e) = params[name].validate(&params[name].default) {
+            let finding = Finding::new("params", format!("Default of '{name}': {e}")).at(file);
+            findings.push(match job {
+                Some(job) => finding.in_job(job),
+                None => finding,
+            });
+        }
+    }
+}
+
+/// Notes `${PARAM_X:-…}` and `${PARAM_X-…}` where `X` is declared for the job:
+/// a run always sets it, so the fallback is a second default that can drift.
+/// A declared `""` is exempt, since `:-` still fires on an empty value.
+fn check_param_fallbacks(
+    jobs: &[JobFolder],
+    metas: &HashMap<String, job_config::job::JobMeta>,
+    metadata: &job_config::workflow::WorkflowMeta,
+    notes: &mut Vec<Finding>,
+) {
+    for job in jobs {
+        let meta = &metas[&job.name];
+        // The job's own declaration shadows the workflow's, as at run time.
+        let mut declared: HashMap<String, &toml::Value> = HashMap::new();
+        for (name, def) in metadata.params.iter().chain(&meta.params) {
+            declared.insert(name.to_uppercase(), &def.default);
+        }
+        for script in [&meta.scripts.pre, &meta.scripts.run, &meta.scripts.post] {
+            let Ok(content) = std::fs::read_to_string(job.path.join(script)) else {
+                continue;
+            };
+            let mut redundant: Vec<String> = content
+                .lines()
+                .filter(|line| !line.trim_start().starts_with('#'))
+                .flat_map(param_fallbacks)
+                .filter(|name| declared.get(name).is_some_and(|d| d.as_str() != Some("")))
+                .map(|name| format!("PARAM_{name}"))
+                .collect();
+            redundant.sort();
+            redundant.dedup();
+            if !redundant.is_empty() {
+                notes.push(
+                    Finding::new(
+                        "script",
+                        format!(
+                            "{}: declared, so a run always sets it and this fallback is a second \
+                             default that can drift from the declared one.",
+                            redundant.join(", ")
+                        ),
+                    )
+                    .at(format!("{}/{script}", job.name))
+                    .in_job(&job.name),
+                );
+            }
+        }
+    }
+}
+
+/// The `X` of every `${PARAM_X:-` or `${PARAM_X-` on a line.
+fn param_fallbacks(line: &str) -> Vec<String> {
+    line.split("${PARAM_")
+        .skip(1)
+        .filter_map(|rest| {
+            let end = rest
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                .unwrap_or(rest.len());
+            let after = &rest[end..];
+            (end > 0 && (after.starts_with(":-") || after.starts_with('-')))
+                .then(|| rest[..end].to_string())
+        })
+        .collect()
 }
 
 /// Every `inputs` pattern of a job must be able to match something one of its
@@ -840,5 +940,59 @@ mod tests {
         assert!(!may_overlap("*.pdb", "*.sdf"));
         assert!(!may_overlap("a_*", "b_*"));
         assert!(!may_overlap("model.pkl", "*.txt"));
+    }
+
+    #[test]
+    fn a_default_that_does_not_match_its_type_is_reported() {
+        let dir = workflow("[params.top_n]\ntype = \"integer\"\ndefault = \"20\"\nhint = \"h\"\n");
+        let report = validate_workflow(dir.path());
+        let params: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|f| f.kind == "params")
+            .collect();
+        assert_eq!(params.len(), 1, "{:?}", report.findings);
+        assert_eq!(params[0].file.as_deref(), Some(".chiral/workflow.toml"));
+        assert!(
+            params[0].message.contains("'top_n'"),
+            "{}",
+            params[0].message
+        );
+        // The fixture's job defaults (float 1.0) are well typed.
+        assert!(params.iter().all(|f| f.job.is_none()));
+    }
+
+    #[test]
+    fn a_fallback_on_a_declared_param_is_a_note_not_a_finding() {
+        let dir = workflow("");
+        fs::write(
+            dir.path().join("01-first/run.sh"),
+            "t=${PARAM_THRESHOLD:-0.5}\nu=${PARAM_THRESHOLD-0.5} ${PARAM_UNDECLARED:-x}\n# ${PARAM_THRESHOLD:-1}\n",
+        )
+        .unwrap();
+        let report = validate_workflow(dir.path());
+        assert!(report.is_valid(), "{:?}", report.findings);
+        assert_eq!(report.notes.len(), 1, "{:?}", report.notes);
+        let note = &report.notes[0];
+        assert_eq!(note.kind, "script");
+        assert_eq!(note.file.as_deref(), Some("01-first/run.sh"));
+        assert!(
+            note.message.starts_with("PARAM_THRESHOLD:"),
+            "{}",
+            note.message
+        );
+        assert!(!note.message.contains("UNDECLARED"));
+    }
+
+    #[test]
+    fn a_fallback_on_an_empty_default_is_not_noted() {
+        let dir = workflow("[params.hotspots]\ntype = \"string\"\ndefault = \"\"\nhint = \"h\"\n");
+        fs::write(
+            dir.path().join("01-first/run.sh"),
+            "h=${PARAM_HOTSPOTS:-A10}\n",
+        )
+        .unwrap();
+        let report = validate_workflow(dir.path());
+        assert!(report.notes.is_empty(), "{:?}", report.notes);
     }
 }
