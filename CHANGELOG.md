@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A JSON Schema for `workflow.toml` and `job.toml` (#115), generated from `job_config`'s structs with `schemars`: `silva schema workflow|job` prints it, `schema/` holds the committed copies, and each release publishes both as assets. A `job_config` test compares the committed files with the generated output, so a struct change that skips regeneration fails `cargo test`. The schema is stamped with `"x-schema-version": "1.0"`, and `schema_version` carries its `MAJOR.MINOR` pattern. The derive sits behind a default-on `schema` feature, so a consumer that only parses can build `job_config` without `schemars`.
 
+### Changed
+
+- The workflow docs are one spec and one tutorial (#116). `doc/format.md` is normative. It leaves field lists to the schema and states the behaviour the schema cannot express, each rule tied to the function that implements it. Above all, it documents that an empty `inputs` copies **every** dependency output into `inputs/`, which several workflows rely on and no doc mentioned. `doc/tutorial.md` builds and runs a two-job workflow from an empty folder.
+
+  They replace three copies that disagreed with the code and with each other: `doc/workflows.md`, the workflow half of `README.md`, and `GET_STARTED.md`. These still documented `@job.toml`, `depends_on` and `docker_image`, a promised alphabetical job order, and `job.toml` examples without the required `description`. `readme.md`, which differed from `README.md` only in case, is merged into it. Behaviour the spec marks as unspecified or TUI-divergent is filed as #128, #129 and #130.
+
 ## [0.5.15]
 
 ### Removed
