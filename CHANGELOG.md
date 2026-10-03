@@ -17,7 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `silva validate` checks that every `inputs` pattern can be fed by a direct dependency (#117), as a new `ports` finding. Previously an unmatched pattern was silent at run time and the job just started without the file. A pattern containing `/` can never match, because `inputs` match file names only, so it is reported with the name to write instead. Only provable misses are reported: two globs count as overlapping unless their literal prefixes or suffixes conflict, and a job is not judged when a dependency declares no `outputs`, since its script may write into `outputs/` directly. Over collab-workflows this finds 11 real misses in workflow-002, 019 and 029, taking the passing count from 19 of 33 to 17. `validate` also rejects `env_passthrough` entries that are not environment variable names.
 
+- `silva validate` checks each declared param `default` against its own `type` (#118), one `params` finding per param. Defaults now reach every run, so a mistyped one is a real value. Over collab-workflows this finds two, in workflow-023 and 024, which already failed. It also notes, without failing, a `${PARAM_X:-…}` fallback in a job script when `X` is declared for that job: a run always sets it, so the fallback is a second default that can drift from the declared one. A declared `""` is exempt, since `:-` still fires on an empty value. 22 corpus scripts carry such fallbacks.
+
 ### Changed
+
+- A `global_params.json` or `params.json` that does not parse fails `silva run` and the TUI (#118). It used to be ignored, so the run went ahead on whatever values were left.
 
 - A job whose `run` script is missing is refused before anything runs (#117), by `silva run`, the TUI and `silva validate` alike, through a new `check_run_scripts` precheck. The script is piped into bash, which reads nothing from a missing file and exits 0, so such a job used to "complete" having done nothing. A missing `pre` or `post` script is still skipped.
 
@@ -26,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   They replace three copies that disagreed with the code and with each other: `doc/workflows.md`, the workflow half of `README.md`, and `GET_STARTED.md`. These still documented `@job.toml`, `depends_on` and `docker_image`, a promised alphabetical job order, and `job.toml` examples without the required `description`. `readme.md`, which differed from `README.md` only in case, is merged into it. Behaviour the spec marks as unspecified or TUI-divergent is filed as #128, #129 and #130.
 
 ### Fixed
+
+- Every declared param reaches every run, and `silva run` and the TUI give a job the same values (#118). The merge happens once, inside the executor, per key: the workflow's default, then `global_params.json`, then the job's default, then `params.json`. A param a job redeclares belongs to that job, so a global value does not override it, as headless runs already behaved. Previously a workflow-level default was never used, a `params.json` naming some keys dropped the defaults of the others, and the TUI used no defaults at all. On collab-workflows, nine workflows declare workflow params that no file sets, and the TUI ran 86 jobs without their defaults. Undeclared keys still pass through. `job_config` gains `params::with_defaults`, which the params editor now shares, and silva's unused `JobFolder::ensure_default_params` is deleted.
 
 - Jobs with no dependencies between them now run in folder-name order every time (#128). The topological sort seeded its queue from a `HashMap`, so a workflow without `[dependencies]` ran in a different order on each run. 20 runs of `silva validate` on a five-job folder used to give 17 different orders; they now give one. The TUI's copy of the sort, with its own error wording, is deleted, so `silva run`, the TUI and `validate` share one implementation.
 

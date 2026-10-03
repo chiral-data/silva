@@ -219,6 +219,23 @@ fn stream_error_message(err: &bollard::errors::Error) -> String {
     }
 }
 
+/// The parameter values a job runs with, by key, lowest layer first:
+/// workflow defaults, `global_params.json`, the job's defaults, its `params.json`.
+///
+/// A param the job declares itself shadows the workflow's, so a global value
+/// does not reach a job that redeclares it.
+pub fn resolve_params(
+    workflow_meta: &WorkflowMeta,
+    global_values: &job_config::params::WorkflowParams,
+    job_meta: &JobMeta,
+    job_values: &job_config::params::JobParams,
+) -> job_config::params::JobParams {
+    use job_config::params::with_defaults;
+    let mut merged = with_defaults(&workflow_meta.params, global_values);
+    merged.extend(with_defaults(&job_meta.params, job_values));
+    merged
+}
+
 impl DockerExecutor {
     /// Creates a new Docker executor.
     ///
@@ -570,6 +587,9 @@ impl DockerExecutor {
     ///
     /// * `job_folder` - Path to the job folder (mounted as /workspace in container)
     /// * `config` - Job configuration specifying container image/Dockerfile and scripts
+    /// * `workflow_params`, `job_params` - the raw contents of `global_params.json`
+    ///   and `params.json` (empty when absent); declared defaults are filled in
+    ///   here by `resolve_params`, not by the caller
     /// * `cli_env_vars` - `KEY=VALUE` strings from `-e/--env`, injected unprefixed
     ///   regardless of `workflow_meta.env_passthrough`
     /// * `cancel_rx` - Channel receiver for cancellation signals
@@ -772,12 +792,7 @@ impl DockerExecutor {
             container.id
         };
 
-        // Merge workflow parameters with job parameters
-        // Start with workflow params, then overlay job params (job params take precedence)
-        let mut merged_params = workflow_params.clone();
-        for (param_name, param_value) in job_params {
-            merged_params.insert(param_name.clone(), param_value.clone());
-        }
+        let merged_params = resolve_params(workflow_meta, workflow_params, config, job_params);
 
         // Convert merged parameters to environment variables
         let mut env_vars: Vec<String> = Vec::new();
@@ -816,17 +831,12 @@ impl DockerExecutor {
         }
 
         if !env_vars.is_empty() {
-            let global_count = workflow_params.len();
-            let job_count = job_params.len();
-            let total_count = merged_params.len();
             let log_line = LogLine::new(
                 LogSource::Stdout,
                 format!(
-                    "Setting {} parameter environment variable(s) ({} global + {} job = {} total)",
+                    "Setting {} environment variable(s), {} of them PARAM_*",
                     env_vars.len(),
-                    global_count,
-                    job_count,
-                    total_count
+                    merged_params.len()
                 ),
             );
             self.tx_send(JobStatus::CreatingContainer, log_line).await?;
@@ -1308,6 +1318,59 @@ impl DockerExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn metas(workflow_toml: &str, job_toml: &str) -> (WorkflowMeta, JobMeta) {
+        let job =
+            format!("name = \"j\"\ndescription = \"d\"\n[container]\nimage = \"i\"\n{job_toml}");
+        (
+            toml::from_str(&format!(
+                "name = \"w\"\ndescription = \"d\"\n{workflow_toml}"
+            ))
+            .unwrap(),
+            toml::from_str(&job).unwrap(),
+        )
+    }
+
+    fn param(name: &str, default: &str) -> String {
+        format!("[params.{name}]\ntype = \"string\"\ndefault = \"{default}\"\nhint = \"h\"\n")
+    }
+
+    #[test]
+    fn every_declared_param_resolves_even_from_a_partial_params_json() {
+        let (workflow, job) = metas(
+            &(param("greeting", "Hello") + &param("name", "you")),
+            &(param("suffix", "!") + &param("mode", "fast")),
+        );
+        let global = HashMap::from([("name".to_string(), serde_json::json!("Ada"))]);
+        let local = HashMap::from([
+            ("mode".to_string(), serde_json::json!("slow")),
+            ("extra".to_string(), serde_json::json!(1)),
+        ]);
+
+        let resolved = resolve_params(&workflow, &global, &job, &local);
+        assert_eq!(resolved["greeting"], "Hello", "workflow default");
+        assert_eq!(resolved["name"], "Ada", "global_params.json");
+        assert_eq!(resolved["suffix"], "!", "job default");
+        assert_eq!(resolved["mode"], "slow", "params.json");
+        assert_eq!(resolved["extra"], 1, "undeclared keys pass through");
+        assert_eq!(resolved.len(), 5);
+    }
+
+    #[test]
+    fn a_job_declaration_shadows_the_global_value() {
+        // workflow-029: 05_prodigy_score redeclares receptor_chain as "B" on purpose.
+        let (workflow, job) = metas(&param("receptor_chain", "A"), &param("receptor_chain", "B"));
+        let global = HashMap::from([("receptor_chain".to_string(), serde_json::json!("C"))]);
+
+        let resolved = resolve_params(&workflow, &global, &job, &HashMap::new());
+        assert_eq!(resolved["receptor_chain"], "B");
+
+        let local = HashMap::from([("receptor_chain".to_string(), serde_json::json!("D"))]);
+        assert_eq!(
+            resolve_params(&workflow, &global, &job, &local)["receptor_chain"],
+            "D"
+        );
+    }
 
     #[test]
     fn test_stream_error_message_recovers_the_discarded_string() {
