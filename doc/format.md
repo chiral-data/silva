@@ -32,7 +32,7 @@ Each release publishes both as assets. This document does not repeat their field
     └── run.sh              # and any other files the job needs
 ```
 
-- **The workflow** is a folder. Its `.chiral/workflow.toml` is required by `silva validate`. `silva run` and the TUI fall back to an empty one when it is missing or does not parse, so a broken file silently runs as "no dependencies" (the TUI side is in [#117](https://github.com/chiral-data/silva/issues/117)).
+- **The workflow** is a folder. Its `.chiral/workflow.toml` is required by `silva validate`. `silva run` and the TUI fall back to an empty one (no dependencies, no params) when it is missing, and refuse to run when it does not parse.
 - **A job** is any direct child folder that contains a regular file `.chiral/job.toml` (`JobScanner::scan_jobs`). Only one level is scanned. A job's name is its folder name. The legacy `@job.toml` is not read.
 - **`input_files/`** at the workflow root holds the data for jobs that have no dependencies. If any such job exists, the folder must exist, even if empty (`check_input_files_folder`). With no `workflow.toml`, every job counts as having no dependencies.
 - **`global_params.json`** and a job's **`params.json`** are flat JSON objects of parameter values (see [Parameters](#parameters)).
@@ -46,7 +46,7 @@ Defined by `topological_sort_jobs`:
 - A job runs after every job listed for it in `[dependencies]`.
 - A cycle is an error, and so is a dependency naming a job that does not exist.
 - A `[dependencies]` key that is not a job is ignored by `silva run` and reported by `silva validate` (`check_dependency_names`).
-- The order among jobs that are ready at the same time is **unspecified**. In particular, a workflow without `[dependencies]` does not run in folder-name order ([#128](https://github.com/chiral-data/silva/issues/128)).
+- The order is deterministic. Jobs with no dependencies start in folder-name order, and a job runs as soon as its last dependency has finished, behind any job that became ready before it. A workflow without `[dependencies]` therefore runs in folder-name order.
 
 Jobs run one at a time.
 
@@ -59,13 +59,14 @@ For each job (`DockerExecutor::run_job`):
 - One container is started per image and reused by every job with that image. The copy's root is mounted at `/workspace`, and the container runs as the user and group that own the workflow folder.
 - Scripts run in this order: `pre`, `run`, `post`, with defaults `pre_run.sh`, `run.sh` and `post_run.sh`. Each value is a **file name** relative to the job folder, not a command.
 - A script is fed to `/bin/bash` with working directory `/workspace/<job>` (`exec_script`). It needs no execute bit, its shebang is ignored, and CRLF line endings are stripped. The image must provide `/bin/bash`.
-- A missing `pre` or `post` file is skipped. A missing `run` file is **not checked**: the step does nothing and counts as a success ([#117](https://github.com/chiral-data/silva/issues/117)).
+- A missing `pre` or `post` file is skipped. A missing `run` file is refused before anything runs (below), unless its path is absolute, in which case it names a file inside the image.
 - The first script that exits non-zero fails the job, skips the job's remaining scripts and its output collection, and stops the workflow. Jobs not yet run are reported as skipped.
 
-Two conventions are enforced before anything runs, by `silva run`, the TUI and `silva validate`:
+Three conventions are enforced before anything runs, by `silva run`, the TUI and `silva validate`:
 
 - No install commands in scripts: `pip`/`pip3`/`apt-get`/`apt`/`conda`/`npm` followed by `install`, or `apk add`, on a non-comment line (`check_install_commands`). Dependencies belong in the image.
 - No `../` on a non-comment script line (`check_cross_node_references`). Jobs exchange data through `inputs` and `outputs` only.
+- Every job's `run` script exists (`check_run_scripts`). bash would otherwise read nothing from a missing file and exit 0.
 
 ## Data flow
 
@@ -76,7 +77,7 @@ Two conventions are enforced before anything runs, by `silva run`, the TUI and `
 - Otherwise each `inputs` entry is a glob, and an entry of a dependency's `outputs/` is copied when its **name** matches one. Matching is on the name only, so a pattern containing `/` never matches ([#130](https://github.com/chiral-data/silva/issues/130)). A matched folder is copied whole.
 - When two dependencies provide the same name, the one listed first in `[dependencies]` wins, and the other is skipped with a warning.
 - Files land in the job's `inputs/` folder.
-- A pattern that matches nothing is ignored silently, and the job still runs. `silva validate` does not catch it yet ([#117](https://github.com/chiral-data/silva/issues/117)).
+- At run time, a pattern that matches nothing is ignored silently and the job still runs. `silva validate` reports it instead (`check_input_ports`).
 
 Jobs with no dependencies instead receive the contents of the workflow's `input_files/`, also in their `inputs/` folder (`copy_input_files_to_dependency_free_jobs`).
 
@@ -146,13 +147,14 @@ silva run workflows/my-workflow \
 `silva validate <workflow>` (`validate_workflow`) needs no Docker and no network. It reports every finding rather than stopping at the first:
 
 1. The path is a folder, and `.chiral/workflow.toml` exists and parses. If either fails, validation stops here.
-2. `schema_version` is acceptable (`check_schema_version`).
+2. `schema_version` is acceptable (`check_schema_version`), and every `env_passthrough` entry is an environment variable name (`check_env_passthrough`).
 3. At least one job exists, and every `job.toml` parses.
 4. Every `[dependencies]` key and value names a job (`check_dependency_names`). If so, the graph has no cycle.
-5. `global_params.json` and each `params.json` parse and declare no unknown keys.
-6. The install-command, `../` and `input_files/` conventions above.
+5. Every `inputs` pattern can be fed by a direct dependency (`check_input_ports`, kind `ports`). A pattern containing `/` can never match, so it is reported as such. Otherwise a pattern is reported when it cannot match any name the dependencies' `outputs` could produce, with output paths reduced to their last component, as collection does. A job is not judged when one of its dependencies declares no `outputs`, because that dependency may write into `outputs/` directly.
+6. `global_params.json` and each `params.json` parse and declare no unknown keys.
+7. The install-command, `../`, `run`-script and `input_files/` conventions above.
 
-It does not check that script files exist, that `inputs` can be satisfied by upstream `outputs` ([#117](https://github.com/chiral-data/silva/issues/117)), that images exist, that defaults match their types ([#118](https://github.com/chiral-data/silva/issues/118)), or that every declared param has a value.
+It does not check that `pre` or `post` scripts exist, that images exist, that defaults match their types ([#118](https://github.com/chiral-data/silva/issues/118)), or that every declared param has a value.
 
 ## Exit codes
 

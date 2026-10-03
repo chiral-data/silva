@@ -162,6 +162,33 @@ pub fn check_input_files_folder(
     ))
 }
 
+/// Checks that every job's `run` script exists.
+///
+/// A missing `run` script is otherwise invisible: the script is piped into
+/// bash, which reads nothing and exits 0, so the job "succeeds" doing nothing.
+/// Absolute paths name a file inside the image and are not checked. Missing
+/// `pre`/`post` scripts are a legitimate skip.
+pub fn check_run_scripts(jobs: &[JobFolder]) -> Result<(), String> {
+    let missing: Vec<String> = jobs
+        .iter()
+        .filter_map(|job| {
+            let run = job.load_meta().ok()?.scripts.run;
+            let relative = !Path::new(&run).is_absolute();
+            (relative && !job.path.join(&run).is_file()).then(|| format!("[{}] {run}", job.name))
+        })
+        .collect();
+
+    if missing.is_empty() {
+        return Ok(());
+    }
+
+    Err(format!(
+        "Run script not found:\n\n  {}\n\n\
+         Fix: Add the script, or point [scripts] run at the one the job uses.",
+        missing.join("\n  ")
+    ))
+}
+
 /// Checks all job scripts for cross-node `../` path references.
 ///
 /// Jobs must use their `inputs/` folder instead of relative paths to siblings.
@@ -483,5 +510,24 @@ run = "run.sh"
         let err = check_cross_node_references(&[job1, job2]).unwrap_err();
         assert!(err.contains("[02-analysis]"));
         assert!(err.contains("[03-report]"));
+    }
+
+    #[test]
+    fn a_missing_run_script_is_reported() {
+        let tmp = TempDir::new().unwrap();
+        let present = create_job(tmp.path(), "01-present", "echo hi\n");
+        let missing = create_job(tmp.path(), "02-missing", "echo hi\n");
+        fs::remove_file(missing.path.join("run.sh")).unwrap();
+
+        let err = check_run_scripts(&[present, missing]).unwrap_err();
+        assert!(err.contains("[02-missing] run.sh"), "{err}");
+        assert!(!err.contains("01-present"), "{err}");
+    }
+
+    #[test]
+    fn present_run_scripts_pass() {
+        let tmp = TempDir::new().unwrap();
+        let job = create_job(tmp.path(), "01-job", "echo hi\n");
+        assert!(check_run_scripts(&[job]).is_ok());
     }
 }

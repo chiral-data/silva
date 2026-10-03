@@ -19,8 +19,8 @@ use crate::headless::topological_sort_jobs;
 /// One problem, addressed to whoever has to fix it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Finding {
-    /// Machine-readable category: `workflow`, `job`, `dependency`, `params`,
-    /// `script`, or `inputs`.
+    /// Machine-readable category: `workflow`, `job`, `dependency`, `ports`,
+    /// `params`, `script`, or `inputs`.
     pub kind: &'static str,
     /// Path this is about, relative to the workflow folder where possible.
     pub file: Option<String>,
@@ -192,6 +192,7 @@ pub fn validate_workflow(workflow_path: &Path) -> Report {
     // 1b. The declared format version. Advisory within a major, since unknown
     //     keys parse harmlessly; a newer major may change meaning, so it fails.
     check_schema_version(&metadata, &mut report);
+    check_env_passthrough(&metadata, &mut report.findings);
 
     // 2. Job folders.
     let jobs = match JobScanner::scan_jobs(&workflow_path) {
@@ -247,6 +248,8 @@ pub fn validate_workflow(workflow_path: &Path) -> Report {
             Ok(sorted) => report.order = sorted.iter().map(|j| j.name.clone()).collect(),
             Err(e) => report.findings.push(Finding::new("dependency", e)),
         }
+        // 4b. Ports: every input pattern can be fed by a direct dependency.
+        check_input_ports(&report.jobs, &metas, &metadata, &mut report.findings);
     }
 
     // 5. Parameter files, where they exist, against their definitions. This is
@@ -288,6 +291,9 @@ pub fn validate_workflow(workflow_path: &Path) -> Report {
         report.findings.push(Finding::new("script", e));
     }
     if let Err(e) = crate::precheck::check_cross_node_references(&parsed) {
+        report.findings.push(Finding::new("script", e));
+    }
+    if let Err(e) = crate::precheck::check_run_scripts(&parsed) {
         report.findings.push(Finding::new("script", e));
     }
     if let Err(e) = crate::precheck::check_input_files_folder(&workflow_path, &parsed, &metadata) {
@@ -333,6 +339,138 @@ fn check_schema_version(metadata: &job_config::workflow::WorkflowMeta, report: &
             .at(at),
         ),
     }
+}
+
+/// `env_passthrough` entries are forwarded as environment variable names, so a
+/// name the shell cannot address is a mistake rather than a value.
+fn check_env_passthrough(
+    metadata: &job_config::workflow::WorkflowMeta,
+    findings: &mut Vec<Finding>,
+) {
+    for name in metadata.env_passthrough.iter().flatten() {
+        let mut chars = name.chars();
+        let valid = chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if !valid {
+            findings.push(
+                Finding::new(
+                    "workflow",
+                    format!("env_passthrough entry '{name}' is not an environment variable name."),
+                )
+                .at(".chiral/workflow.toml"),
+            );
+        }
+    }
+}
+
+/// Every `inputs` pattern of a job must be able to match something one of its
+/// direct dependencies declares in `outputs`; otherwise the job starts without
+/// the file, silently.
+///
+/// Only provable misses are reported. A job is skipped when any dependency
+/// declares no `outputs`, since its script may write to `outputs/` directly.
+fn check_input_ports(
+    job_names: &[String],
+    metas: &HashMap<String, job_config::job::JobMeta>,
+    metadata: &job_config::workflow::WorkflowMeta,
+    findings: &mut Vec<Finding>,
+) {
+    for job in job_names {
+        let Some(meta) = metas.get(job) else { continue };
+        let deps = metadata.get_job_dependencies(job);
+        if meta.inputs.is_empty() || deps.is_empty() {
+            continue;
+        }
+        let Some(dep_metas) = deps
+            .iter()
+            .map(|d| metas.get(d).filter(|m| !m.outputs.is_empty()))
+            .collect::<Option<Vec<_>>>()
+        else {
+            continue;
+        };
+        // Collection flattens paths, so a dependent sees only the last component.
+        let outputs: Vec<&str> = dep_metas
+            .iter()
+            .flat_map(|m| &m.outputs)
+            .filter_map(|o| o.trim_end_matches('/').rsplit('/').next())
+            .filter(|o| !o.is_empty())
+            .collect();
+
+        for input in &meta.inputs {
+            let message = if input.contains('/') {
+                let name = input
+                    .trim_end_matches('/')
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(input);
+                format!(
+                    "input '{input}' contains a path, but inputs match file names only, \
+                     so it can never match; write '{name}'."
+                )
+            } else if !outputs.iter().any(|o| may_overlap(input, o)) {
+                format!(
+                    "input '{input}' matches none of the outputs declared by {}: {}.",
+                    deps.join(", "),
+                    outputs.join(", ")
+                )
+            } else {
+                continue;
+            };
+            findings.push(
+                Finding::new("ports", message)
+                    .at(format!("{job}/.chiral/job.toml"))
+                    .in_job(job),
+            );
+        }
+    }
+}
+
+/// Whether some file name could match both patterns. Exact for a literal
+/// against a glob; for two globs, `false` only when their literal prefixes or
+/// suffixes conflict, which every common match would have to carry.
+fn may_overlap(a: &str, b: &str) -> bool {
+    const META: &[char] = &['*', '?', '['];
+    let matches = |glob: &str, name: &str| {
+        globset::Glob::new(glob).map_or(true, |g| g.compile_matcher().is_match(name))
+    };
+    let prefix = |p: &str| -> String { p.split(META).next().unwrap_or("").to_string() };
+    let suffix = |p: &str| -> String { p.rsplit(['*', '?', ']']).next().unwrap_or("").to_string() };
+
+    expand_braces(a).iter().any(|a| {
+        expand_braces(b)
+            .iter()
+            .any(|b| match (a.contains(META), b.contains(META)) {
+                (false, _) => matches(b, a),
+                (_, false) => matches(a, b),
+                _ => {
+                    let (pa, pb, sa, sb) = (prefix(a), prefix(b), suffix(a), suffix(b));
+                    (pa.starts_with(&pb) || pb.starts_with(&pa))
+                        && (sa.ends_with(&sb) || sb.ends_with(&sa))
+                }
+            })
+    })
+}
+
+/// `x.{pdb,cif}` -> `x.pdb`, `x.cif`, innermost group first, so nesting works.
+fn expand_braces(pattern: &str) -> Vec<String> {
+    let Some(close) = pattern.find('}') else {
+        return vec![pattern.to_string()];
+    };
+    let Some(open) = pattern[..close].rfind('{') else {
+        return vec![pattern.to_string()];
+    };
+    pattern[open + 1..close]
+        .split(',')
+        .flat_map(|alt| {
+            expand_braces(&format!(
+                "{}{alt}{}",
+                &pattern[..open],
+                &pattern[close + 1..]
+            ))
+        })
+        .collect()
 }
 
 /// `[dependencies]` may name a job that does not exist — the topological sort
@@ -601,5 +739,106 @@ mod tests {
             assert!(report.is_valid(), "{:?}", report.findings);
             assert!(report.notes.is_empty());
         }
+    }
+
+    /// Gives `job` an `inputs` line, keeping the rest of the helper's job.toml.
+    fn set_inputs(dir: &TempDir, job: &str, inputs: &str) {
+        let path = dir.path().join(job).join(".chiral/job.toml");
+        let toml = fs::read_to_string(&path).unwrap();
+        fs::write(
+            &path,
+            toml.replace("outputs =", &format!("inputs = {inputs}\noutputs =")),
+        )
+        .unwrap();
+    }
+
+    fn ports(report: &Report) -> Vec<&Finding> {
+        report
+            .findings
+            .iter()
+            .filter(|f| f.kind == "ports")
+            .collect()
+    }
+
+    #[test]
+    fn an_input_an_upstream_output_can_satisfy_passes() {
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        set_inputs(&dir, "02-second", "[\"result.txt\", \"*.{txt,csv}\"]");
+
+        let report = validate_workflow(dir.path());
+        assert!(report.is_valid(), "{:?}", report.findings);
+    }
+
+    #[test]
+    fn an_input_no_upstream_output_can_satisfy_is_reported() {
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        set_inputs(&dir, "02-second", "[\"*.txt\", \"*.pdb\"]");
+
+        let report = validate_workflow(dir.path());
+        let ports = ports(&report);
+        assert_eq!(ports.len(), 1, "{:?}", report.findings);
+        assert!(ports[0].message.contains("'*.pdb'"));
+        assert_eq!(ports[0].job.as_deref(), Some("02-second"));
+        assert_eq!(ports[0].file.as_deref(), Some("02-second/.chiral/job.toml"));
+    }
+
+    #[test]
+    fn an_input_with_a_path_can_never_match_and_says_what_to_write() {
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        set_inputs(&dir, "02-second", "[\"results/a.txt\"]");
+
+        let report = validate_workflow(dir.path());
+        let ports = ports(&report);
+        assert_eq!(ports.len(), 1, "{:?}", report.findings);
+        assert!(ports[0].message.contains("write 'a.txt'"));
+    }
+
+    #[test]
+    fn a_dependency_without_declared_outputs_is_not_judged() {
+        // It may write into outputs/ directly, which nothing here can see.
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        let first = dir.path().join("01-first/.chiral/job.toml");
+        let toml = fs::read_to_string(&first).unwrap();
+        fs::write(&first, toml.replace("outputs = [\"*.txt\"]\n", "")).unwrap();
+        set_inputs(&dir, "02-second", "[\"*.pdb\"]");
+
+        let report = validate_workflow(dir.path());
+        assert!(report.is_valid(), "{:?}", report.findings);
+    }
+
+    #[test]
+    fn a_missing_run_script_is_reported() {
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        fs::remove_file(dir.path().join("02-second/run.sh")).unwrap();
+
+        let report = validate_workflow(dir.path());
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|f| f.kind == "script" && f.message.contains("[02-second] run.sh")),
+            "{:?}",
+            report.findings
+        );
+    }
+
+    #[test]
+    fn an_env_passthrough_entry_that_is_not_a_variable_name_is_reported() {
+        let dir = workflow("env_passthrough = [\"HF_TOKEN\", \"NGC-API-KEY\"]\n");
+
+        let report = validate_workflow(dir.path());
+        assert_eq!(report.findings.len(), 1, "{:?}", report.findings);
+        assert!(report.findings[0].message.contains("NGC-API-KEY"));
+    }
+
+    #[test]
+    fn globs_overlap_unless_their_literal_ends_conflict() {
+        assert!(may_overlap("*.pdb", "design_*.pdb"));
+        assert!(may_overlap("design_*_rank001.pdb", "design_*.pdb"));
+        assert!(may_overlap("ligand_library", "ligand_*"));
+        assert!(may_overlap("*.{fasta,fa}", "seq.fa"));
+        assert!(!may_overlap("*.pdb", "*.sdf"));
+        assert!(!may_overlap("a_*", "b_*"));
+        assert!(!may_overlap("model.pkl", "*.txt"));
     }
 }
