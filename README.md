@@ -176,8 +176,9 @@ Execution order: 01-download -> 02-pocket -> 03-visualize
 It parses `workflow.toml` and every `job.toml`, resolves the dependency graph,
 validates `global_params.json` and each `params.json` against their `[params]`
 definitions, and applies the same conventions a run applies (no install commands
-in scripts, no cross-node `../` references, `input_files/` present when
-dependency-free jobs exist).
+in scripts, no cross-node `../` references, every `run` script present,
+`input_files/` present when dependency-free jobs exist), and checks that every
+job's `inputs` can be fed by its dependencies' `outputs`.
 
 The exit code is `0` when the folder is sound and non-zero when it is not, so it
 works as a CI gate on a repository of workflows. `--json` emits the report as
@@ -201,8 +202,8 @@ $ silva validate --json ./broken
 }
 ```
 
-`kind` is one of `workflow`, `job`, `dependency`, `params`, `script` or
-`inputs`.
+`kind` is one of `workflow`, `job`, `dependency`, `ports`, `params`, `script`
+or `inputs`.
 
 ## Workflows
 

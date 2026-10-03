@@ -9,6 +9,7 @@ use tempfile::TempDir;
 use tokio::sync::mpsc;
 
 use crate::components::workflow::{self, JobFolder};
+use crate::headless::topological_sort_jobs;
 use crate::utils::copy_dir_recursive;
 
 use super::{
@@ -195,17 +196,28 @@ impl State {
                 }
             };
 
-            // Load workflow metadata (contains dependencies and param definitions)
-            let workflow_metadata = workflow_folder
-                .load_workflow_metadata()
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| {
+            // Load workflow metadata (contains dependencies and param definitions).
+            // A missing file means "no dependencies"; a broken one must not, or
+            // the jobs would run in the wrong order.
+            let workflow_metadata = match workflow_folder.load_workflow_metadata() {
+                Ok(meta) => meta.unwrap_or_else(|| {
                     job_config::workflow::WorkflowMeta::new(
                         workflow_folder.name.clone(),
                         String::new(),
                     )
-                });
+                }),
+                Err(e) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stderr,
+                        format!("Cannot read .chiral/workflow.toml: {e}"),
+                    );
+                    tx.send((0, JobStatus::Failed, log_line)).await.unwrap();
+                    tx.send((jobs.len(), JobStatus::Failed, LogLine::empty()))
+                        .await
+                        .unwrap();
+                    return;
+                }
+            };
 
             // Load workflow parameters (global parameters)
             let workflow_params = workflow_folder
@@ -257,6 +269,7 @@ impl State {
             for check_result in [
                 crate::precheck::check_install_commands(&sorted_jobs),
                 crate::precheck::check_cross_node_references(&sorted_jobs),
+                crate::precheck::check_run_scripts(&sorted_jobs),
                 crate::precheck::check_input_files_folder(
                     &workflow_folder.path,
                     &sorted_jobs,
@@ -545,121 +558,6 @@ impl State {
         clipboard.set_text(path.to_string_lossy().to_string())?;
         Ok(())
     }
-}
-
-/// Performs topological sort on jobs based on their dependencies.
-///
-/// # Arguments
-///
-/// * `jobs` - List of jobs to sort
-///
-/// # Returns
-///
-/// * `Ok(Vec<JobFolder>)` - Jobs sorted in dependency order (dependencies first)
-/// * `Err(String)` - Error message if circular dependency detected or invalid dependency
-///
-/// # Algorithm
-///
-/// Uses Kahn's algorithm for topological sorting:
-/// 1. Build dependency graph and calculate in-degrees
-/// 2. Start with jobs that have no dependencies (in-degree = 0)
-/// 3. Process jobs in order, removing edges as we go
-/// 4. If we can't process all jobs, there's a cycle
-fn topological_sort_jobs(
-    jobs: &[JobFolder],
-    workflow_metadata: &job_config::workflow::WorkflowMeta,
-) -> Result<Vec<JobFolder>, String> {
-    use std::collections::{HashMap, VecDeque};
-
-    if jobs.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Build a map of job names to job data for quick lookup
-    let job_map: HashMap<String, JobFolder> =
-        jobs.iter().map(|j| (j.name.clone(), j.clone())).collect();
-
-    // Build dependency graph: job_name -> Vec<jobs that depend on it>
-    let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
-    let mut in_degree: HashMap<String, usize> = HashMap::new();
-
-    // Initialize all jobs with in-degree 0
-    for job in jobs {
-        in_degree.insert(job.name.clone(), 0);
-        dependents.entry(job.name.clone()).or_default();
-    }
-
-    // Build the graph using dependencies from workflow metadata
-    for job in jobs {
-        let job_deps = workflow_metadata.get_job_dependencies(&job.name);
-
-        for dep_name in job_deps {
-            // Validate that the dependency exists
-            if !job_map.contains_key(dep_name) {
-                return Err(format!(
-                    "Job '{}' depends on '{}', but '{}' does not exist in the workflow",
-                    job.name, dep_name, dep_name
-                ));
-            }
-
-            // Add edge: dep_name -> job.name
-            dependents
-                .entry(dep_name.clone())
-                .or_default()
-                .push(job.name.clone());
-
-            // Increment in-degree of current job
-            *in_degree.get_mut(&job.name).unwrap() += 1;
-        }
-    }
-
-    // Kahn's algorithm: start with jobs that have no dependencies
-    let mut queue: VecDeque<String> = in_degree
-        .iter()
-        .filter(|&(_, &degree)| degree == 0)
-        .map(|(name, _)| name.clone())
-        .collect();
-
-    let mut sorted_jobs = Vec::new();
-
-    while let Some(job_name) = queue.pop_front() {
-        // Add this job to the sorted list
-        if let Some(job) = job_map.get(&job_name) {
-            sorted_jobs.push(job.clone());
-        }
-
-        // Process all jobs that depend on this one
-        if let Some(deps) = dependents.get(&job_name) {
-            for dependent in deps {
-                // Decrease in-degree
-                let degree = in_degree.get_mut(dependent).unwrap();
-                *degree -= 1;
-
-                // If in-degree becomes 0, add to queue
-                if *degree == 0 {
-                    queue.push_back(dependent.clone());
-                }
-            }
-        }
-    }
-
-    // Check if all jobs were processed (no cycles)
-    if sorted_jobs.len() != jobs.len() {
-        // Find jobs that are part of the cycle
-        let processed: std::collections::HashSet<_> = sorted_jobs.iter().map(|j| &j.name).collect();
-        let unprocessed: Vec<_> = jobs
-            .iter()
-            .filter(|j| !processed.contains(&j.name))
-            .map(|j| j.name.as_str())
-            .collect();
-
-        return Err(format!(
-            "Circular dependency detected involving jobs: {}",
-            unprocessed.join(", ")
-        ));
-    }
-
-    Ok(sorted_jobs)
 }
 
 /// Helper function to copy input files from dependency jobs' outputs to the current job folder.

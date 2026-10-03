@@ -15,11 +15,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A JSON Schema for `workflow.toml` and `job.toml` (#115), generated from `job_config`'s structs with `schemars`: `silva schema workflow|job` prints it, `schema/` holds the committed copies, and each release publishes both as assets. A `job_config` test compares the committed files with the generated output, so a struct change that skips regeneration fails `cargo test`. The schema is stamped with `"x-schema-version": "1.0"`, and `schema_version` carries its `MAJOR.MINOR` pattern. The derive sits behind a default-on `schema` feature, so a consumer that only parses can build `job_config` without `schemars`.
 
+- `silva validate` checks that every `inputs` pattern can be fed by a direct dependency (#117), as a new `ports` finding. Previously an unmatched pattern was silent at run time and the job just started without the file. A pattern containing `/` can never match, because `inputs` match file names only, so it is reported with the name to write instead. Only provable misses are reported: two globs count as overlapping unless their literal prefixes or suffixes conflict, and a job is not judged when a dependency declares no `outputs`, since its script may write into `outputs/` directly. Over collab-workflows this finds 11 real misses in workflow-002, 019 and 029, taking the passing count from 19 of 33 to 17. `validate` also rejects `env_passthrough` entries that are not environment variable names.
+
 ### Changed
+
+- A job whose `run` script is missing is refused before anything runs (#117), by `silva run`, the TUI and `silva validate` alike, through a new `check_run_scripts` precheck. The script is piped into bash, which reads nothing from a missing file and exits 0, so such a job used to "complete" having done nothing. A missing `pre` or `post` script is still skipped.
 
 - The workflow docs are one spec and one tutorial (#116). `doc/format.md` is normative. It leaves field lists to the schema and states the behaviour the schema cannot express, each rule tied to the function that implements it. Above all, it documents that an empty `inputs` copies **every** dependency output into `inputs/`, which several workflows rely on and no doc mentioned. `doc/tutorial.md` builds and runs a two-job workflow from an empty folder.
 
   They replace three copies that disagreed with the code and with each other: `doc/workflows.md`, the workflow half of `README.md`, and `GET_STARTED.md`. These still documented `@job.toml`, `depends_on` and `docker_image`, a promised alphabetical job order, and `job.toml` examples without the required `description`. `readme.md`, which differed from `README.md` only in case, is merged into it. Behaviour the spec marks as unspecified or TUI-divergent is filed as #128, #129 and #130.
+
+### Fixed
+
+- Jobs with no dependencies between them now run in folder-name order every time (#128). The topological sort seeded its queue from a `HashMap`, so a workflow without `[dependencies]` ran in a different order on each run. 20 runs of `silva validate` on a five-job folder used to give 17 different orders; they now give one. The TUI's copy of the sort, with its own error wording, is deleted, so `silva run`, the TUI and `validate` share one implementation.
+
+- A `.chiral/workflow.toml` that does not parse now fails `silva run` and the TUI with the parse error (#117). It used to be swallowed into an empty workflow, so the run went ahead with no dependencies and jobs in the wrong order. A missing file still means "no dependencies".
 
 ## [0.5.15]
 

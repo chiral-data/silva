@@ -88,11 +88,12 @@ pub async fn run_workflow(
 
     emitter.jobs_found(jobs.len());
 
-    // Load workflow metadata (dependencies are managed here, not in job.toml)
+    // Load workflow metadata (dependencies are managed here, not in job.toml).
+    // A missing file means "no dependencies"; a broken one must not, or the
+    // jobs would run in the wrong order.
     let workflow_metadata = workflow_folder
         .load_workflow_metadata()
-        .ok()
-        .flatten()
+        .map_err(|e| format!("Cannot read .chiral/workflow.toml: {e}"))?
         .unwrap_or_else(|| {
             job_config::workflow::WorkflowMeta::new(workflow_name.clone(), String::new())
         });
@@ -115,6 +116,7 @@ pub async fn run_workflow(
     // Pre-checks: reject workflows that violate conventions
     crate::precheck::check_install_commands(&sorted_jobs)?;
     crate::precheck::check_cross_node_references(&sorted_jobs)?;
+    crate::precheck::check_run_scripts(&sorted_jobs)?;
     crate::precheck::check_input_files_folder(&workflow_path, &sorted_jobs, &workflow_metadata)?;
 
     // Copy input_files to all jobs without dependencies
@@ -480,11 +482,12 @@ pub(crate) fn topological_sort_jobs(
         }
     }
 
-    // Kahn's algorithm
-    let mut queue: VecDeque<String> = in_degree
+    // Kahn's algorithm, seeded in scan (folder-name) order: seeding from the
+    // map would make the order of independent jobs vary from run to run.
+    let mut queue: VecDeque<String> = jobs
         .iter()
-        .filter(|&(_, &degree)| degree == 0)
-        .map(|(name, _)| name.clone())
+        .filter(|j| in_degree[&j.name] == 0)
+        .map(|j| j.name.clone())
         .collect();
 
     let mut sorted_jobs = Vec::new();
@@ -922,5 +925,28 @@ mod tests {
             list_inputs(wf, "02-consume"),
             vec!["a.txt", "b.csv", "c.fasta"]
         );
+    }
+
+    #[test]
+    fn independent_jobs_sort_in_folder_name_order_every_time() {
+        // Seeding from the in-degree map made this order vary between runs.
+        let names = [
+            "01-a", "02-b", "03-c", "04-d", "05-e", "06-f", "07-g", "08-h",
+        ];
+        let jobs: Vec<JobFolder> = names
+            .iter()
+            .map(|n| JobFolder::new(n.to_string(), std::path::PathBuf::from(n)))
+            .collect();
+        let mut meta = job_config::workflow::WorkflowMeta::new("w".into(), String::new());
+        meta.dependencies.insert("08-h".into(), vec!["01-a".into()]);
+
+        for _ in 0..20 {
+            let order: Vec<String> = topological_sort_jobs(&jobs, &meta)
+                .unwrap()
+                .into_iter()
+                .map(|j| j.name)
+                .collect();
+            assert_eq!(order, names);
+        }
     }
 }
