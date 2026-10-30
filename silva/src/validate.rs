@@ -15,6 +15,7 @@ use std::time::SystemTime;
 
 use crate::components::workflow::{JobFolder, JobScanner, WorkflowFolder};
 use crate::headless::topological_sort_jobs;
+use crate::precheck::{self, ScriptConvention};
 
 /// One problem, addressed to whoever has to fix it.
 #[derive(Debug, Clone, PartialEq)]
@@ -27,6 +28,9 @@ pub struct Finding {
     /// Job folder this is about, when it is about one.
     pub job: Option<String>,
     pub message: String,
+    /// Convention this offence belongs to; human output groups a run of them
+    /// under its heading. Not part of the JSON.
+    pub(crate) group: Option<&'static ScriptConvention>,
 }
 
 impl Finding {
@@ -36,6 +40,7 @@ impl Finding {
             file: None,
             job: None,
             message: message.into(),
+            group: None,
         }
     }
 
@@ -46,6 +51,11 @@ impl Finding {
 
     fn in_job(mut self, job: impl Into<String>) -> Self {
         self.job = Some(job.into());
+        self
+    }
+
+    fn under(mut self, convention: &'static ScriptConvention) -> Self {
+        self.group = Some(convention);
         self
     }
 }
@@ -79,8 +89,28 @@ impl Report {
             )
         } else {
             let mut out = format!("{} problem(s) found:\n\n", self.findings.len());
-            for finding in &self.findings {
-                out.push_str(&render_item(finding));
+            for (i, finding) in self.findings.iter().enumerate() {
+                let group = finding.group;
+                let opens = i == 0 || self.findings[i - 1].group != group;
+                let closes = self
+                    .findings
+                    .get(i + 1)
+                    .is_none_or(|next| next.group != group);
+                match group {
+                    Some(convention) => {
+                        if opens {
+                            out.push_str(&format!(
+                                "  {}\n",
+                                convention.heading.replace('\n', "\n  ")
+                            ));
+                        }
+                        out.push_str(&format!("  {}", render_item(finding)));
+                        if closes {
+                            out.push_str(&format!("    Fix: {}\n", convention.fix));
+                        }
+                    }
+                    None => out.push_str(&render_item(finding)),
+                }
             }
             out
         };
@@ -305,16 +335,43 @@ pub fn validate_workflow(workflow_path: &Path) -> Report {
 
     // 6. The same conventions headless execution enforces, so validate agrees
     //    with what a run would do.
-    if let Err(e) = crate::precheck::check_install_commands(&parsed) {
-        report.findings.push(Finding::new("script", e));
+    //    One finding per offence, so a caller can show each on its job.
+    for (convention, what, violations) in [
+        (
+            &precheck::INSTALL_COMMANDS,
+            "install command",
+            precheck::install_command_violations(&parsed),
+        ),
+        (
+            &precheck::CROSS_NODE_REFERENCES,
+            "sibling path",
+            precheck::cross_node_violations(&parsed),
+        ),
+    ] {
+        for v in violations {
+            report.findings.push(
+                Finding::new(
+                    "script",
+                    format!(
+                        "{}:{} — {what}: {}",
+                        v.script_name, v.line_number, v.line_content
+                    ),
+                )
+                .at(format!("{}/{}", v.job_name, v.script_name))
+                .in_job(&v.job_name)
+                .under(convention),
+            );
+        }
     }
-    if let Err(e) = crate::precheck::check_cross_node_references(&parsed) {
-        report.findings.push(Finding::new("script", e));
+    for (job, run) in precheck::missing_run_scripts(&parsed) {
+        report.findings.push(
+            Finding::new("script", format!("run script '{run}' not found"))
+                .at(format!("{job}/{run}"))
+                .in_job(&job)
+                .under(&precheck::RUN_SCRIPTS),
+        );
     }
-    if let Err(e) = crate::precheck::check_run_scripts(&parsed) {
-        report.findings.push(Finding::new("script", e));
-    }
-    if let Err(e) = crate::precheck::check_input_files_folder(&workflow_path, &parsed, &metadata) {
+    if let Err(e) = precheck::check_input_files_folder(&workflow_path, &parsed, &metadata) {
         report
             .findings
             .push(Finding::new("inputs", e).at("input_files/"));
@@ -912,14 +969,75 @@ mod tests {
         fs::remove_file(dir.path().join("02-second/run.sh")).unwrap();
 
         let report = validate_workflow(dir.path());
-        assert!(
-            report
-                .findings
-                .iter()
-                .any(|f| f.kind == "script" && f.message.contains("[02-second] run.sh")),
-            "{:?}",
-            report.findings
+        let scripts = scripts(&report);
+        assert_eq!(scripts.len(), 1, "{:?}", report.findings);
+        assert_eq!(scripts[0].job.as_deref(), Some("02-second"));
+        assert_eq!(scripts[0].file.as_deref(), Some("02-second/run.sh"));
+    }
+
+    fn scripts(report: &Report) -> Vec<&Finding> {
+        report
+            .findings
+            .iter()
+            .filter(|f| f.kind == "script")
+            .collect()
+    }
+
+    fn append_line(dir: &TempDir, job: &str, line: &str) {
+        let path = dir.path().join(job).join("run.sh");
+        let script = fs::read_to_string(&path).unwrap();
+        fs::write(&path, format!("{script}{line}\n")).unwrap();
+    }
+
+    #[test]
+    fn each_install_command_is_its_own_finding_on_its_job() {
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        append_line(&dir, "01-first", "apt-get install -y cowsay");
+        append_line(&dir, "02-second", "pip install numpy");
+
+        let report = validate_workflow(dir.path());
+        let scripts = scripts(&report);
+        assert_eq!(scripts.len(), 2, "{:?}", report.findings);
+        assert_eq!(scripts[0].job.as_deref(), Some("01-first"));
+        assert_eq!(scripts[0].file.as_deref(), Some("01-first/run.sh"));
+        assert_eq!(
+            scripts[0].message,
+            "run.sh:3 — install command: apt-get install -y cowsay"
         );
+        assert_eq!(scripts[1].job.as_deref(), Some("02-second"));
+
+        let json = report.to_json();
+        assert!(json.contains("\"job\": \"01-first\""));
+        assert!(json.contains("\"job\": \"02-second\""));
+    }
+
+    #[test]
+    fn a_sibling_path_names_its_job_file_and_line() {
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        append_line(&dir, "02-second", "cat ../01-first/out.txt");
+
+        let report = validate_workflow(dir.path());
+        let scripts = scripts(&report);
+        assert_eq!(scripts.len(), 1, "{:?}", report.findings);
+        assert_eq!(scripts[0].job.as_deref(), Some("02-second"));
+        assert_eq!(scripts[0].file.as_deref(), Some("02-second/run.sh"));
+        assert!(scripts[0].message.starts_with("run.sh:3 — sibling path:"));
+    }
+
+    #[test]
+    fn human_output_groups_one_convention_under_one_heading() {
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        append_line(&dir, "01-first", "apt-get install -y cowsay");
+        append_line(&dir, "02-second", "pip install numpy");
+
+        let out = validate_workflow(dir.path()).render();
+        assert_eq!(out.matches("Install commands found").count(), 1, "{out}");
+        assert_eq!(
+            out.matches("Fix: Move install commands").count(),
+            1,
+            "{out}"
+        );
+        assert!(out.contains("[01-first/run.sh]") && out.contains("[02-second/run.sh]"));
     }
 
     #[test]
