@@ -4,6 +4,9 @@
 //! - Rejects scripts containing install commands (should be in Docker images)
 //! - Requires `input_files/` folder when dependency-free jobs exist
 //! - Rejects scripts with cross-node `../` path references
+//!
+//! Each script check has a collector, which `silva validate` reports one
+//! finding per offence from, and a `check_*` that folds them into one message.
 
 use std::fs;
 use std::path::Path;
@@ -11,12 +14,36 @@ use std::path::Path;
 use crate::components::workflow::JobFolder;
 
 /// A single violation found in a script.
-struct Violation {
-    job_name: String,
-    script_name: String,
-    line_number: usize,
-    line_content: String,
+pub(crate) struct Violation {
+    pub job_name: String,
+    pub script_name: String,
+    pub line_number: usize,
+    pub line_content: String,
 }
+
+/// What every report of one script convention says around its offences.
+#[derive(Debug, PartialEq)]
+pub(crate) struct ScriptConvention {
+    pub heading: &'static str,
+    pub fix: &'static str,
+}
+
+pub(crate) const INSTALL_COMMANDS: ScriptConvention = ScriptConvention {
+    heading: "Install commands found in workflow scripts.\n\
+              Dependencies must be pre-baked into Docker images.",
+    fix: "Move install commands into Dockerfiles and rebuild the images.",
+};
+
+pub(crate) const CROSS_NODE_REFERENCES: ScriptConvention = ScriptConvention {
+    heading: "Cross-node path references found in workflow scripts.\n\
+              Jobs must use the inputs/ folder, not relative paths to siblings.",
+    fix: "Use files from the inputs/ directory instead of ../",
+};
+
+pub(crate) const RUN_SCRIPTS: ScriptConvention = ScriptConvention {
+    heading: "Run script not found:",
+    fix: "Add the script, or point [scripts] run at the one the job uses.",
+};
 
 /// Install command patterns to detect: (command, subcommand).
 const INSTALL_PATTERNS: &[(&str, &str)] = &[
@@ -42,86 +69,88 @@ fn line_has_install_command(line: &str) -> bool {
     false
 }
 
+/// Every script line that installs a package, across all jobs.
+pub(crate) fn install_command_violations(jobs: &[JobFolder]) -> Vec<Violation> {
+    scan_jobs(jobs, line_has_install_command)
+}
+
 /// Checks all job scripts for install commands.
 ///
 /// Returns `Ok(())` if no install commands are found, or `Err(message)`
 /// with a formatted error listing all violations.
 pub fn check_install_commands(jobs: &[JobFolder]) -> Result<(), String> {
-    let mut violations = Vec::new();
+    violations_message(&INSTALL_COMMANDS, &install_command_violations(jobs))
+}
 
-    for job in jobs {
-        let job_dir = &job.path;
+/// Every script line that reaches a sibling job through `../`, across all jobs.
+pub(crate) fn cross_node_violations(jobs: &[JobFolder]) -> Vec<Violation> {
+    scan_jobs(jobs, |line| line.contains("../"))
+}
 
-        // Load job meta to find configured script names
-        let script_names = match job.load_meta() {
-            Ok(meta) => vec![meta.scripts.pre, meta.scripts.run, meta.scripts.post],
-            Err(_) => vec![
-                "pre_run.sh".to_string(),
-                "run.sh".to_string(),
-                "post_run.sh".to_string(),
-            ],
-        };
+/// Checks all job scripts for cross-node `../` path references.
+///
+/// Jobs must use their `inputs/` folder instead of relative paths to siblings.
+/// Returns `Err` listing all violations if any are found.
+pub fn check_cross_node_references(jobs: &[JobFolder]) -> Result<(), String> {
+    violations_message(&CROSS_NODE_REFERENCES, &cross_node_violations(jobs))
+}
 
-        for script_name in &script_names {
-            let script_path = job_dir.join(script_name);
-            if let Some(mut script_violations) = scan_script(&job.name, script_name, &script_path) {
-                violations.append(&mut script_violations);
-            }
-        }
-    }
-
+fn violations_message(
+    convention: &ScriptConvention,
+    violations: &[Violation],
+) -> Result<(), String> {
     if violations.is_empty() {
         return Ok(());
     }
 
-    let mut msg = String::from(
-        "Install commands found in workflow scripts.\n\
-         Dependencies must be pre-baked into Docker images.\n",
-    );
-
-    for v in &violations {
+    let mut msg = format!("{}\n", convention.heading);
+    for v in violations {
         msg.push_str(&format!(
             "\n  [{}] {}:{} — {}",
-            v.job_name,
-            v.script_name,
-            v.line_number,
-            v.line_content.trim()
+            v.job_name, v.script_name, v.line_number, v.line_content
         ));
     }
-
-    msg.push_str("\n\nFix: Move install commands into Dockerfiles and rebuild the images.");
+    msg.push_str(&format!("\n\nFix: {}", convention.fix));
 
     Err(msg)
 }
 
-/// Scans a single script file for install command patterns.
-fn scan_script(job_name: &str, script_name: &str, path: &Path) -> Option<Vec<Violation>> {
-    let content = fs::read_to_string(path).ok()?;
+/// The job's configured scripts, or the defaults when its job.toml won't load.
+fn script_names(job: &JobFolder) -> Vec<String> {
+    match job.load_meta() {
+        Ok(meta) => vec![meta.scripts.pre, meta.scripts.run, meta.scripts.post],
+        Err(_) => vec![
+            "pre_run.sh".to_string(),
+            "run.sh".to_string(),
+            "post_run.sh".to_string(),
+        ],
+    }
+}
+
+/// Scans every job's scripts, line by line, skipping comments.
+fn scan_jobs(jobs: &[JobFolder], offends: impl Fn(&str) -> bool) -> Vec<Violation> {
     let mut violations = Vec::new();
 
-    for (line_idx, line) in content.lines().enumerate() {
-        let trimmed = line.trim();
-
-        // Skip comments
-        if trimmed.starts_with('#') {
-            continue;
-        }
-
-        if line_has_install_command(trimmed) {
-            violations.push(Violation {
-                job_name: job_name.to_string(),
-                script_name: script_name.to_string(),
-                line_number: line_idx + 1,
-                line_content: trimmed.to_string(),
-            });
+    for job in jobs {
+        for script_name in script_names(job) {
+            let Ok(content) = fs::read_to_string(job.path.join(&script_name)) else {
+                continue;
+            };
+            for (line_idx, line) in content.lines().enumerate() {
+                let trimmed = line.trim();
+                if !trimmed.starts_with('#') && offends(trimmed) {
+                    violations.push(Violation {
+                        job_name: job.name.clone(),
+                        script_name: script_name.clone(),
+                        line_number: line_idx + 1,
+                        line_content: trimmed.to_string(),
+                    });
+                }
+            }
         }
     }
 
-    if violations.is_empty() {
-        None
-    } else {
-        Some(violations)
-    }
+    violations
 }
 
 /// Checks that an `input_files/` folder exists at the workflow root when
@@ -162,6 +191,17 @@ pub fn check_input_files_folder(
     ))
 }
 
+/// Every job whose relative `run` script is missing, as (job, script).
+pub(crate) fn missing_run_scripts(jobs: &[JobFolder]) -> Vec<(String, String)> {
+    jobs.iter()
+        .filter_map(|job| {
+            let run = job.load_meta().ok()?.scripts.run;
+            let relative = !Path::new(&run).is_absolute();
+            (relative && !job.path.join(&run).is_file()).then(|| (job.name.clone(), run))
+        })
+        .collect()
+}
+
 /// Checks that every job's `run` script exists.
 ///
 /// A missing `run` script is otherwise invisible: the script is piped into
@@ -169,13 +209,9 @@ pub fn check_input_files_folder(
 /// Absolute paths name a file inside the image and are not checked. Missing
 /// `pre`/`post` scripts are a legitimate skip.
 pub fn check_run_scripts(jobs: &[JobFolder]) -> Result<(), String> {
-    let missing: Vec<String> = jobs
-        .iter()
-        .filter_map(|job| {
-            let run = job.load_meta().ok()?.scripts.run;
-            let relative = !Path::new(&run).is_absolute();
-            (relative && !job.path.join(&run).is_file()).then(|| format!("[{}] {run}", job.name))
-        })
+    let missing: Vec<String> = missing_run_scripts(jobs)
+        .into_iter()
+        .map(|(job, run)| format!("[{job}] {run}"))
         .collect();
 
     if missing.is_empty() {
@@ -183,97 +219,11 @@ pub fn check_run_scripts(jobs: &[JobFolder]) -> Result<(), String> {
     }
 
     Err(format!(
-        "Run script not found:\n\n  {}\n\n\
-         Fix: Add the script, or point [scripts] run at the one the job uses.",
-        missing.join("\n  ")
+        "{}\n\n  {}\n\nFix: {}",
+        RUN_SCRIPTS.heading,
+        missing.join("\n  "),
+        RUN_SCRIPTS.fix
     ))
-}
-
-/// Checks all job scripts for cross-node `../` path references.
-///
-/// Jobs must use their `inputs/` folder instead of relative paths to siblings.
-/// Returns `Err` listing all violations if any are found.
-pub fn check_cross_node_references(jobs: &[JobFolder]) -> Result<(), String> {
-    let mut violations = Vec::new();
-
-    for job in jobs {
-        let job_dir = &job.path;
-
-        let script_names = match job.load_meta() {
-            Ok(meta) => vec![meta.scripts.pre, meta.scripts.run, meta.scripts.post],
-            Err(_) => vec![
-                "pre_run.sh".to_string(),
-                "run.sh".to_string(),
-                "post_run.sh".to_string(),
-            ],
-        };
-
-        for script_name in &script_names {
-            let script_path = job_dir.join(script_name);
-            if let Some(mut script_violations) =
-                scan_script_for_cross_node_refs(&job.name, script_name, &script_path)
-            {
-                violations.append(&mut script_violations);
-            }
-        }
-    }
-
-    if violations.is_empty() {
-        return Ok(());
-    }
-
-    let mut msg = String::from(
-        "Cross-node path references found in workflow scripts.\n\
-         Jobs must use the inputs/ folder, not relative paths to siblings.\n",
-    );
-
-    for v in &violations {
-        msg.push_str(&format!(
-            "\n  [{}] {}:{} — {}",
-            v.job_name,
-            v.script_name,
-            v.line_number,
-            v.line_content.trim()
-        ));
-    }
-
-    msg.push_str("\n\nFix: Use files from the inputs/ directory instead of ../");
-
-    Err(msg)
-}
-
-/// Scans a single script file for `../` path patterns.
-fn scan_script_for_cross_node_refs(
-    job_name: &str,
-    script_name: &str,
-    path: &Path,
-) -> Option<Vec<Violation>> {
-    let content = fs::read_to_string(path).ok()?;
-    let mut violations = Vec::new();
-
-    for (line_idx, line) in content.lines().enumerate() {
-        let trimmed = line.trim();
-
-        // Skip comments
-        if trimmed.starts_with('#') {
-            continue;
-        }
-
-        if trimmed.contains("../") {
-            violations.push(Violation {
-                job_name: job_name.to_string(),
-                script_name: script_name.to_string(),
-                line_number: line_idx + 1,
-                line_content: trimmed.to_string(),
-            });
-        }
-    }
-
-    if violations.is_empty() {
-        None
-    } else {
-        Some(violations)
-    }
 }
 
 #[cfg(test)]
