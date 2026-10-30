@@ -219,12 +219,22 @@ impl State {
                 }
             };
 
-            // Load workflow parameters (global parameters)
-            let workflow_params = workflow_folder
-                .load_workflow_params()
-                .ok()
-                .flatten()
-                .unwrap_or_default();
+            // Raw values only: run_job fills in the declared defaults. A broken
+            // file must not silently become "use the defaults".
+            let workflow_params = match workflow_folder.load_workflow_params() {
+                Ok(params) => params.unwrap_or_default(),
+                Err(e) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stderr,
+                        format!("Cannot read global_params.json: {e}"),
+                    );
+                    tx.send((0, JobStatus::Failed, log_line)).await.unwrap();
+                    tx.send((jobs.len(), JobStatus::Failed, LogLine::empty()))
+                        .await
+                        .unwrap();
+                    return;
+                }
+            };
 
             if !workflow_params.is_empty() {
                 let log_line = LogLine::new(
@@ -326,8 +336,18 @@ impl State {
                     Ok(config) => {
                         docker_executor.set_job_idx(idx);
 
-                        // Load job parameters (if they exist)
-                        let job_params = job.load_params().ok().flatten().unwrap_or_default();
+                        let job_params = match job.load_params() {
+                            Ok(params) => params.unwrap_or_default(),
+                            Err(e) => {
+                                let log_line = LogLine::new(
+                                    LogSource::Stderr,
+                                    format!("Cannot read {}/params.json: {e}", job.name),
+                                );
+                                tx.send((idx, JobStatus::Failed, log_line)).await.unwrap();
+                                workflow_failed = true;
+                                break;
+                            }
+                        };
 
                         // Copy input files from dependencies before running the job
                         let job_deps = workflow_metadata.get_job_dependencies(&job.name);

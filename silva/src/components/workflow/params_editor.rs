@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use job_config::job::ParamType;
-use job_config::params::{JobParams, json_to_toml, toml_to_json};
+use job_config::params::{JobParams, json_to_toml, with_defaults};
 
 use super::param_source::ParamSource;
 
@@ -32,20 +32,16 @@ pub struct ParamsEditorState<T: ParamSource> {
 impl<T: ParamSource> ParamsEditorState<T> {
     /// Creates a new parameter editor state from a param source.
     pub fn new(source: T) -> Result<Self, String> {
-        // Load current params or use defaults
-        let current_params = source
-            .load_params()?
-            .unwrap_or_else(|| source.generate_default_params());
-
-        // Convert params to editable strings
-        let mut param_values = Vec::new();
-        for (param_name, param_def) in source.param_definitions() {
-            // Get value from current params or convert default from TOML to JSON
-            let default_json = toml_to_json(&param_def.default);
-            let value = current_params.get(param_name).unwrap_or(&default_json);
-            let value_str = param_value_to_string(value);
-            param_values.push((param_name.clone(), value_str));
-        }
+        // The same per-key merge a run uses, shown for the declared params only.
+        let current_params = with_defaults(
+            source.param_definitions(),
+            &source.load_params()?.unwrap_or_default(),
+        );
+        let mut param_values: Vec<(String, String)> = source
+            .param_definitions()
+            .keys()
+            .map(|name| (name.clone(), param_value_to_string(&current_params[name])))
+            .collect();
 
         // Sort by param name for consistent display
         param_values.sort_by(|a, b| a.0.cmp(&b.0));

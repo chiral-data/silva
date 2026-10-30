@@ -31,9 +31,6 @@ pub trait ParamSource: Clone {
     /// Saves parameter values.
     fn save_params(&self, params: &JobParams) -> Result<(), String>;
 
-    /// Generates default parameter values from definitions.
-    fn generate_default_params(&self) -> JobParams;
-
     /// Returns true if this is a global/workflow-level editor.
     fn is_global(&self) -> bool;
 }
@@ -74,10 +71,6 @@ impl ParamSource for JobParamSource {
         self.job
             .save_params(params)
             .map_err(|e| format!("Failed to save params: {e}"))
-    }
-
-    fn generate_default_params(&self) -> JobParams {
-        self.meta.generate_default_params()
     }
 
     fn is_global(&self) -> bool {
@@ -121,10 +114,6 @@ impl ParamSource for WorkflowParamSource {
         self.workflow
             .save_workflow_params(params)
             .map_err(|e| format!("Failed to save global params: {e}"))
-    }
-
-    fn generate_default_params(&self) -> JobParams {
-        self.meta.generate_default_params()
     }
 
     fn is_global(&self) -> bool {

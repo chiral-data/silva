@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::job::{JobError, ParamDefinition};
-use crate::params::{WorkflowParams, json_to_toml, toml_to_json};
+use crate::params::{WorkflowParams, json_to_toml};
 
 // Re-export WorkflowParams from params module for convenience
 pub use crate::params::WorkflowParams as WorkflowParamsType;
@@ -134,10 +134,7 @@ impl WorkflowMeta {
     /// Generates default parameters based on the parameter definitions.
     /// Returns JSON-based WorkflowParams converted from TOML defaults.
     pub fn generate_default_params(&self) -> WorkflowParams {
-        self.params
-            .iter()
-            .map(|(name, def)| (name.clone(), toml_to_json(&def.default)))
-            .collect()
+        crate::params::with_defaults(&self.params, &Default::default())
     }
 }
 

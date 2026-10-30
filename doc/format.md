@@ -14,7 +14,7 @@ The keys of `workflow.toml` and `job.toml` — their types, defaults, and which 
 Each release publishes both as assets. This document does not repeat their field lists. Three schema facts that surprise people:
 
 - `description` is required in both files, not only `name`.
-- A `[params.<name>]` block requires all of `type`, `default` and `hint`. `default` accepts any value and is not checked against `type`.
+- A `[params.<name>]` block requires all of `type`, `default` and `hint`. The schema accepts any value for `default`; `silva validate` checks it against `type`.
 - Unknown keys are ignored, not rejected. A misspelt key is silently dropped.
 
 `schema_version` (in `workflow.toml`) is the format version as `"MAJOR.MINOR"`, independent of silva's own version. Absent means `1.0`. `silva validate` accepts a newer minor version with a note — features newer than the silva build are ignored — and rejects a newer major version and anything malformed (`check_schema_version`). `silva run` does not check it.
@@ -93,20 +93,22 @@ In the TUI, inputs land in the job folder itself rather than in `inputs/`, and `
 
 A parameter is declared as `[params.<name>]` in `workflow.toml` (shared by all jobs) or in a `job.toml` (that job only). Its value reaches every script as the environment variable `PARAM_<NAME>`, where `<NAME>` is the name upper-cased and otherwise unchanged. Strings are passed as they are. Numbers and booleans are written out, and arrays and objects as JSON.
 
-Values come from `global_params.json` at the workflow root and from each job's `params.json`. Every key in `global_params.json` must be declared in `workflow.toml`, and every key in a `params.json` in that job's `job.toml`. `silva validate` reports undeclared keys as `Unknown parameter`. `silva run` does not check them.
+Values come from `global_params.json` at the workflow root and from each job's `params.json`. Either file may be missing; one that does not parse fails the run. Every key in `global_params.json` must be declared in `workflow.toml`, and every key in a `params.json` in that job's `job.toml`. `silva validate` reports undeclared keys as `Unknown parameter`. `silva run` does not check them, and passes them through.
 
-The container environment is built in this order, later entries overriding earlier ones (`DockerExecutor::run_job`):
+Each param a job sees takes its value from the highest of these layers that has one (`resolve_params`):
 
-1. `global_params.json`
-2. the job's own values
-3. host variables named in `env_passthrough`
-4. `-e`/`--env` values
+1. the `default` declared in `workflow.toml`
+2. `global_params.json`
+3. the `default` declared in the job's `job.toml`
+4. the job's `params.json`
 
-Declared defaults are only partly used at run time today ([#118](https://github.com/chiral-data/silva/issues/118)):
+So every declared param is always set. A job that declares a param of the same name as a workflow param shadows it: the workflow's value, even one from `global_params.json`, does not reach that job. `silva run` and the TUI resolve values identically.
 
-- A workflow-level `default` is never used. A value missing from `global_params.json` produces no `PARAM_` variable.
-- For a job, `silva run` uses the declared defaults only when `params.json` is absent. A `params.json` that names some keys gets no defaults for the others.
-- The TUI uses no defaults.
+The container environment is then built in this order, later entries overriding earlier ones (`DockerExecutor::run_job`):
+
+1. the resolved `PARAM_` values
+2. host variables named in `env_passthrough`
+3. `-e`/`--env` values
 
 ## Environment
 
@@ -151,10 +153,10 @@ silva run workflows/my-workflow \
 3. At least one job exists, and every `job.toml` parses.
 4. Every `[dependencies]` key and value names a job (`check_dependency_names`). If so, the graph has no cycle.
 5. Every `inputs` pattern can be fed by a direct dependency (`check_input_ports`, kind `ports`). A pattern containing `/` can never match, so it is reported as such. Otherwise a pattern is reported when it cannot match any name the dependencies' `outputs` could produce, with output paths reduced to their last component, as collection does. A job is not judged when one of its dependencies declares no `outputs`, because that dependency may write into `outputs/` directly.
-6. `global_params.json` and each `params.json` parse and declare no unknown keys.
+6. Every declared `default` matches its `type`. `global_params.json` and each `params.json` parse and declare no unknown keys. A `${PARAM_X:-…}` fallback on a param declared for the job is reported as a note, which does not fail validation, unless the declared default is `""`.
 7. The install-command, `../`, `run`-script and `input_files/` conventions above.
 
-It does not check that `pre` or `post` scripts exist, that images exist, that defaults match their types ([#118](https://github.com/chiral-data/silva/issues/118)), or that every declared param has a value.
+It does not check that `pre` or `post` scripts exist or that images exist.
 
 ## Exit codes
 

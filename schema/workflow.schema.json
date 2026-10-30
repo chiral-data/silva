@@ -60,7 +60,7 @@
       "type": "object",
       "properties": {
         "default": {
-          "description": "Any TOML value; not yet checked against `type`."
+          "description": "Any TOML value here; `silva validate` checks it against `type`."
         },
         "enum_values": {
           "type": [

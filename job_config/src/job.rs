@@ -40,7 +40,7 @@ impl fmt::Display for ParamType {
 pub struct ParamDefinition {
     #[serde(rename = "type")]
     pub param_type: ParamType,
-    /// Any TOML value; not yet checked against `type`.
+    /// Any TOML value here; `silva validate` checks it against `type`.
     #[cfg_attr(feature = "schema", schemars(with = "serde_json::Value"))]
     pub default: toml::Value,
     pub hint: String,
@@ -350,10 +350,7 @@ impl JobMeta {
     /// Generates default parameters based on the parameter definitions.
     /// Returns JSON-based JobParams converted from TOML defaults.
     pub fn generate_default_params(&self) -> crate::params::JobParams {
-        self.params
-            .iter()
-            .map(|(name, def)| (name.clone(), crate::params::toml_to_json(&def.default)))
-            .collect()
+        crate::params::with_defaults(&self.params, &Default::default())
     }
 }
 

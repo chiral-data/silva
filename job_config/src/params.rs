@@ -127,6 +127,22 @@ pub fn save_workflow_params<P: AsRef<Path>>(
     Ok(())
 }
 
+/// Returns every declared default, overlaid by `values`.
+///
+/// Keys in `values` that `defs` does not declare are kept: `silva run` passes
+/// them through and leaves reporting them to `silva validate`.
+pub fn with_defaults(
+    defs: &HashMap<String, crate::job::ParamDefinition>,
+    values: &JobParams,
+) -> JobParams {
+    let mut merged: JobParams = defs
+        .iter()
+        .map(|(name, def)| (name.clone(), toml_to_json(&def.default)))
+        .collect();
+    merged.extend(values.iter().map(|(k, v)| (k.clone(), v.clone())));
+    merged
+}
+
 /// Converts a toml::Value to serde_json::Value.
 /// Used when generating default params from ParamDefinition defaults.
 pub fn toml_to_json(value: &toml::Value) -> serde_json::Value {
@@ -224,6 +240,26 @@ mod tests {
         let toml_val = toml::Value::Boolean(true);
         let json_val = toml_to_json(&toml_val);
         assert_eq!(json_val, serde_json::Value::Bool(true));
+    }
+
+    #[test]
+    fn values_override_defaults_and_undeclared_keys_survive() {
+        use crate::job::{ParamDefinition, ParamType};
+        let def = |v: toml::Value| ParamDefinition::new(ParamType::String, v, String::new(), None);
+        let defs = HashMap::from([
+            ("given".to_string(), def("default".into())),
+            ("missing".to_string(), def("fallback".into())),
+        ]);
+        let values = JobParams::from([
+            ("given".to_string(), serde_json::json!("value")),
+            ("undeclared".to_string(), serde_json::json!(1)),
+        ]);
+
+        let merged = with_defaults(&defs, &values);
+        assert_eq!(merged["given"], serde_json::json!("value"));
+        assert_eq!(merged["missing"], serde_json::json!("fallback"));
+        assert_eq!(merged["undeclared"], serde_json::json!(1));
+        assert_eq!(merged.len(), 3);
     }
 
     #[test]
