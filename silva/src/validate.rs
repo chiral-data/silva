@@ -299,6 +299,7 @@ pub fn validate_workflow(workflow_path: &Path) -> Report {
         );
     }
     check_param_fallbacks(&parsed, &metas, &metadata, &mut report.notes);
+    check_undeclared_format_fields(&parsed, &metas, &metadata, &mut report.notes);
 
     //    Parameter files, where they exist, against their definitions. This is
     //    what catches a generated params.json that names a parameter the job
@@ -476,6 +477,49 @@ fn check_param_fallbacks(
                     .in_job(&job.name),
                 );
             }
+        }
+    }
+}
+
+/// Notes a job using a format 1.1 field in a workflow that doesn't declare 1.1:
+/// a build that speaks only 1.0 would run it without the field, and say nothing.
+fn check_undeclared_format_fields(
+    jobs: &[JobFolder],
+    metas: &HashMap<String, job_config::job::JobMeta>,
+    metadata: &job_config::workflow::WorkflowMeta,
+    notes: &mut Vec<Finding>,
+) {
+    let declared = metadata
+        .schema_version
+        .as_deref()
+        .and_then(|v| v.split_once('.'))
+        .and_then(|(major, minor)| Some((major.parse::<u32>().ok()?, minor.parse::<u32>().ok()?)));
+    if declared.is_some_and(|v| v >= (1, 1)) {
+        return;
+    }
+    for job in jobs {
+        let meta = &metas[&job.name];
+        let used: Vec<&str> = [
+            ("`retry`", meta.retry.is_some()),
+            ("`timeout`", meta.timeout.is_some()),
+        ]
+        .into_iter()
+        .filter_map(|(field, set)| set.then_some(field))
+        .collect();
+        if !used.is_empty() {
+            notes.push(
+                Finding::new(
+                    "job",
+                    format!(
+                        "uses format 1.1 ({}) without declaring it; add schema_version = \"1.1\" \
+                         to .chiral/workflow.toml so an older silva warns instead of silently \
+                         ignoring it.",
+                        used.join(" and ")
+                    ),
+                )
+                .at(format!("{}/.chiral/job.toml", job.name))
+                .in_job(&job.name),
+            );
         }
     }
 }
@@ -844,13 +888,47 @@ mod tests {
 
     #[test]
     fn a_future_minor_schema_version_passes_with_a_note() {
-        let dir = workflow("schema_version = \"1.1\"\n");
+        let dir = workflow("schema_version = \"1.2\"\n");
         let report = validate_workflow(dir.path());
 
         assert!(report.is_valid(), "{:?}", report.findings);
         assert_eq!(report.notes.len(), 1);
-        assert!(report.render().contains("format 1.1"));
+        assert!(report.render().contains("format 1.2"));
         assert!(report.to_json().contains("\"notes\": ["));
+    }
+
+    fn with_retry_on_first_job(dir: &TempDir) {
+        let path = dir.path().join("01-first/.chiral/job.toml");
+        let toml = fs::read_to_string(&path).unwrap();
+        fs::write(path, format!("retry = 2\ntimeout = \"5m\"\n{toml}")).unwrap();
+    }
+
+    #[test]
+    fn a_1_1_field_without_a_1_1_declaration_is_noted() {
+        let dir = workflow("");
+        with_retry_on_first_job(&dir);
+        let report = validate_workflow(dir.path());
+
+        assert!(report.is_valid(), "{:?}", report.findings);
+        assert_eq!(report.notes.len(), 1, "{:?}", report.notes);
+        let note = &report.notes[0];
+        assert_eq!(note.job.as_deref(), Some("01-first"));
+        assert!(
+            note.message
+                .contains("uses format 1.1 (`retry` and `timeout`)"),
+            "{}",
+            note.message
+        );
+    }
+
+    #[test]
+    fn a_1_1_field_under_a_1_1_declaration_passes_quietly() {
+        let dir = workflow("schema_version = \"1.1\"\n");
+        with_retry_on_first_job(&dir);
+        let report = validate_workflow(dir.path());
+
+        assert!(report.is_valid(), "{:?}", report.findings);
+        assert!(report.notes.is_empty(), "{:?}", report.notes);
     }
 
     #[test]

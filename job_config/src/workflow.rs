@@ -11,7 +11,7 @@ pub use crate::params::WorkflowParams as WorkflowParamsType;
 
 /// The Silva Workflow Format version this build speaks. Independent of silva's
 /// own version: a workflow that omits `schema_version` is this format's 1.0.
-pub const SCHEMA_VERSION: &str = "1.0";
+pub const SCHEMA_VERSION: &str = "1.1";
 
 /// How a workflow's declared `schema_version` relates to [`SCHEMA_VERSION`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -183,9 +183,10 @@ mod tests {
     #[test]
     fn test_schema_compat_classifies_each_case() {
         assert_eq!(with_version("1.0").schema_compat(), SchemaCompat::Supported);
+        assert_eq!(with_version("1.1").schema_compat(), SchemaCompat::Supported);
         assert_eq!(
-            with_version("1.1").schema_compat(),
-            SchemaCompat::NewerMinor("1.1".to_string())
+            with_version("1.2").schema_compat(),
+            SchemaCompat::NewerMinor("1.2".to_string())
         );
         assert_eq!(
             with_version("2.0").schema_compat(),

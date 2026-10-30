@@ -139,7 +139,7 @@ fn test_newer_minor_schema_version_notes_and_continues() {
     let (success, stdout, stderr) = silva_run("schema-minor", false);
     let combined = format!("{stdout}{stderr}");
     assert!(
-        combined.contains("targets format 1.1"),
+        combined.contains("targets format 1.2"),
         "Should note the newer minor. Output:\n{combined}"
     );
     assert!(
@@ -154,7 +154,7 @@ fn test_newer_minor_schema_version_notes_and_continues() {
                 event["event"] == "note"
                     && event["text"]
                         .as_str()
-                        .is_some_and(|t| t.contains("targets format 1.1"))
+                        .is_some_and(|t| t.contains("targets format 1.2"))
             })
         }),
         "Should arrive as a note event under --json. Stdout:\n{stdout}"

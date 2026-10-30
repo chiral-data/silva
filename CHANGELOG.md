@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `retry` and `timeout` on `job.toml` (#120), the first fields of format 1.1, so `SCHEMA_VERSION` is now `1.1`. `retry = 2` re-runs the `run` script up to twice after it fails or times out, waiting 10 s and then doubling. `timeout = "30m"` limits each attempt, and an attempt that runs over has its container removed, because Docker can't stop the script any other way. `pre` and `post` run once. A value out of range (`retry` above 10, a `timeout` that isn't a whole number with s, m or h) fails `job.toml` parsing. `silva validate` notes a job that uses either field in a workflow that doesn't declare `schema_version = "1.1"`. Cancelling a run is no longer reported as the script failing with exit code 1, and a cancel is never retried.
+
 - `schema_version` on `workflow.toml` (#114): a workflow can now state which version of the Silva Workflow Format it is written for. It is optional and independent of silva's version; absent means `1.0`, so no existing workflow changes, and a save omits it when unset. `job_config` exports `SCHEMA_VERSION` and `WorkflowMeta::schema_compat()` so every consumer classifies it the same way.
 
   `silva validate` fails a newer major version ("workflow requires format 2.0; this silva speaks 1.x — upgrade silva") or a value that is not `MAJOR.MINOR`. A newer minor version is reported as a **note** and stays valid: unknown keys already parse harmlessly, so a 1.1 workflow does run on a 1.0 build, minus the new behaviour. Notes are new — human output lists them after the result, and `--json` gains a `"notes"` array alongside `"findings"`.
