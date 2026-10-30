@@ -381,38 +381,11 @@ pub fn validate_workflow(workflow_path: &Path) -> Report {
 }
 
 fn check_schema_version(metadata: &job_config::workflow::WorkflowMeta, report: &mut Report) {
-    use job_config::workflow::{SCHEMA_VERSION, SchemaCompat};
-
-    let major = SCHEMA_VERSION.split('.').next().unwrap_or(SCHEMA_VERSION);
     let at = ".chiral/workflow.toml";
-    match metadata.schema_compat() {
-        SchemaCompat::Supported => {}
-        SchemaCompat::NewerMinor(v) => report.notes.push(
-            Finding::new(
-                "workflow",
-                format!(
-                    "workflow targets format {v}; this silva speaks {SCHEMA_VERSION}, \
-                     so features newer than {SCHEMA_VERSION} are ignored."
-                ),
-            )
-            .at(at),
-        ),
-        SchemaCompat::UnsupportedMajor(v) => report.findings.push(
-            Finding::new(
-                "workflow",
-                format!("workflow requires format {v}; this silva speaks {major}.x — upgrade silva."),
-            )
-            .at(at),
-        ),
-        SchemaCompat::Malformed(v) => report.findings.push(
-            Finding::new(
-                "workflow",
-                format!(
-                    "schema_version \"{v}\" is not a format version; write MAJOR.MINOR, e.g. \"{SCHEMA_VERSION}\"."
-                ),
-            )
-            .at(at),
-        ),
+    match precheck::check_schema_version(metadata) {
+        Ok(None) => {}
+        Ok(Some(note)) => report.notes.push(Finding::new("workflow", note).at(at)),
+        Err(e) => report.findings.push(Finding::new("workflow", e).at(at)),
     }
 }
 

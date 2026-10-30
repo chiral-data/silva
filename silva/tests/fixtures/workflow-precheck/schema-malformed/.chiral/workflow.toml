@@ -1,0 +1,3 @@
+name = "schema-malformed"
+description = "Test that run checks schema_version before anything else"
+schema_version = "v1"

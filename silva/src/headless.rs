@@ -98,6 +98,11 @@ pub async fn run_workflow(
             job_config::workflow::WorkflowMeta::new(workflow_name.clone(), String::new())
         });
 
+    // Before the sort and prechecks: a newer major may change what they mean.
+    if let Some(note) = crate::precheck::check_schema_version(&workflow_metadata)? {
+        crate::note!("Note: {note}");
+    }
+
     // Raw values only: run_job fills in the declared defaults. A broken file
     // must not silently become "use the defaults".
     let workflow_params = workflow_folder

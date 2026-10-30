@@ -79,3 +79,84 @@ fn test_cross_node_reference_rejected() {
         "Should list the violating job. Output:\n{combined}"
     );
 }
+
+/// Runs `silva run` (not the deprecated bare path) and returns (success, stdout, stderr).
+fn silva_run(fixture_name: &str, json: bool) -> (bool, String, String) {
+    let fixture = fixture_path(fixture_name);
+    assert!(fixture.exists(), "Fixture not found: {}", fixture.display());
+
+    let mut command = Command::new(silva_bin());
+    command.arg("run").arg(&fixture);
+    if json {
+        command.arg("--json");
+    }
+    let output = command.output().expect("Failed to run silva binary");
+
+    (
+        output.status.success(),
+        String::from_utf8_lossy(&output.stdout).to_string(),
+        String::from_utf8_lossy(&output.stderr).to_string(),
+    )
+}
+
+// The schema fixtures have no input_files/ either, so a refusal that names the
+// version rather than the folder proves the version is checked first.
+
+#[test]
+fn test_newer_major_schema_version_refused_first() {
+    let (success, stdout, stderr) = silva_run("schema-major", false);
+    assert!(!success, "A 2.0 workflow must not run on a 1.x silva");
+
+    let combined = format!("{stdout}{stderr}");
+    assert!(
+        combined.contains("requires format 2.0") && combined.contains("upgrade silva"),
+        "Should say to upgrade. Output:\n{combined}"
+    );
+    assert!(
+        !combined.contains("input_files"),
+        "Should stop before the other prechecks. Output:\n{combined}"
+    );
+}
+
+#[test]
+fn test_malformed_schema_version_refused_first() {
+    let (success, stdout, stderr) = silva_run("schema-malformed", false);
+    assert!(!success, "A malformed schema_version must not run");
+
+    let combined = format!("{stdout}{stderr}");
+    assert!(
+        combined.contains("MAJOR.MINOR"),
+        "Should say how to write it. Output:\n{combined}"
+    );
+    assert!(
+        !combined.contains("input_files"),
+        "Should stop before the other prechecks. Output:\n{combined}"
+    );
+}
+
+#[test]
+fn test_newer_minor_schema_version_notes_and_continues() {
+    let (success, stdout, stderr) = silva_run("schema-minor", false);
+    let combined = format!("{stdout}{stderr}");
+    assert!(
+        combined.contains("targets format 1.1"),
+        "Should note the newer minor. Output:\n{combined}"
+    );
+    assert!(
+        !success && combined.contains("No 'input_files/' folder found"),
+        "Should carry on to the next precheck. Output:\n{combined}"
+    );
+
+    let (_, stdout, _) = silva_run("schema-minor", true);
+    assert!(
+        stdout.lines().any(|line| {
+            serde_json::from_str::<serde_json::Value>(line).is_ok_and(|event| {
+                event["event"] == "note"
+                    && event["text"]
+                        .as_str()
+                        .is_some_and(|t| t.contains("targets format 1.1"))
+            })
+        }),
+        "Should arrive as a note event under --json. Stdout:\n{stdout}"
+    );
+}

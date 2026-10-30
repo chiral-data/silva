@@ -226,6 +226,32 @@ pub fn check_run_scripts(jobs: &[JobFolder]) -> Result<(), String> {
     ))
 }
 
+/// Checks the declared format version, the same way for `validate`, `run` and
+/// the TUI. A newer major may change what fields mean, so it is refused; a
+/// newer minor only adds fields an older silva can skip, so it is a note.
+///
+/// Returns `Err` to refuse, `Ok(Some(note))` to run with a note, `Ok(None)` otherwise.
+pub fn check_schema_version(
+    metadata: &job_config::workflow::WorkflowMeta,
+) -> Result<Option<String>, String> {
+    use job_config::workflow::{SCHEMA_VERSION, SchemaCompat};
+
+    let major = SCHEMA_VERSION.split('.').next().unwrap_or(SCHEMA_VERSION);
+    match metadata.schema_compat() {
+        SchemaCompat::Supported => Ok(None),
+        SchemaCompat::NewerMinor(v) => Ok(Some(format!(
+            "workflow targets format {v}; this silva speaks {SCHEMA_VERSION}, \
+             so features newer than {SCHEMA_VERSION} are ignored."
+        ))),
+        SchemaCompat::UnsupportedMajor(v) => Err(format!(
+            "workflow requires format {v}; this silva speaks {major}.x — upgrade silva."
+        )),
+        SchemaCompat::Malformed(v) => Err(format!(
+            "schema_version \"{v}\" is not a format version; write MAJOR.MINOR, e.g. \"{SCHEMA_VERSION}\"."
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -479,5 +505,30 @@ run = "run.sh"
         let tmp = TempDir::new().unwrap();
         let job = create_job(tmp.path(), "01-job", "echo hi\n");
         assert!(check_run_scripts(&[job]).is_ok());
+    }
+
+    fn workflow_with_version(version: &str) -> job_config::workflow::WorkflowMeta {
+        toml::from_str(&format!(
+            "name = \"t\"\ndescription = \"t\"\nschema_version = \"{version}\"\n"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn schema_version_refuses_a_newer_major_or_a_malformed_value() {
+        let err = check_schema_version(&workflow_with_version("2.0")).unwrap_err();
+        assert!(err.contains("upgrade silva"), "{err}");
+        let err = check_schema_version(&workflow_with_version("v1")).unwrap_err();
+        assert!(err.contains("MAJOR.MINOR"), "{err}");
+    }
+
+    #[test]
+    fn schema_version_notes_a_newer_minor_and_passes_a_known_one() {
+        let note = check_schema_version(&workflow_with_version("1.1")).unwrap();
+        assert!(note.is_some_and(|n| n.contains("format 1.1")));
+        assert_eq!(
+            check_schema_version(&workflow_with_version("1.0")),
+            Ok(None)
+        );
     }
 }

@@ -219,6 +219,23 @@ impl State {
                 }
             };
 
+            // Before the sort and prechecks: a newer major may change what they mean.
+            match crate::precheck::check_schema_version(&workflow_metadata) {
+                Ok(None) => {}
+                Ok(Some(note)) => {
+                    let log_line = LogLine::new(LogSource::Stdout, format!("Note: {note}"));
+                    tx.send((0, JobStatus::Idle, log_line)).await.unwrap();
+                }
+                Err(e) => {
+                    let log_line = LogLine::new(LogSource::Stderr, e);
+                    tx.send((0, JobStatus::Failed, log_line)).await.unwrap();
+                    tx.send((jobs.len(), JobStatus::Failed, LogLine::empty()))
+                        .await
+                        .unwrap();
+                    return;
+                }
+            }
+
             // Raw values only: run_job fills in the declared defaults. A broken
             // file must not silently become "use the defaults".
             let workflow_params = match workflow_folder.load_workflow_params() {
