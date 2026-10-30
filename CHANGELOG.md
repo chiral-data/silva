@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `silva validate` reports each script-convention offence on its own job (#135): every install command, `../` reference and missing `run` script is one `script` finding with `job` and `file` (`<job>/run.sh`) set, so `--json` callers no longer parse the job out of the message. Human output still groups each convention under one heading and `Fix:` line. `silva run` and the TUI print the same messages as before.
+
 - A job whose `run` script is missing is refused before anything runs (#117), by `silva run`, the TUI and `silva validate` alike, through a new `check_run_scripts` precheck. The script is piped into bash, which reads nothing from a missing file and exits 0, so such a job used to "complete" having done nothing. A missing `pre` or `post` script is still skipped.
 
 - The workflow docs are one spec and one tutorial (#116). `doc/format.md` is normative. It leaves field lists to the schema and states the behaviour the schema cannot express, each rule tied to the function that implements it. Above all, it documents that an empty `inputs` copies **every** dependency output into `inputs/`, which several workflows rely on and no doc mentioned. `doc/tutorial.md` builds and runs a two-job workflow from an empty folder.
