@@ -40,6 +40,16 @@
       },
       "default": {}
     },
+    "retry": {
+      "description": "Re-runs of the `run` script after it fails or times out (format 1.1).",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "maximum": 10,
+      "minimum": 0
+    },
     "scripts": {
       "description": "Scripts to execute.",
       "$ref": "#/$defs/Scripts",
@@ -48,6 +58,17 @@
         "pre": "./pre_run.sh",
         "run": "./run.sh"
       }
+    },
+    "timeout": {
+      "description": "Time limit on each attempt of the `run` script (format 1.1).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Timeout"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [
@@ -55,7 +76,7 @@
     "description",
     "container"
   ],
-  "x-schema-version": "1.0",
+  "x-schema-version": "1.1",
   "$defs": {
     "Container": {
       "description": "Represents the container configuration for a job.\nThe `image` field can be a Docker registry URL or a local file path (.tar or .sif).",
@@ -137,6 +158,11 @@
           "default": "./run.sh"
         }
       }
+    },
+    "Timeout": {
+      "description": "A per-attempt time limit on the `run` script: a whole number with s, m or h.",
+      "type": "string",
+      "pattern": "^[1-9][0-9]*[smh]$"
     }
   }
 }

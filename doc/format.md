@@ -1,4 +1,4 @@
-# Silva Workflow Format 1.0
+# Silva Workflow Format 1.1
 
 This is the normative description of the format: what a workflow folder must contain and what silva does with it. To learn the format by building a workflow, start with the [tutorial](tutorial.md).
 
@@ -17,7 +17,9 @@ Each release publishes both as assets. This document does not repeat their field
 - A `[params.<name>]` block requires all of `type`, `default` and `hint`. The schema accepts any value for `default`; `silva validate` checks it against `type`.
 - Unknown keys are ignored, not rejected. A misspelt key is silently dropped.
 
-`schema_version` (in `workflow.toml`) is the format version as `"MAJOR.MINOR"`, independent of silva's own version. Absent means `1.0`. `silva validate` accepts a newer minor version with a note — features newer than the silva build are ignored — and rejects a newer major version and anything malformed (`check_schema_version`). `silva run` does not check it.
+`schema_version` (in `workflow.toml`) is the format version as `"MAJOR.MINOR"`, independent of silva's own version. Absent means `1.0`. `silva validate` accepts a newer minor version with a note — features newer than the silva build are ignored — and rejects a newer major version and anything malformed (`check_schema_version`). `silva run` and the TUI apply the same check before anything else: they refuse what `validate` rejects, and print the note and run otherwise.
+
+Format 1.1 adds `retry` and `timeout` to `job.toml` (see [Execution](#execution)). A build that speaks only 1.0 ignores them and runs each job once with no time limit. `silva validate` notes a job that uses them in a workflow that doesn't declare `schema_version = "1.1"`.
 
 ## Layout
 
@@ -61,6 +63,8 @@ For each job (`DockerExecutor::run_job`):
 - A script is fed to `/bin/bash` with working directory `/workspace/<job>` (`exec_script`). It needs no execute bit, its shebang is ignored, and CRLF line endings are stripped. The image must provide `/bin/bash`.
 - A missing `pre` or `post` file is skipped. A missing `run` file is refused before anything runs (below), unless its path is absolute, in which case it names a file inside the image.
 - The first script that exits non-zero fails the job, skips the job's remaining scripts and its output collection, and stops the workflow. Jobs not yet run are reported as skipped.
+- **`retry`** (0–10) re-runs `run` after it exits non-zero or times out, waiting 10 s before the second attempt and doubling each time (10, 20, 40 …). `pre` and `post` are never retried. The job folder is not reset between attempts, so `run` must cope with what a failed attempt left behind. Outputs are collected only after the attempt that succeeds. A cancel is never retried.
+- **`timeout`** (a whole number with `s`, `m` or `h`, e.g. `"30m"`) limits each attempt of `run`. Docker can't stop an exec, so an attempt that runs over has its container removed, and the next attempt or job starts a fresh one.
 
 Three conventions are enforced before anything runs, by `silva run`, the TUI and `silva validate`:
 

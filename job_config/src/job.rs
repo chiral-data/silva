@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fs;
 use std::path::Path;
+use std::str::FromStr;
+use std::time::Duration;
 
 /// Represents the type of a parameter.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -229,6 +231,98 @@ impl Default for Scripts {
     }
 }
 
+/// The most re-runs `retry` may ask for.
+pub const MAX_RETRY: u32 = 10;
+
+fn deserialize_retry<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<u32>, D::Error> {
+    let retry = u32::deserialize(d)?;
+    if retry > MAX_RETRY {
+        return Err(serde::de::Error::custom(format!(
+            "retry = {retry} is more than the maximum of {MAX_RETRY}"
+        )));
+    }
+    Ok(Some(retry))
+}
+
+/// A per-attempt time limit on the `run` script: a whole number with `s`, `m` or `h`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Timeout {
+    text: String,
+    duration: Duration,
+}
+
+impl Timeout {
+    pub fn duration(&self) -> Duration {
+        self.duration
+    }
+}
+
+impl fmt::Display for Timeout {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.text)
+    }
+}
+
+impl FromStr for Timeout {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let invalid = || {
+            format!(
+                "timeout \"{text}\" is not a duration; write a whole number with s, m or h, e.g. \"30m\""
+            )
+        };
+        let unit = match text.chars().last() {
+            Some('s') => 1,
+            Some('m') => 60,
+            Some('h') => 3600,
+            _ => return Err(invalid()),
+        };
+        let digits = &text[..text.len() - 1];
+        // Same rule as the schema pattern: no sign, no leading zero, so no zero.
+        if digits.is_empty()
+            || digits.starts_with('0')
+            || !digits.bytes().all(|b| b.is_ascii_digit())
+        {
+            return Err(invalid());
+        }
+        let n: u64 = digits.parse().map_err(|_| invalid())?;
+        Ok(Self {
+            text: text.to_string(),
+            duration: Duration::from_secs(n.saturating_mul(unit)),
+        })
+    }
+}
+
+impl Serialize for Timeout {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&self.text)
+    }
+}
+
+impl<'de> Deserialize<'de> for Timeout {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        String::deserialize(d)?
+            .parse()
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "schema")]
+impl schemars::JsonSchema for Timeout {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Timeout".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "pattern": "^[1-9][0-9]*[smh]$",
+            "description": "A per-attempt time limit on the `run` script: a whole number with s, m or h."
+        })
+    }
+}
+
 /// Error type for job configuration operations.
 #[derive(Debug)]
 pub enum JobError {
@@ -282,6 +376,18 @@ pub struct JobMeta {
     pub name: String,
     /// Job description.
     pub description: String,
+    /// Re-runs of the `run` script after it fails or times out (format 1.1).
+    // Scalars before the first table: `to_string_pretty` rejects a scalar after one.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_retry"
+    )]
+    #[cfg_attr(feature = "schema", schemars(range(max = 10)))]
+    pub retry: Option<u32>,
+    /// Time limit on each attempt of the `run` script (format 1.1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout: Option<Timeout>,
     /// Container configuration (image source).
     pub container: Container,
     /// Scripts to execute.
@@ -304,6 +410,8 @@ impl JobMeta {
         Self {
             name,
             description,
+            retry: None,
+            timeout: None,
             container,
             scripts: Scripts::default(),
             inputs: Vec::new(),
@@ -583,6 +691,64 @@ mod tests {
         assert_eq!(
             container.get_image_source(),
             ImageSource::LocalImage("aso-rna:latest".to_string())
+        );
+    }
+
+    fn parse_job(fields: &str) -> Result<JobMeta, toml::de::Error> {
+        toml::from_str(&format!(
+            "name = \"J\"\ndescription = \"d\"\n{fields}\n[container]\nimage = \"alpine\"\n"
+        ))
+    }
+
+    #[test]
+    fn retry_and_timeout_parse_and_round_trip() {
+        let meta = parse_job("retry = 2\ntimeout = \"30m\"").unwrap();
+        assert_eq!(meta.retry, Some(2));
+        let timeout = meta.timeout.as_ref().unwrap();
+        assert_eq!(timeout.duration(), Duration::from_secs(1800));
+        assert_eq!(timeout.to_string(), "30m");
+
+        let saved = toml::to_string_pretty(&meta).unwrap();
+        assert!(saved.contains("retry = 2") && saved.contains("timeout = \"30m\""));
+        assert_eq!(toml::from_str::<JobMeta>(&saved).unwrap(), meta);
+    }
+
+    #[test]
+    fn out_of_range_retry_and_malformed_timeout_are_rejected() {
+        assert!(parse_job("retry = 10").is_ok());
+        let err = parse_job("retry = 11").unwrap_err().to_string();
+        assert!(err.contains("maximum of 10"), "{err}");
+        for bad in ["30", "1.5h", "0s", "05m", "m", "30d", "-5s", " 5s"] {
+            let err = parse_job(&format!("timeout = \"{bad}\""))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("not a duration"), "{bad}: {err}");
+        }
+        assert_eq!(
+            parse_job("timeout = \"45s\"")
+                .unwrap()
+                .timeout
+                .unwrap()
+                .duration(),
+            Duration::from_secs(45)
+        );
+        assert_eq!(
+            parse_job("timeout = \"2h\"")
+                .unwrap()
+                .timeout
+                .unwrap()
+                .duration(),
+            Duration::from_secs(7200)
+        );
+    }
+
+    #[test]
+    fn a_job_without_retry_or_timeout_saves_as_before() {
+        let meta = JobMeta::new("J".into(), "d".into(), Container::new("alpine".into()));
+        let saved = toml::to_string_pretty(&meta).unwrap();
+        assert!(
+            !saved.contains("retry") && !saved.contains("timeout"),
+            "{saved}"
         );
     }
 

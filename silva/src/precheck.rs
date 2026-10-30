@@ -524,11 +524,13 @@ run = "run.sh"
 
     #[test]
     fn schema_version_notes_a_newer_minor_and_passes_a_known_one() {
-        let note = check_schema_version(&workflow_with_version("1.1")).unwrap();
-        assert!(note.is_some_and(|n| n.contains("format 1.1")));
-        assert_eq!(
-            check_schema_version(&workflow_with_version("1.0")),
-            Ok(None)
-        );
+        let note = check_schema_version(&workflow_with_version("1.2")).unwrap();
+        assert!(note.is_some_and(|n| n.contains("format 1.2")));
+        for known in ["1.0", "1.1"] {
+            assert_eq!(
+                check_schema_version(&workflow_with_version(known)),
+                Ok(None)
+            );
+        }
     }
 }

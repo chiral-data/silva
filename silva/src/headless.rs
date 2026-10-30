@@ -799,6 +799,8 @@ mod tests {
         JobMeta {
             name: "test".to_string(),
             description: String::new(),
+            retry: None,
+            timeout: None,
             container: Container::new("ubuntu:latest".to_string()),
             scripts: Scripts {
                 pre: String::new(),
