@@ -111,7 +111,11 @@ impl State {
             && let Ok((idx, status, log_line)) = rx.try_recv()
         {
             if let Some(job_entry) = self.job_entries.get_mut(idx) {
-                job_entry.status = status;
+                // A failure is final for this run: cleanup lines that follow it
+                // arrive as `Completed` and must not turn the job ✓.
+                if job_entry.status != JobStatus::Failed {
+                    job_entry.status = status;
+                }
                 job_entry.logs.push(log_line);
 
                 // Auto-scroll to bottom if enabled and this is the selected job
@@ -133,6 +137,10 @@ impl State {
         };
 
         self.is_executing_workflow = true;
+        // A failure from the previous run must not stick to this one.
+        for entry in &mut self.job_entries {
+            entry.status = JobStatus::Idle;
+        }
         self.select_next_job();
 
         // Clear previous temp path
@@ -811,6 +819,80 @@ async fn copy_input_files_from_dependencies(
 mod tests {
     use super::*;
     use crate::components::docker::job::JobStatus;
+
+    fn state_with_jobs(names: &[&str]) -> (State, mpsc::Sender<(usize, JobStatus, LogLine)>) {
+        let (tx, rx) = mpsc::channel(32);
+        let state = State {
+            job_entries: names.iter().map(|n| JobEntry::new(n.to_string())).collect(),
+            rx: Some(rx),
+            ..Default::default()
+        };
+        (state, tx)
+    }
+
+    fn deliver(
+        state: &mut State,
+        tx: &mpsc::Sender<(usize, JobStatus, LogLine)>,
+        status: JobStatus,
+        text: &str,
+    ) {
+        tx.try_send((0, status, LogLine::new(LogSource::Stdout, text.to_string())))
+            .unwrap();
+        state.update();
+    }
+
+    #[test]
+    fn a_failed_job_stays_failed_through_the_cleanup_lines() {
+        let (mut state, tx) = state_with_jobs(&["02-pocket"]);
+        deliver(
+            &mut state,
+            &tx,
+            JobStatus::Running,
+            "Executing script: run.sh",
+        );
+        deliver(
+            &mut state,
+            &tx,
+            JobStatus::Failed,
+            "Script run.sh failed with exit code 1",
+        );
+        deliver(
+            &mut state,
+            &tx,
+            JobStatus::Completed,
+            "Cleaning up 1 container(s)...",
+        );
+
+        let entry = &state.job_entries[0];
+        assert_eq!(entry.status, JobStatus::Failed);
+        assert!(
+            entry
+                .logs
+                .lines()
+                .iter()
+                .any(|l| l.content.starts_with("Cleaning up")),
+            "the cleanup line is still logged"
+        );
+    }
+
+    #[test]
+    fn a_completed_script_does_not_freeze_the_job() {
+        // The executor reports `Completed` after each script, then runs the next one.
+        let (mut state, tx) = state_with_jobs(&["01-job"]);
+        deliver(
+            &mut state,
+            &tx,
+            JobStatus::Completed,
+            "Script pre_run.sh completed successfully",
+        );
+        deliver(
+            &mut state,
+            &tx,
+            JobStatus::Running,
+            "Executing script: run.sh",
+        );
+        assert_eq!(state.job_entries[0].status, JobStatus::Running);
+    }
 
     #[test]
     fn test_job_status_as_str() {

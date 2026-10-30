@@ -209,10 +209,15 @@ fn test_failed_job_not_moved() {
         return;
     }
 
-    let (success, _stdout, temp_path) = run_silva("failed-job");
+    let (success, stdout, temp_path) = run_silva("failed-job");
     assert!(
         !success,
         "Workflow should fail because node 01 exits with error"
+    );
+    // Container cleanup after the failure must not report the job as completed (#140).
+    assert!(
+        !stdout.contains("[01-produce] Completed"),
+        "a failed job was reported Completed:\n{stdout}"
     );
 
     let temp = temp_path.expect("Should have temp folder path");

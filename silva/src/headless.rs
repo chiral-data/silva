@@ -404,7 +404,10 @@ pub async fn run_workflow(
             );
         }
 
-        emitter.job_status_line(&job_name, &status);
+        // Cleanup lines after a failure arrive as `Completed`; the job still failed.
+        if !(status == JobStatus::Completed && open_job_failed.is_some()) {
+            emitter.job_status_line(&job_name, &status);
+        }
 
         if status == JobStatus::Failed {
             // Keep silva's own message as the reason, so a caller never has to
