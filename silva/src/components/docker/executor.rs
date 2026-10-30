@@ -143,7 +143,7 @@ use tokio::sync::mpsc;
 
 use crate::components::workflow;
 use crate::components::workflow::LocalApp;
-use job_config::job::JobMeta;
+use job_config::job::{GpuMode, JobMeta, Resources};
 use job_config::workflow::WorkflowMeta;
 
 use super::error::DockerError;
@@ -212,6 +212,65 @@ enum ExecOutcome {
 /// The wait after failed attempt `attempt` (1-based) of `run`: 10 s, doubling.
 fn retry_backoff(attempt: u32) -> Duration {
     Duration::from_secs(10 << (attempt - 1).min(job_config::job::MAX_RETRY))
+}
+
+/// The reuse-cache key: the image alone when a job declares nothing, so such
+/// jobs share a container as before; otherwise the image plus its resources.
+fn registry_key(image: &str, resources: Option<&Resources>) -> String {
+    let Some(resources) = resources else {
+        return image.to_string();
+    };
+    let mut parts = Vec::new();
+    if let Some(cpus) = resources.cpus {
+        parts.push(format!("cpus={cpus}"));
+    }
+    if let Some(memory) = &resources.memory {
+        parts.push(format!("memory={}", memory.bytes()));
+    }
+    match resources.gpu.unwrap_or_default() {
+        GpuMode::Auto => {}
+        gpu => parts.push(format!("gpu={gpu}")),
+    }
+    if parts.is_empty() {
+        image.to_string()
+    } else {
+        format!("{image}#{}", parts.join(","))
+    }
+}
+
+fn nano_cpus(cpus: f64) -> i64 {
+    (cpus * 1e9).round() as i64
+}
+
+/// Whether Docker recorded the limits asked for. A dropped swap cap is only a
+/// note: the memory limit itself still holds.
+fn limits_took(
+    requested: &Resources,
+    host_config: &bollard::models::HostConfig,
+) -> Result<Option<String>, String> {
+    if let Some(cpus) = requested.cpus {
+        let got = host_config.nano_cpus.unwrap_or(0);
+        if got != nano_cpus(cpus) {
+            return Err(format!(
+                "cpus = {cpus} was not applied: Docker recorded NanoCpus {got}"
+            ));
+        }
+    }
+    if let Some(memory) = &requested.memory {
+        let want = memory.bytes() as i64;
+        let got = host_config.memory.unwrap_or(0);
+        if got != want {
+            return Err(format!(
+                "memory = \"{memory}\" was not applied: Docker recorded Memory {got}"
+            ));
+        }
+        if host_config.memory_swap.unwrap_or(0) != want {
+            return Ok(Some(format!(
+                "this host does not cap swap, so the container may swap beyond memory = \"{memory}\""
+            )));
+        }
+    }
+    Ok(None)
 }
 
 /// Docker executor for building images and running jobs.
@@ -647,9 +706,16 @@ impl DockerExecutor {
         let image_name = &config.container.image;
         self.pull_image(image_name).await?;
 
+        let resources = config.resources.as_ref();
+        let key = registry_key(image_name, resources);
         let mut container_id = Some(
-            self.reuse_or_create_container(image_name, workflow_folder, container_registry)
-                .await?,
+            self.reuse_or_create_container(
+                image_name,
+                (&key, resources),
+                workflow_folder,
+                container_registry,
+            )
+            .await?,
         );
 
         let merged_params = resolve_params(workflow_meta, workflow_params, config, job_params);
@@ -745,6 +811,7 @@ impl DockerExecutor {
                         let id = self
                             .reuse_or_create_container(
                                 image_name,
+                                (&key, resources),
                                 workflow_folder,
                                 container_registry,
                             )
@@ -783,7 +850,7 @@ impl DockerExecutor {
                     Ok(ExecOutcome::TimedOut) => {
                         // The script is still running inside it, so the container goes.
                         self.discard_container(&container).await;
-                        container_registry.remove(image_name);
+                        container_registry.remove(&key);
                         container_id = None;
                         format!("timed out after {timeout_text}")
                     }
@@ -888,17 +955,19 @@ impl DockerExecutor {
         }
     }
 
-    /// Returns the container registered for `image_name`, or creates, starts and registers one.
+    /// Returns the container registered under `key`, or creates, starts and registers one
+    /// with the job's resources.
     async fn reuse_or_create_container(
         &self,
         image_name: &str,
+        (key, resources): (&str, Option<&Resources>),
         workflow_folder: &Path,
         container_registry: &mut HashMap<String, String>,
     ) -> Result<String, DockerError> {
         let work_dir = "/workspace";
 
-        // Check if we already have a container for this image
-        let container_id = if let Some(existing_id) = container_registry.get(image_name) {
+        // Check if we already have a container for this image and resources
+        let container_id = if let Some(existing_id) = container_registry.get(key) {
             let log_line = LogLine::new(
                 LogSource::Stdout,
                 format!("Reusing existing container {existing_id} for image {image_name}"),
@@ -913,14 +982,34 @@ impl DockerExecutor {
             );
             self.tx_send(JobStatus::CreatingContainer, log_line).await?;
 
-            // Auto-detect GPU: check if image needs GPU and host has it
-            let image_gpu = self.detect_image_gpu(image_name).await;
-            let use_gpu = image_gpu != GpuRuntime::None && self.host_gpu != GpuRuntime::None;
+            // `auto` passes the GPU when the image needs one and the host has it.
+            let gpu_mode = resources.and_then(|r| r.gpu).unwrap_or_default();
+            let image_gpu = if gpu_mode == GpuMode::Auto {
+                self.detect_image_gpu(image_name).await
+            } else {
+                GpuRuntime::None
+            };
+            let use_gpu = match gpu_mode {
+                GpuMode::Auto => image_gpu != GpuRuntime::None && self.host_gpu != GpuRuntime::None,
+                GpuMode::Required => true,
+                GpuMode::None => false,
+            };
+            // The precheck refuses this before the first job; reaching it is a bug.
+            if use_gpu && self.host_gpu == GpuRuntime::None {
+                return Err(DockerError::ContainerCreateFailed(
+                    "gpu = \"required\" but the host has no GPU runtime".to_string(),
+                ));
+            }
 
             let mut host_config = if use_gpu && self.host_gpu == GpuRuntime::Nvidia {
                 let log_line = LogLine::new(
                     LogSource::Stdout,
-                    "GPU auto-detected: NVIDIA runtime on host, CUDA image — enabling GPU passthrough".to_string(),
+                    if gpu_mode == GpuMode::Required {
+                        "gpu = \"required\": NVIDIA runtime on host — enabling GPU passthrough"
+                            .to_string()
+                    } else {
+                        "GPU auto-detected: NVIDIA runtime on host, CUDA image — enabling GPU passthrough".to_string()
+                    },
                 );
                 self.tx_send(JobStatus::CreatingContainer, log_line).await?;
 
@@ -938,7 +1027,12 @@ impl DockerExecutor {
             } else if use_gpu && self.host_gpu == GpuRuntime::Rocm {
                 let log_line = LogLine::new(
                     LogSource::Stdout,
-                    "GPU auto-detected: AMD/ROCm runtime on host, ROCm image — enabling GPU passthrough".to_string(),
+                    if gpu_mode == GpuMode::Required {
+                        "gpu = \"required\": AMD/ROCm runtime on host — enabling GPU passthrough"
+                            .to_string()
+                    } else {
+                        "GPU auto-detected: AMD/ROCm runtime on host, ROCm image — enabling GPU passthrough".to_string()
+                    },
                 );
                 self.tx_send(JobStatus::CreatingContainer, log_line).await?;
 
@@ -980,6 +1074,15 @@ impl DockerExecutor {
                 "/tmp:/tmp".to_string(),
             ];
             host_config.binds = Some(volume_binds);
+
+            // Swap equal to memory: no swap on top of the limit.
+            if let Some(resources) = resources {
+                host_config.nano_cpus = resources.cpus.map(nano_cpus);
+                if let Some(memory) = &resources.memory {
+                    host_config.memory = Some(memory.bytes() as i64);
+                    host_config.memory_swap = Some(memory.bytes() as i64);
+                }
+            }
 
             // Run container as host user to avoid permission issues on bind mounts
             #[cfg(unix)]
@@ -1023,6 +1126,15 @@ impl DockerExecutor {
             );
             self.tx_send(JobStatus::CreatingContainer, log_line).await?;
 
+            for warning in &container.warnings {
+                let log_line =
+                    LogLine::new(LogSource::Stderr, format!("Docker warning: {warning}"));
+                self.tx_send(JobStatus::CreatingContainer, log_line).await?;
+            }
+            if let Some(resources) = resources {
+                self.check_limits(&container.id, resources).await?;
+            }
+
             // Start container
             self.client
                 .start_container::<String>(&container.id, None)
@@ -1053,10 +1165,38 @@ impl DockerExecutor {
             self.tx_send(JobStatus::Running, log_line).await?;
 
             // Register the new container in the registry
-            container_registry.insert(image_name.to_string(), container.id.clone());
+            container_registry.insert(key.to_string(), container.id.clone());
             container.id
         };
         Ok(container_id)
+    }
+
+    /// Fails the job, and removes the new container, when Docker dropped a
+    /// declared limit: a job must not run claiming a guarantee it does not have.
+    async fn check_limits(
+        &self,
+        container_id: &str,
+        resources: &Resources,
+    ) -> Result<(), DockerError> {
+        let inspected = self.client.inspect_container(container_id, None).await?;
+        match limits_took(resources, &inspected.host_config.unwrap_or_default()) {
+            Ok(None) => Ok(()),
+            Ok(Some(note)) => {
+                let log_line = LogLine::new(LogSource::Stderr, format!("Warning: {note}"));
+                self.tx_send(JobStatus::CreatingContainer, log_line).await
+            }
+            Err(e) => {
+                self.discard_container(container_id).await;
+                let log_line = LogLine::new(LogSource::Stderr, e.clone());
+                self.tx_send(JobStatus::Failed, log_line).await?;
+                Err(DockerError::ContainerCreateFailed(e))
+            }
+        }
+    }
+
+    /// Whether the host has a GPU runtime silva can pass through.
+    pub fn host_has_gpu(&self) -> bool {
+        self.host_gpu != GpuRuntime::None
     }
 
     /// Force-removes a container: the only way to stop an exec Docker can't kill.
@@ -1475,6 +1615,63 @@ mod tests {
             .unwrap(),
             toml::from_str(&job).unwrap(),
         )
+    }
+
+    fn resources(toml_body: &str) -> Resources {
+        toml::from_str(toml_body).unwrap()
+    }
+
+    #[test]
+    fn a_job_without_resources_keys_the_registry_by_image_alone() {
+        assert_eq!(registry_key("ubuntu", None), "ubuntu");
+        assert_eq!(registry_key("ubuntu", Some(&resources(""))), "ubuntu");
+        assert_eq!(
+            registry_key("ubuntu", Some(&resources("gpu = \"auto\""))),
+            "ubuntu"
+        );
+        assert_eq!(
+            registry_key(
+                "ubuntu",
+                Some(&resources("cpus = 0.5\nmemory = \"1g\"\ngpu = \"none\""))
+            ),
+            "ubuntu#cpus=0.5,memory=1073741824,gpu=none"
+        );
+        // The same limit spelt two ways shares a container.
+        assert_eq!(
+            registry_key("ubuntu", Some(&resources("memory = \"1024m\""))),
+            registry_key("ubuntu", Some(&resources("memory = \"1g\"")))
+        );
+    }
+
+    fn host_config(nano: i64, memory: i64, swap: i64) -> bollard::models::HostConfig {
+        bollard::models::HostConfig {
+            nano_cpus: Some(nano),
+            memory: Some(memory),
+            memory_swap: Some(swap),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_dropped_cpu_or_memory_limit_fails_and_a_dropped_swap_cap_is_a_note() {
+        let asked = resources("cpus = 0.5\nmemory = \"64m\"");
+        let mib64 = 64 << 20;
+        assert_eq!(
+            limits_took(&asked, &host_config(500_000_000, mib64, mib64)),
+            Ok(None)
+        );
+
+        let err = limits_took(&asked, &host_config(0, mib64, mib64)).unwrap_err();
+        assert!(err.contains("cpus = 0.5 was not applied"), "{err}");
+        let err = limits_took(&asked, &host_config(500_000_000, 0, 0)).unwrap_err();
+        assert!(err.contains("memory = \"64m\" was not applied"), "{err}");
+
+        let note = limits_took(&asked, &host_config(500_000_000, mib64, -1)).unwrap();
+        assert!(note.is_some_and(|n| n.contains("does not cap swap")));
+        assert_eq!(
+            limits_took(&resources("gpu = \"none\""), &Default::default()),
+            Ok(None)
+        );
     }
 
     #[test]

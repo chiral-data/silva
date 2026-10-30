@@ -19,7 +19,7 @@ Each release publishes both as assets. This document does not repeat their field
 
 `schema_version` (in `workflow.toml`) is the format version as `"MAJOR.MINOR"`, independent of silva's own version. Absent means `1.0`. `silva validate` accepts a newer minor version with a note — features newer than the silva build are ignored — and rejects a newer major version and anything malformed (`check_schema_version`). `silva run` and the TUI apply the same check before anything else: they refuse what `validate` rejects, and print the note and run otherwise.
 
-Format 1.1 adds `retry` and `timeout` to `job.toml` (see [Execution](#execution)). A build that speaks only 1.0 ignores them and runs each job once with no time limit. `silva validate` notes a job that uses them in a workflow that doesn't declare `schema_version = "1.1"`.
+Format 1.1 adds `retry`, `timeout` and a `[resources]` table to `job.toml` (see [Execution](#execution)). A build that speaks only 1.0 ignores them: it runs each job once, with no time limit, no resource limits and automatic GPU. `silva validate` notes a job that uses them in a workflow that doesn't declare `schema_version = "1.1"`.
 
 ## Layout
 
@@ -58,13 +58,18 @@ Jobs run one at a time.
 
 For each job (`DockerExecutor::run_job`):
 
-- One container is started per image and reused by every job with that image. The copy's root is mounted at `/workspace`, and the container runs as the user and group that own the workflow folder.
+- One container is started per image and `[resources]`, and reused by every job with the same image and resources. Jobs that declare no resources share one container per image. The copy's root is mounted at `/workspace`, and the container runs as the user and group that own the workflow folder.
 - Scripts run in this order: `pre`, `run`, `post`, with defaults `pre_run.sh`, `run.sh` and `post_run.sh`. Each value is a **file name** relative to the job folder, not a command.
 - A script is fed to `/bin/bash` with working directory `/workspace/<job>` (`exec_script`). It needs no execute bit, its shebang is ignored, and CRLF line endings are stripped. The image must provide `/bin/bash`.
 - A missing `pre` or `post` file is skipped. A missing `run` file is refused before anything runs (below), unless its path is absolute, in which case it names a file inside the image.
 - The first script that exits non-zero fails the job, skips the job's remaining scripts and its output collection, and stops the workflow. Jobs not yet run are reported as skipped.
 - **`retry`** (0–10) re-runs `run` after it exits non-zero or times out, waiting 10 s before the second attempt and doubling each time (10, 20, 40 …). `pre` and `post` are never retried. The job folder is not reset between attempts, so `run` must cope with what a failed attempt left behind. Outputs are collected only after the attempt that succeeds. A cancel is never retried.
 - **`timeout`** (a whole number with `s`, `m` or `h`, e.g. `"30m"`) limits each attempt of `run`. Docker can't stop an exec, so an attempt that runs over has its container removed, and the next attempt or job starts a fresh one.
+- **`[resources]`** limits the job's container. Every field is optional.
+  - `cpus` may be fractional and must be at least 0.01. More CPUs than the host has is rejected by Docker when the container is created.
+  - `memory` is a whole number with `k`, `m` or `g`, in binary units. Swap is capped at the same value, so there is no swap on top. A host without swap accounting can't apply that cap, and silva logs a warning.
+  - A `cpus` or `memory` limit that Docker accepts but doesn't apply fails the job: silva inspects each new container and compares.
+  - `gpu` is `"auto"` (the default), `"required"` or `"none"`. `auto` passes the GPU through when the host has a GPU runtime and the image is built for one (CUDA or ROCm environment markers). `required` always passes it through, and a host with no GPU runtime refuses the workflow before the first job (`check_gpu_required`). `none` never passes it through. The old `use_gpu` key is ignored, and `silva validate` notes it.
 
 Three conventions are enforced before anything runs, by `silva run`, the TUI and `silva validate`:
 

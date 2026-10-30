@@ -323,6 +323,142 @@ impl schemars::JsonSchema for Timeout {
     }
 }
 
+/// The smallest `cpus` Docker accepts.
+pub const MIN_CPUS: f64 = 0.01;
+
+fn deserialize_cpus<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<f64>, D::Error> {
+    let cpus = f64::deserialize(d)?;
+    if !(cpus.is_finite() && cpus >= MIN_CPUS) {
+        return Err(serde::de::Error::custom(format!(
+            "cpus = {cpus} is below the minimum of {MIN_CPUS}"
+        )));
+    }
+    Ok(Some(cpus))
+}
+
+/// A memory limit: a whole number with `k`, `m` or `g`, in binary units as Docker reads them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Memory {
+    text: String,
+    bytes: u64,
+}
+
+impl Memory {
+    pub fn bytes(&self) -> u64 {
+        self.bytes
+    }
+}
+
+impl fmt::Display for Memory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.text)
+    }
+}
+
+impl FromStr for Memory {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let invalid = || {
+            format!(
+                "memory \"{text}\" is not a size; write a whole number with k, m or g, e.g. \"16g\""
+            )
+        };
+        let unit: u64 = match text.chars().last() {
+            Some('k') => 1 << 10,
+            Some('m') => 1 << 20,
+            Some('g') => 1 << 30,
+            _ => return Err(invalid()),
+        };
+        let digits = &text[..text.len() - 1];
+        // Same rule as the schema pattern: no sign, no leading zero, so no zero.
+        if digits.is_empty()
+            || digits.starts_with('0')
+            || !digits.bytes().all(|b| b.is_ascii_digit())
+        {
+            return Err(invalid());
+        }
+        let n: u64 = digits.parse().map_err(|_| invalid())?;
+        Ok(Self {
+            text: text.to_string(),
+            bytes: n.checked_mul(unit).ok_or_else(invalid)?,
+        })
+    }
+}
+
+impl Serialize for Memory {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&self.text)
+    }
+}
+
+impl<'de> Deserialize<'de> for Memory {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        String::deserialize(d)?
+            .parse()
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "schema")]
+impl schemars::JsonSchema for Memory {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Memory".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "pattern": "^[1-9][0-9]*[kmg]$",
+            "description": "A memory limit: a whole number with k, m or g, in binary units."
+        })
+    }
+}
+
+/// Whether a job's container gets the host GPU.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum GpuMode {
+    /// Passed through when the host has a GPU runtime and the image is built for one.
+    #[default]
+    Auto,
+    /// Always passed through; a host without a GPU runtime refuses the workflow.
+    Required,
+    /// Never passed through.
+    None,
+}
+
+impl fmt::Display for GpuMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            GpuMode::Auto => "auto",
+            GpuMode::Required => "required",
+            GpuMode::None => "none",
+        })
+    }
+}
+
+/// What a job's container may use (format 1.1). Every field is optional.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Resources {
+    /// CPUs the container may use; may be fractional.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_cpus"
+    )]
+    #[cfg_attr(feature = "schema", schemars(range(min = 0.01)))]
+    pub cpus: Option<f64>,
+    /// Memory limit, with no swap on top.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory: Option<Memory>,
+    /// GPU passthrough; absent means `auto`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu: Option<GpuMode>,
+}
+
 /// Error type for job configuration operations.
 #[derive(Debug)]
 pub enum JobError {
@@ -402,6 +538,9 @@ pub struct JobMeta {
     /// Parameter definitions for this job.
     #[serde(default)]
     pub params: HashMap<String, ParamDefinition>,
+    /// Limits and GPU for the job's container (format 1.1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resources: Option<Resources>,
 }
 
 impl JobMeta {
@@ -417,6 +556,7 @@ impl JobMeta {
             inputs: Vec::new(),
             outputs: Vec::new(),
             params: HashMap::new(),
+            resources: None,
         }
     }
 
@@ -743,11 +883,56 @@ mod tests {
     }
 
     #[test]
+    fn resources_parse_and_round_trip() {
+        assert_eq!(parse_job("").unwrap().resources, None);
+
+        let meta = parse_resources("cpus = 4\nmemory = \"16g\"\ngpu = \"required\"").unwrap();
+        let resources = meta.resources.as_ref().unwrap();
+        assert_eq!(resources.cpus, Some(4.0));
+        assert_eq!(resources.memory.as_ref().unwrap().bytes(), 16 << 30);
+        assert_eq!(resources.gpu, Some(GpuMode::Required));
+
+        let saved = toml::to_string_pretty(&meta).unwrap();
+        assert!(
+            saved.contains("[resources]") && saved.contains("memory = \"16g\""),
+            "{saved}"
+        );
+        assert_eq!(toml::from_str::<JobMeta>(&saved).unwrap(), meta);
+    }
+
+    fn parse_resources(body: &str) -> Result<JobMeta, toml::de::Error> {
+        toml::from_str(&format!(
+            "name = \"J\"\ndescription = \"d\"\n[container]\nimage = \"alpine\"\n[resources]\n{body}\n"
+        ))
+    }
+
+    #[test]
+    fn resources_out_of_range_or_malformed_are_rejected() {
+        let ok = parse_resources("cpus = 0.5\nmemory = \"512m\"\ngpu = \"none\"").unwrap();
+        let resources = ok.resources.unwrap();
+        assert_eq!(resources.cpus, Some(0.5));
+        assert_eq!(resources.memory.unwrap().bytes(), 512 << 20);
+        assert_eq!(resources.gpu, Some(GpuMode::None));
+
+        for bad in ["cpus = 0", "cpus = 0.001", "cpus = -1"] {
+            let err = parse_resources(bad).unwrap_err().to_string();
+            assert!(err.contains("below the minimum"), "{bad}: {err}");
+        }
+        for bad in ["16", "1.5g", "0g", "016g", "16G", "16t", " 16g"] {
+            let err = parse_resources(&format!("memory = \"{bad}\""))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("not a size"), "{bad}: {err}");
+        }
+        assert!(parse_resources("gpu = \"yes\"").is_err());
+    }
+
+    #[test]
     fn a_job_without_retry_or_timeout_saves_as_before() {
         let meta = JobMeta::new("J".into(), "d".into(), Container::new("alpine".into()));
         let saved = toml::to_string_pretty(&meta).unwrap();
         assert!(
-            !saved.contains("retry") && !saved.contains("timeout"),
+            !saved.contains("retry") && !saved.contains("timeout") && !saved.contains("resources"),
             "{saved}"
         );
     }

@@ -226,6 +226,32 @@ pub fn check_run_scripts(jobs: &[JobFolder]) -> Result<(), String> {
     ))
 }
 
+/// Refuses a workflow whose job declares `gpu = "required"` on a host with no
+/// GPU runtime, before anything runs: falling back to CPU after a long queue is
+/// what the field exists to prevent.
+pub fn check_gpu_required(jobs: &[JobFolder], host_has_gpu: bool) -> Result<(), String> {
+    if host_has_gpu {
+        return Ok(());
+    }
+    let required: Vec<String> = jobs
+        .iter()
+        .filter(|job| {
+            job.load_meta().is_ok_and(|meta| {
+                meta.resources.and_then(|r| r.gpu) == Some(job_config::job::GpuMode::Required)
+            })
+        })
+        .map(|job| job.name.clone())
+        .collect();
+    if required.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "This host has no GPU runtime, but these jobs declare gpu = \"required\":\n\n  {}\n\n\
+         Fix: run on a host with a GPU, or set gpu = \"auto\" to fall back to CPU.",
+        required.join("\n  ")
+    ))
+}
+
 /// Checks the declared format version, the same way for `validate`, `run` and
 /// the TUI. A newer major may change what fields mean, so it is refused; a
 /// newer minor only adds fields an older silva can skip, so it is a note.
@@ -505,6 +531,36 @@ run = "run.sh"
         let tmp = TempDir::new().unwrap();
         let job = create_job(tmp.path(), "01-job", "echo hi\n");
         assert!(check_run_scripts(&[job]).is_ok());
+    }
+
+    fn with_gpu(job: &JobFolder, gpu: &str) {
+        let path = job.path.join(".chiral/job.toml");
+        let toml = fs::read_to_string(&path).unwrap();
+        fs::write(path, format!("{toml}\n[resources]\ngpu = \"{gpu}\"\n")).unwrap();
+    }
+
+    #[test]
+    fn gpu_required_is_refused_on_a_host_without_one_and_names_the_job() {
+        let tmp = TempDir::new().unwrap();
+        let cpu = create_job(tmp.path(), "01-cpu", "echo hi\n");
+        let gpu = create_job(tmp.path(), "02-gpu", "echo hi\n");
+        with_gpu(&gpu, "required");
+        let jobs = [cpu, gpu];
+
+        let err = check_gpu_required(&jobs, false).unwrap_err();
+        assert!(err.contains("no GPU runtime"), "{err}");
+        assert!(err.contains("02-gpu") && !err.contains("01-cpu"), "{err}");
+        assert!(check_gpu_required(&jobs, true).is_ok());
+    }
+
+    #[test]
+    fn gpu_auto_or_none_never_needs_a_gpu_host() {
+        let tmp = TempDir::new().unwrap();
+        let auto = create_job(tmp.path(), "01-auto", "echo hi\n");
+        with_gpu(&auto, "auto");
+        let none = create_job(tmp.path(), "02-none", "echo hi\n");
+        with_gpu(&none, "none");
+        assert!(check_gpu_required(&[auto, none], false).is_ok());
     }
 
     fn workflow_with_version(version: &str) -> job_config::workflow::WorkflowMeta {

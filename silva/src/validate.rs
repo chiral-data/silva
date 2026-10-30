@@ -300,6 +300,7 @@ pub fn validate_workflow(workflow_path: &Path) -> Report {
     }
     check_param_fallbacks(&parsed, &metas, &metadata, &mut report.notes);
     check_undeclared_format_fields(&parsed, &metas, &metadata, &mut report.notes);
+    check_leftover_use_gpu(&parsed, &mut report.notes);
 
     //    Parameter files, where they exist, against their definitions. This is
     //    what catches a generated params.json that names a parameter the job
@@ -502,6 +503,7 @@ fn check_undeclared_format_fields(
         let used: Vec<&str> = [
             ("`retry`", meta.retry.is_some()),
             ("`timeout`", meta.timeout.is_some()),
+            ("`[resources]`", meta.resources.is_some()),
         ]
         .into_iter()
         .filter_map(|(field, set)| set.then_some(field))
@@ -514,13 +516,41 @@ fn check_undeclared_format_fields(
                         "uses format 1.1 ({}) without declaring it; add schema_version = \"1.1\" \
                          to .chiral/workflow.toml so an older silva warns instead of silently \
                          ignoring it.",
-                        used.join(" and ")
+                        used.join(", ")
                     ),
                 )
                 .at(format!("{}/.chiral/job.toml", job.name))
                 .in_job(&job.name),
             );
         }
+    }
+}
+
+/// Notes `use_gpu` under `[container]`: it has been ignored since it was
+/// removed, and `[resources] gpu` is what now decides passthrough. Read from the
+/// raw TOML because the parsed struct drops unknown keys.
+fn check_leftover_use_gpu(jobs: &[JobFolder], notes: &mut Vec<Finding>) {
+    for job in jobs {
+        let Ok(text) = std::fs::read_to_string(&job.config_path) else {
+            continue;
+        };
+        let Ok(table) = text.parse::<toml::Table>() else {
+            continue;
+        };
+        let Some(value) = table.get("container").and_then(|c| c.get("use_gpu")) else {
+            continue;
+        };
+        notes.push(
+            Finding::new(
+                "job",
+                format!(
+                    "use_gpu = {value} is ignored; GPU passthrough is automatic, and \
+                     [resources] gpu = \"required\" or \"none\" overrides it (format 1.1)."
+                ),
+            )
+            .at(format!("{}/.chiral/job.toml", job.name))
+            .in_job(&job.name),
+        );
     }
 }
 
@@ -915,7 +945,54 @@ mod tests {
         assert_eq!(note.job.as_deref(), Some("01-first"));
         assert!(
             note.message
-                .contains("uses format 1.1 (`retry` and `timeout`)"),
+                .contains("uses format 1.1 (`retry`, `timeout`)"),
+            "{}",
+            note.message
+        );
+    }
+
+    fn append_to_first_job(dir: &TempDir, text: &str) {
+        let path = dir.path().join("01-first/.chiral/job.toml");
+        let toml = fs::read_to_string(&path).unwrap();
+        fs::write(path, format!("{toml}\n{text}")).unwrap();
+    }
+
+    #[test]
+    fn a_resources_block_without_a_1_1_declaration_is_noted() {
+        let dir = workflow("");
+        append_to_first_job(&dir, "[resources]\ncpus = 2\n");
+        let report = validate_workflow(dir.path());
+
+        assert!(report.is_valid(), "{:?}", report.findings);
+        assert_eq!(report.notes.len(), 1, "{:?}", report.notes);
+        assert!(
+            report.notes[0].message.contains("(`[resources]`)"),
+            "{}",
+            report.notes[0].message
+        );
+    }
+
+    #[test]
+    fn a_leftover_use_gpu_is_noted_on_its_job() {
+        let dir = workflow("");
+        let path = dir.path().join("02-second/.chiral/job.toml");
+        let toml = fs::read_to_string(&path).unwrap();
+        fs::write(
+            &path,
+            toml.replace(
+                "image = \"alpine:latest\"",
+                "image = \"alpine:latest\"\nuse_gpu = true",
+            ),
+        )
+        .unwrap();
+        let report = validate_workflow(dir.path());
+
+        assert!(report.is_valid(), "{:?}", report.findings);
+        assert_eq!(report.notes.len(), 1, "{:?}", report.notes);
+        let note = &report.notes[0];
+        assert_eq!(note.job.as_deref(), Some("02-second"));
+        assert!(
+            note.message.contains("use_gpu = true is ignored"),
             "{}",
             note.message
         );

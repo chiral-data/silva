@@ -1,0 +1,8 @@
+name = "01-first"
+description = "d"
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"
