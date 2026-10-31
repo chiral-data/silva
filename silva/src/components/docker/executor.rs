@@ -293,6 +293,15 @@ fn stream_error_message(err: &bollard::errors::Error) -> String {
     }
 }
 
+/// A param value as its `PARAM_*` environment variable carries it.
+pub(crate) fn env_value(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Null => "null".to_string(),
+        v => v.to_string(),
+    }
+}
+
 /// The parameter values a job runs with, by key, lowest layer first:
 /// workflow defaults, `global_params.json`, the job's defaults, its `params.json`.
 ///
@@ -723,16 +732,12 @@ impl DockerExecutor {
         // Convert merged parameters to environment variables
         let mut env_vars: Vec<String> = Vec::new();
         for (param_name, param_value) in &merged_params {
-            // Convert JSON value to string
-            let value_str = match param_value {
-                serde_json::Value::String(s) => s.clone(),
-                serde_json::Value::Number(n) => n.to_string(),
-                serde_json::Value::Bool(b) => b.to_string(),
-                serde_json::Value::Null => "null".to_string(),
-                v => v.to_string(),
-            };
             // Add with PARAM_ prefix to avoid conflicts
-            env_vars.push(format!("PARAM_{}={}", param_name.to_uppercase(), value_str));
+            env_vars.push(format!(
+                "PARAM_{}={}",
+                param_name.to_uppercase(),
+                env_value(param_value)
+            ));
         }
 
         // Forward selected host environment variables into the container exec environment.

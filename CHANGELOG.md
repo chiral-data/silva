@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `silva export --cwl <workflow>` (#123) writes the workflow as CWL v1.2, so cwltool, Toil or another CWL runner can run it: `workflow.cwl` plus one tool per job, as JSON, in `<workflow>/cwl/` or `-o <dir>`. Each tool runs a generated bash script that does what silva does around a job: stage `inputs/` from dependency outputs or `input_files/`, run `pre`, `run` and `post`, and collect `outputs`. So the data flow is the same, including an empty `inputs` copying everything and the first dependency winning a name. The CWL passes whole folders rather than typed files. `timeout` becomes `ToolTimeLimit`, `[resources]` becomes `ResourceRequirement`, and `gpu = "required"` becomes cwltool's CUDA hint. `retry`, which CWL can't express, is dropped with a warning, as are `env_passthrough` and local `apps/` images, which export with instructions. Image files (`.tar`, `.sif`) and anything `silva run` would refuse are refused. CI installs cwltool and runs three exported fixtures, comparing each job's outputs with `silva run`'s.
+
 ## [0.6.0]
 
 ### Added
