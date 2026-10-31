@@ -183,6 +183,26 @@ Each job's tool runs a generated bash script that does what this spec says silva
 | `[resources] cpus` / `memory` | `ResourceRequirement` (`coresMin`/`coresMax`, `ramMin`/`ramMax` in MiB). cwltool applies them to the container only with `--strict-cpu-limit --strict-memory-limit` |
 | `gpu = "required"` | the `cwltool:CUDARequirement` hint (NVIDIA, cwltool only); `"auto"` warns, `"none"` needs nothing |
 
+## Export to WDL
+
+`silva export --wdl <workflow>` writes WDL 1.2 into `<workflow>/wdl/` (or `-o <dir>`; a folder with files needs `--force`): `workflow.wdl`, holding a task per job and the workflow calling them, and `inputs.json`, naming the job folders and `input_files/` by absolute path, since WDL can't default a `Directory` input. Moving the workflow folder means exporting again. It refuses what `silva run` refuses, through the same checks, and writes nothing when it refuses. `miniwdl run <dir>/workflow.wdl -i <dir>/inputs.json` runs it.
+
+WDL 1.2 is required for `Directory`, which carries job folders and dependency outputs whole; WDL 1.1 has no such type, so engines without 1.2 (Cromwell, Terra) can't run the export. Each task runs the same generated bash script as the CWL export, so the data flow above holds exactly. Beyond that:
+
+| silva | In the WDL |
+| --- | --- |
+| a job | `task job_<name>`, the name made into a WDL identifier; two jobs that become the same identifier are refused |
+| image name | `requirements.container`. A local `apps/` image is exported by tag, with a warning to build it first |
+| image file (`.tar`, `.sif`) | refused |
+| `[params]`, and undeclared keys in `global_params.json` / `params.json` | `env String PARAM_*` task inputs, passed from `String` workflow inputs defaulting to the resolved value; constants as private `env` declarations. An `enum`'s choices are listed in `parameter_meta`. A `PARAM_*` name that isn't a WDL identifier is refused |
+| `env_passthrough` | a warning: run miniwdl with `--env <NAME>` |
+| `retry` | `requirements.max_retries`. The runner re-runs the whole task in a fresh folder, without silva's 10 s doubling backoff |
+| `timeout` | dropped, with a warning: WDL has no time limit |
+| `[resources] cpus` / `memory` | `requirements.cpu` / `memory` (in MiB); enforcement is the runner's |
+| `gpu = "required"` | `requirements.gpu: true`; `"auto"` warns, `"none"` needs nothing. Whether a GPU reaches the task is the runner's: miniwdl 1.16 ran such a task without one on a host where `silva run` passes the GPU through |
+
+miniwdl runs tasks as Docker swarm services: its first run turns on a single-node swarm (`docker swarm init`) on the host it runs on.
+
 ## Exit codes
 
 | Command | Code | Meaning |

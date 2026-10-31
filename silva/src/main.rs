@@ -117,16 +117,21 @@ enum Command {
     /// The export runs with that language's tools instead of silva. Whatever
     /// the target can't express is refused or reported as a warning. Needs no
     /// Docker.
+    #[command(group = clap::ArgGroup::new("format").required(true).args(["cwl", "wdl"]))]
     Export {
         /// Path to the workflow folder
         #[arg(value_name = "WORKFLOW_PATH")]
         path: PathBuf,
 
         /// Write CWL v1.2: workflow.cwl plus one tool per job
-        #[arg(long, required = true)]
+        #[arg(long)]
         cwl: bool,
 
-        /// Output folder [default: WORKFLOW_PATH/cwl]
+        /// Write WDL 1.2: workflow.wdl plus inputs.json
+        #[arg(long)]
+        wdl: bool,
+
+        /// Output folder [default: WORKFLOW_PATH/cwl or WORKFLOW_PATH/wdl]
         #[arg(short = 'o', long = "out", value_name = "DIR")]
         out: Option<PathBuf>,
 
@@ -191,19 +196,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Offline for the same reason as validation.
     if let Some(Command::Export {
-        path, out, force, ..
+        path,
+        wdl,
+        out,
+        force,
+        ..
     }) = &args.command
     {
-        match silva::export::export_cwl(path, out.as_deref(), *force) {
+        let exported = if *wdl {
+            silva::export::export_wdl(path, out.as_deref(), *force)
+        } else {
+            silva::export::export_cwl(path, out.as_deref(), *force)
+        };
+        match exported {
             Ok((dir, warnings)) => {
                 for warning in &warnings {
                     eprintln!("Warning: {warning}");
                 }
-                println!("Wrote CWL to {}", dir.display());
-                println!(
-                    "Run it with: cwltool {}",
-                    dir.join("workflow.cwl").display()
-                );
+                if *wdl {
+                    println!("Wrote WDL to {}", dir.display());
+                    println!(
+                        "Run it with: miniwdl run {} -i {}",
+                        dir.join("workflow.wdl").display(),
+                        dir.join("inputs.json").display()
+                    );
+                } else {
+                    println!("Wrote CWL to {}", dir.display());
+                    println!(
+                        "Run it with: cwltool {}",
+                        dir.join("workflow.cwl").display()
+                    );
+                }
                 std::process::exit(0);
             }
             Err(e) => {

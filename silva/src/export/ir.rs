@@ -23,8 +23,9 @@ pub struct ExportWorkflow {
     pub jobs: Vec<ExportJob>,
     /// Params declared in `workflow.toml`, defaulting to their resolved value.
     pub params: Vec<ExportParam>,
-    /// What the target can't express; the export still goes ahead.
-    pub warnings: Vec<String>,
+    /// Things a target may not express, in the order found; each emitter
+    /// words its own warning, or none when it can express it.
+    pub caveats: Vec<Caveat>,
 }
 
 #[derive(Debug)]
@@ -51,6 +52,7 @@ pub struct ExportJob {
     pub cpus: Option<f64>,
     pub memory_bytes: Option<u64>,
     pub gpu_required: bool,
+    pub retry: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -61,6 +63,23 @@ pub struct ExportParam {
     pub default: String,
     /// Allowed values of an `enum` param.
     pub choices: Option<Vec<String>>,
+}
+
+/// A fact about the workflow that some target languages can't carry.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Caveat {
+    /// A host variable `env_passthrough` forwards.
+    EnvPassthrough(String),
+    /// A job's image is built from `apps/`, not pulled.
+    LocalImage {
+        job: String,
+        image: String,
+        context: PathBuf,
+    },
+    /// A job's `retry` count.
+    Retry { job: String, count: u32 },
+    /// A job's `gpu = "auto"`.
+    GpuAuto { job: String },
 }
 
 /// Where a `PARAM_*` variable's value comes from.
@@ -104,12 +123,9 @@ pub fn lower(path: &Path) -> Result<ExportWorkflow, String> {
     let workflow_values = with_defaults(&meta.params, &global_values);
     let params = declared(&meta.params, &workflow_values);
 
-    let mut warnings = Vec::new();
+    let mut caveats = Vec::new();
     for name in meta.env_passthrough.iter().flatten() {
-        warnings.push(format!(
-            "env_passthrough {name}: CWL can't read the host environment; \
-             run cwltool with --preserve-environment {name}."
-        ));
+        caveats.push(Caveat::EnvPassthrough(name.clone()));
     }
     let local_apps: HashMap<String, PathBuf> = apps_to_build(path, &sorted)
         .into_iter()
@@ -130,28 +146,23 @@ pub fn lower(path: &Path) -> Result<ExportWorkflow, String> {
             ));
         }
         if let Some(dockerfile) = local_apps.get(image) {
-            let context = dockerfile.parent().unwrap_or(path);
-            warnings.push(format!(
-                "{}: image {image} is built from apps/, not pulled; build it before running: \
-                 docker build -t {image} {}",
-                job.name,
-                context.display()
-            ));
+            caveats.push(Caveat::LocalImage {
+                job: job.name.clone(),
+                image: image.clone(),
+                context: dockerfile.parent().unwrap_or(path).to_path_buf(),
+            });
         }
-        if let Some(retry) = config.retry {
-            warnings.push(format!(
-                "{}: retry = {retry} has no CWL equivalent and is dropped; \
-                 use your runner's retry option instead.",
-                job.name
-            ));
+        if let Some(count) = config.retry {
+            caveats.push(Caveat::Retry {
+                job: job.name.clone(),
+                count,
+            });
         }
         let gpu = config.resources.as_ref().and_then(|r| r.gpu);
         if gpu == Some(GpuMode::Auto) {
-            warnings.push(format!(
-                "{}: gpu = \"auto\" has no CWL equivalent; the job runs without a GPU \
-                 unless the runner adds one.",
-                job.name
-            ));
+            caveats.push(Caveat::GpuAuto {
+                job: job.name.clone(),
+            });
         }
 
         let job_values = job
@@ -217,6 +228,7 @@ pub fn lower(path: &Path) -> Result<ExportWorkflow, String> {
                 .and_then(|r| r.memory.as_ref())
                 .map(|m| m.bytes()),
             gpu_required: gpu == Some(GpuMode::Required),
+            retry: config.retry,
         });
     }
 
@@ -226,7 +238,7 @@ pub fn lower(path: &Path) -> Result<ExportWorkflow, String> {
         path: path.to_path_buf(),
         jobs: export_jobs,
         params,
-        warnings,
+        caveats,
     })
 }
 
@@ -388,18 +400,17 @@ mod tests {
         assert_eq!(second.dependencies, vec!["01-first"]);
         assert!(!second.takes_input_files);
         assert_eq!(second.inputs, vec!["*.txt", "*.csv"]);
-        assert!(wf.warnings.is_empty(), "{:?}", wf.warnings);
+        assert!(wf.caveats.is_empty(), "{:?}", wf.caveats);
     }
 
     #[test]
     fn an_image_file_is_refused_and_retry_is_warned_about() {
         let dir = workflow("", "retry = 2\n");
         let wf = lower(dir.path()).unwrap();
-        assert!(
-            wf.warnings
-                .iter()
-                .any(|w| w.starts_with("01-first: retry = 2 has no CWL equivalent"))
-        );
+        assert!(wf.caveats.contains(&Caveat::Retry {
+            job: "01-first".to_string(),
+            count: 2
+        }));
 
         let toml = dir.path().join("02-second/.chiral/job.toml");
         let text = fs::read_to_string(&toml)
