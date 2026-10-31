@@ -43,11 +43,12 @@ Once you push the tag, GitHub Actions will automatically:
 1. **Create a GitHub Release** with the tag name
 2. **Build binaries** for all supported platforms:
    - Linux x86_64
-   - Linux ARM64
    - macOS x86_64 (Intel)
    - macOS ARM64 (Apple Silicon)
    - Windows x86_64
    - Windows ARM64
+
+   Linux ARM64 is not built: its target is commented out in `.github/workflows/release.yml` until a `cc` link error is fixed.
 
 3. **Package binaries**:
    - Linux/macOS: `.tar.gz` archives
@@ -59,7 +60,7 @@ Once you push the tag, GitHub Actions will automatically:
 
 1. Go to `https://github.com/chiral-data/silva/releases`
 2. Check that the release was created with version tag
-3. Verify all 6 platform binaries are attached
+3. Verify all 5 platform binaries are attached, each with its `.sha256`, plus `job.schema.json` and `workflow.schema.json`
 4. Test the installation script:
    ```bash
    curl -fsSL https://raw.githubusercontent.com/chiral-data/silva/main/install.sh | sh
