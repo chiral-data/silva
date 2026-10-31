@@ -48,10 +48,12 @@ jobs:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
-      # integration_export runs each exported workflow with cwltool; without it
-      # those tests skip themselves and only check that export is refused correctly.
-      - name: Install cwltool
-        run: pipx install cwltool
+      # integration_export runs each exported workflow with cwltool and miniwdl;
+      # without them those tests skip themselves and only check refusals.
+      - name: Install cwltool and miniwdl
+        run: |
+          pipx install cwltool
+          pipx install miniwdl
 
       - name: Run tests (job_config)
         run: cargo test -p job_config --verbose
