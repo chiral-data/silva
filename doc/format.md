@@ -165,6 +165,24 @@ silva run workflows/my-workflow \
 
 It does not check that `pre` or `post` scripts exist or that images exist.
 
+## Export to CWL
+
+`silva export --cwl <workflow>` writes CWL v1.2 into `<workflow>/cwl/` (or `-o <dir>`; a folder with files needs `--force`): `workflow.cwl` and one `<job>.cwl` per job, as JSON. It refuses what `silva run` refuses, through the same checks. `cwltool <dir>/workflow.cwl` runs it, and each job's `outputs/` comes out as a folder named after the job.
+
+Each job's tool runs a generated bash script that does what this spec says silva does: it stages `inputs/` from dependency outputs or `input_files/`, runs `pre`, `run` and `post`, and collects `outputs`. So the data flow above holds exactly, at the cost of CWL that passes whole folders instead of typed files. Beyond that:
+
+| silva | In the CWL |
+| --- | --- |
+| image name | `DockerRequirement.dockerPull`. A local `apps/` image is exported by tag, with a warning to build it first |
+| image file (`.tar`, `.sif`) | refused |
+| a container's network access | `NetworkAccess`, since CWL's default is no network |
+| `[params]`, and undeclared keys in `global_params.json` / `params.json` | `string` (or `enum`) workflow inputs defaulting to the resolved value, and constants, set as `PARAM_*` |
+| `env_passthrough` | a warning: run cwltool with `--preserve-environment <NAME>` |
+| `timeout` | `ToolTimeLimit`. Enforcement is the runner's: cwltool 3.3 logs the overrun but lets a Docker job finish |
+| `retry` | dropped, with a warning: CWL has no retry |
+| `[resources] cpus` / `memory` | `ResourceRequirement` (`coresMin`/`coresMax`, `ramMin`/`ramMax` in MiB). cwltool applies them to the container only with `--strict-cpu-limit --strict-memory-limit` |
+| `gpu = "required"` | the `cwltool:CUDARequirement` hint (NVIDIA, cwltool only); `"auto"` warns, `"none"` needs nothing |
+
 ## Exit codes
 
 | Command | Code | Meaning |

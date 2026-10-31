@@ -211,4 +211,5 @@ A workflow is a folder of jobs. Each job runs its scripts in a Docker container,
 
 - **Writing one:** follow the [tutorial](doc/tutorial.md). It builds a two-job workflow and runs it.
 - **The rules:** [doc/format.md](doc/format.md) is the spec. Its keys come from the JSON Schemas in [`schema/`](schema/), which `silva schema workflow` and `silva schema job` also print.
+- **Running one elsewhere:** `silva export --cwl <workflow>` writes it as CWL v1.2 for cwltool or Toil; see [Export to CWL](doc/format.md#export-to-cwl).
 - **Examples:** [collab-workflows](https://github.com/chiral-data/collab-workflows) has more than thirty real workflows.

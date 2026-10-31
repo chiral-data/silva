@@ -111,6 +111,29 @@ enum Command {
         #[arg(value_enum)]
         kind: SchemaKind,
     },
+
+    /// Write a workflow folder in another workflow language
+    ///
+    /// The export runs with that language's tools instead of silva. Whatever
+    /// the target can't express is refused or reported as a warning. Needs no
+    /// Docker.
+    Export {
+        /// Path to the workflow folder
+        #[arg(value_name = "WORKFLOW_PATH")]
+        path: PathBuf,
+
+        /// Write CWL v1.2: workflow.cwl plus one tool per job
+        #[arg(long, required = true)]
+        cwl: bool,
+
+        /// Output folder [default: WORKFLOW_PATH/cwl]
+        #[arg(short = 'o', long = "out", value_name = "DIR")]
+        out: Option<PathBuf>,
+
+        /// Write into an output folder that already has files
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -166,6 +189,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
         std::process::exit(0);
     }
 
+    // Offline for the same reason as validation.
+    if let Some(Command::Export {
+        path, out, force, ..
+    }) = &args.command
+    {
+        match silva::export::export_cwl(path, out.as_deref(), *force) {
+            Ok((dir, warnings)) => {
+                for warning in &warnings {
+                    eprintln!("Warning: {warning}");
+                }
+                println!("Wrote CWL to {}", dir.display());
+                println!(
+                    "Run it with: cwltool {}",
+                    dir.join("workflow.cwl").display()
+                );
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("Export failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     // Whether this invocation wants machine-readable output, in either form:
     // `silva run <path> --json` or the deprecated `silva <path> --json`.
     let json = args.json || matches!(&args.command, Some(Command::Run { json: true, .. }));
@@ -187,7 +234,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // deprecated alias kept for existing scripts.
     let (workflow_path, env) = match args.command {
         Some(Command::Run { path, env, .. }) => (Some(path), env),
-        Some(Command::Validate { .. } | Command::Schema { .. }) => unreachable!("handled above"),
+        Some(Command::Validate { .. } | Command::Schema { .. } | Command::Export { .. }) => {
+            unreachable!("handled above")
+        }
         None => {
             if args.workflow_path.is_some() {
                 silva::events::warn_line(
