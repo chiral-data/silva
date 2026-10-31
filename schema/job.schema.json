@@ -40,6 +40,17 @@
       },
       "default": {}
     },
+    "resources": {
+      "description": "Limits and GPU for the job's container (format 1.1).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Resources"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "retry": {
       "description": "Re-runs of the `run` script after it fails or times out (format 1.1).",
       "type": [
@@ -98,6 +109,31 @@
         "image"
       ]
     },
+    "GpuMode": {
+      "description": "Whether a job's container gets the host GPU.",
+      "oneOf": [
+        {
+          "description": "Passed through when the host has a GPU runtime and the image is built for one.",
+          "type": "string",
+          "const": "auto"
+        },
+        {
+          "description": "Always passed through; a host without a GPU runtime refuses the workflow.",
+          "type": "string",
+          "const": "required"
+        },
+        {
+          "description": "Never passed through.",
+          "type": "string",
+          "const": "none"
+        }
+      ]
+    },
+    "Memory": {
+      "description": "A memory limit: a whole number with k, m or g, in binary units.",
+      "type": "string",
+      "pattern": "^[1-9][0-9]*[kmg]$"
+    },
     "ParamDefinition": {
       "description": "Represents a parameter definition in job.toml.",
       "type": "object",
@@ -140,6 +176,43 @@
         "enum",
         "array"
       ]
+    },
+    "Resources": {
+      "description": "What a job's container may use (format 1.1). Every field is optional.",
+      "type": "object",
+      "properties": {
+        "cpus": {
+          "description": "CPUs the container may use; may be fractional.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "minimum": 0.01
+        },
+        "gpu": {
+          "description": "GPU passthrough; absent means `auto`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GpuMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "memory": {
+          "description": "Memory limit, with no swap on top.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Memory"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
     },
     "Scripts": {
       "description": "Represents the scripts that will be executed for a job.\nAll fields are optional and have default values.",

@@ -1,0 +1,7 @@
+schema_version = "1.1"
+name = "split-by-resources"
+description = "resources fixture"
+
+[dependencies]
+02-limited = ["01-plain"]
+03-same-limit = ["02-limited"]

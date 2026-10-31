@@ -305,6 +305,7 @@ impl State {
                 crate::precheck::check_install_commands(&sorted_jobs),
                 crate::precheck::check_cross_node_references(&sorted_jobs),
                 crate::precheck::check_run_scripts(&sorted_jobs),
+                crate::precheck::check_gpu_required(&sorted_jobs, docker_executor.host_has_gpu()),
                 crate::precheck::check_input_files_folder(
                     &workflow_folder.path,
                     &sorted_jobs,

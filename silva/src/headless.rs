@@ -192,6 +192,16 @@ pub async fn run_workflow(
             }
         };
         docker_executor.detect_host_gpu().await;
+        if let Err(e) =
+            crate::precheck::check_gpu_required(&sorted_jobs_clone, docker_executor.host_has_gpu())
+        {
+            let log_line = LogLine::new(LogSource::Stderr, e.clone());
+            let _ = tx.send((0, JobStatus::Failed, log_line)).await;
+            let _ = tx
+                .send((jobs_len, JobStatus::Failed, LogLine::empty()))
+                .await;
+            return Err(e);
+        }
 
         // Build the local app images this workflow ships in apps/, if any.
         // Their tags exist in no registry, so pulling cannot satisfy them.
@@ -813,6 +823,7 @@ mod tests {
             inputs: inputs.into_iter().map(String::from).collect(),
             outputs: vec![],
             params: HashMap::new(),
+            resources: None,
         }
     }
 
