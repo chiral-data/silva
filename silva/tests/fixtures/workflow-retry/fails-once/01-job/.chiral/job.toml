@@ -1,0 +1,10 @@
+name = "Flaky"
+description = "Fails on the first attempt only"
+retry = 1
+outputs = ["attempts"]
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"

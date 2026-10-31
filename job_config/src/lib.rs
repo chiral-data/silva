@@ -20,4 +20,6 @@
 
 pub mod job;
 pub mod params;
+#[cfg(feature = "schema")]
+pub mod schema;
 pub mod workflow;

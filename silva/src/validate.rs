@@ -15,18 +15,22 @@ use std::time::SystemTime;
 
 use crate::components::workflow::{JobFolder, JobScanner, WorkflowFolder};
 use crate::headless::topological_sort_jobs;
+use crate::precheck::{self, ScriptConvention};
 
 /// One problem, addressed to whoever has to fix it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Finding {
-    /// Machine-readable category: `workflow`, `job`, `dependency`, `params`,
-    /// `script`, or `inputs`.
+    /// Machine-readable category: `workflow`, `job`, `dependency`, `ports`,
+    /// `params`, `script`, or `inputs`.
     pub kind: &'static str,
     /// Path this is about, relative to the workflow folder where possible.
     pub file: Option<String>,
     /// Job folder this is about, when it is about one.
     pub job: Option<String>,
     pub message: String,
+    /// Convention this offence belongs to; human output groups a run of them
+    /// under its heading. Not part of the JSON.
+    pub(crate) group: Option<&'static ScriptConvention>,
 }
 
 impl Finding {
@@ -36,6 +40,7 @@ impl Finding {
             file: None,
             job: None,
             message: message.into(),
+            group: None,
         }
     }
 
@@ -48,6 +53,11 @@ impl Finding {
         self.job = Some(job.into());
         self
     }
+
+    fn under(mut self, convention: &'static ScriptConvention) -> Self {
+        self.group = Some(convention);
+        self
+    }
 }
 
 #[derive(Debug, Default)]
@@ -58,6 +68,8 @@ pub struct Report {
     /// Execution order, when the graph is sound enough to produce one.
     pub order: Vec<String>,
     pub findings: Vec<Finding>,
+    /// Worth telling the author, but not a reason the folder would not run.
+    pub notes: Vec<Finding>,
 }
 
 impl Report {
@@ -68,54 +80,87 @@ impl Report {
     /// Human output. Success names the execution order, because that is the
     /// thing a person actually wants confirmed.
     pub fn render(&self) -> String {
-        if self.is_valid() {
+        let mut out = if self.is_valid() {
             let name = self.workflow_name.as_deref().unwrap_or("workflow");
-            return format!(
+            format!(
                 "{name}: {} job(s) ok\nExecution order: {}\n",
                 self.jobs.len(),
                 self.order.join(" -> ")
-            );
-        }
+            )
+        } else {
+            let mut out = format!("{} problem(s) found:\n\n", self.findings.len());
+            for (i, finding) in self.findings.iter().enumerate() {
+                let group = finding.group;
+                let opens = i == 0 || self.findings[i - 1].group != group;
+                let closes = self
+                    .findings
+                    .get(i + 1)
+                    .is_none_or(|next| next.group != group);
+                match group {
+                    Some(convention) => {
+                        if opens {
+                            out.push_str(&format!(
+                                "  {}\n",
+                                convention.heading.replace('\n', "\n  ")
+                            ));
+                        }
+                        out.push_str(&format!("  {}", render_item(finding)));
+                        if closes {
+                            out.push_str(&format!("    Fix: {}\n", convention.fix));
+                        }
+                    }
+                    None => out.push_str(&render_item(finding)),
+                }
+            }
+            out
+        };
 
-        let mut out = format!("{} problem(s) found:\n\n", self.findings.len());
-        for finding in &self.findings {
-            let where_ = match (&finding.file, &finding.job) {
-                (Some(file), _) => format!(" [{file}]"),
-                (None, Some(job)) => format!(" [{job}]"),
-                (None, None) => String::new(),
-            };
-            // The prechecks return multi-line messages; indent continuations so
-            // one finding still reads as one item.
-            let message = finding.message.trim_end().replace('\n', "\n    ");
-            out.push_str(&format!("  {}{}: {message}\n", finding.kind, where_));
+        if !self.notes.is_empty() {
+            out.push_str("\nNote(s):\n\n");
+            for note in &self.notes {
+                out.push_str(&render_item(note));
+            }
         }
         out
     }
 
     /// Machine output, for a caller that has to act on the result.
     pub fn to_json(&self) -> String {
-        let findings: Vec<serde_json::Value> = self
-            .findings
-            .iter()
-            .map(|f| {
-                serde_json::json!({
-                    "kind": f.kind,
-                    "file": f.file,
-                    "job": f.job,
-                    "message": f.message,
+        let items = |list: &[Finding]| -> Vec<serde_json::Value> {
+            list.iter()
+                .map(|f| {
+                    serde_json::json!({
+                        "kind": f.kind,
+                        "file": f.file,
+                        "job": f.job,
+                        "message": f.message,
+                    })
                 })
-            })
-            .collect();
+                .collect()
+        };
 
         serde_json::to_string_pretty(&serde_json::json!({
             "valid": self.is_valid(),
             "workflow": self.workflow_name,
             "jobs": self.jobs,
             "order": self.order,
-            "findings": findings,
+            "findings": items(&self.findings),
+            "notes": items(&self.notes),
         }))
         .unwrap_or_else(|e| format!("{{\"valid\":false,\"error\":\"{e}\"}}"))
     }
+}
+
+fn render_item(finding: &Finding) -> String {
+    let where_ = match (&finding.file, &finding.job) {
+        (Some(file), _) => format!(" [{file}]"),
+        (None, Some(job)) => format!(" [{job}]"),
+        (None, None) => String::new(),
+    };
+    // The prechecks return multi-line messages; indent continuations so one
+    // finding still reads as one item.
+    let message = finding.message.trim_end().replace('\n', "\n    ");
+    format!("  {}{}: {message}\n", finding.kind, where_)
 }
 
 /// Validates a workflow folder in place. Never runs anything and never needs
@@ -174,6 +219,11 @@ pub fn validate_workflow(workflow_path: &Path) -> Report {
         }
     };
 
+    // 1b. The declared format version. Advisory within a major, since unknown
+    //     keys parse harmlessly; a newer major may change meaning, so it fails.
+    check_schema_version(&metadata, &mut report);
+    check_env_passthrough(&metadata, &mut report.findings);
+
     // 2. Job folders.
     let jobs = match JobScanner::scan_jobs(&workflow_path) {
         Ok(jobs) => jobs,
@@ -228,9 +278,31 @@ pub fn validate_workflow(workflow_path: &Path) -> Report {
             Ok(sorted) => report.order = sorted.iter().map(|j| j.name.clone()).collect(),
             Err(e) => report.findings.push(Finding::new("dependency", e)),
         }
+        // 4b. Ports: every input pattern can be fed by a direct dependency.
+        check_input_ports(&report.jobs, &metas, &metadata, &mut report.findings);
     }
 
-    // 5. Parameter files, where they exist, against their definitions. This is
+    // 5. Declared defaults against their types: a default is the value a run
+    //    uses whenever no file names the param.
+    check_default_types(
+        &metadata.params,
+        ".chiral/workflow.toml",
+        None,
+        &mut report.findings,
+    );
+    for job in &parsed {
+        check_default_types(
+            &metas[&job.name].params,
+            &format!("{}/.chiral/job.toml", job.name),
+            Some(&job.name),
+            &mut report.findings,
+        );
+    }
+    check_param_fallbacks(&parsed, &metas, &metadata, &mut report.notes);
+    check_undeclared_format_fields(&parsed, &metas, &metadata, &mut report.notes);
+    check_leftover_use_gpu(&parsed, &mut report.notes);
+
+    //    Parameter files, where they exist, against their definitions. This is
     //    what catches a generated params.json that names a parameter the job
     //    does not have.
     if let Ok(Some(params)) = folder.load_workflow_params()
@@ -265,19 +337,344 @@ pub fn validate_workflow(workflow_path: &Path) -> Report {
 
     // 6. The same conventions headless execution enforces, so validate agrees
     //    with what a run would do.
-    if let Err(e) = crate::precheck::check_install_commands(&parsed) {
-        report.findings.push(Finding::new("script", e));
+    //    One finding per offence, so a caller can show each on its job.
+    for (convention, what, violations) in [
+        (
+            &precheck::INSTALL_COMMANDS,
+            "install command",
+            precheck::install_command_violations(&parsed),
+        ),
+        (
+            &precheck::CROSS_NODE_REFERENCES,
+            "sibling path",
+            precheck::cross_node_violations(&parsed),
+        ),
+    ] {
+        for v in violations {
+            report.findings.push(
+                Finding::new(
+                    "script",
+                    format!(
+                        "{}:{} — {what}: {}",
+                        v.script_name, v.line_number, v.line_content
+                    ),
+                )
+                .at(format!("{}/{}", v.job_name, v.script_name))
+                .in_job(&v.job_name)
+                .under(convention),
+            );
+        }
     }
-    if let Err(e) = crate::precheck::check_cross_node_references(&parsed) {
-        report.findings.push(Finding::new("script", e));
+    for (job, run) in precheck::missing_run_scripts(&parsed) {
+        report.findings.push(
+            Finding::new("script", format!("run script '{run}' not found"))
+                .at(format!("{job}/{run}"))
+                .in_job(&job)
+                .under(&precheck::RUN_SCRIPTS),
+        );
     }
-    if let Err(e) = crate::precheck::check_input_files_folder(&workflow_path, &parsed, &metadata) {
+    if let Err(e) = precheck::check_input_files_folder(&workflow_path, &parsed, &metadata) {
         report
             .findings
             .push(Finding::new("inputs", e).at("input_files/"));
     }
 
     report
+}
+
+fn check_schema_version(metadata: &job_config::workflow::WorkflowMeta, report: &mut Report) {
+    let at = ".chiral/workflow.toml";
+    match precheck::check_schema_version(metadata) {
+        Ok(None) => {}
+        Ok(Some(note)) => report.notes.push(Finding::new("workflow", note).at(at)),
+        Err(e) => report.findings.push(Finding::new("workflow", e).at(at)),
+    }
+}
+
+/// `env_passthrough` entries are forwarded as environment variable names, so a
+/// name the shell cannot address is a mistake rather than a value.
+fn check_env_passthrough(
+    metadata: &job_config::workflow::WorkflowMeta,
+    findings: &mut Vec<Finding>,
+) {
+    for name in metadata.env_passthrough.iter().flatten() {
+        let mut chars = name.chars();
+        let valid = chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if !valid {
+            findings.push(
+                Finding::new(
+                    "workflow",
+                    format!("env_passthrough entry '{name}' is not an environment variable name."),
+                )
+                .at(".chiral/workflow.toml"),
+            );
+        }
+    }
+}
+
+/// One finding per declared default that does not match its own `type`.
+fn check_default_types(
+    params: &HashMap<String, job_config::job::ParamDefinition>,
+    file: &str,
+    job: Option<&str>,
+    findings: &mut Vec<Finding>,
+) {
+    let mut names: Vec<&String> = params.keys().collect();
+    names.sort();
+    for name in names {
+        if let Err(e) = params[name].validate(&params[name].default) {
+            let finding = Finding::new("params", format!("Default of '{name}': {e}")).at(file);
+            findings.push(match job {
+                Some(job) => finding.in_job(job),
+                None => finding,
+            });
+        }
+    }
+}
+
+/// Notes `${PARAM_X:-…}` and `${PARAM_X-…}` where `X` is declared for the job:
+/// a run always sets it, so the fallback is a second default that can drift.
+/// A declared `""` is exempt, since `:-` still fires on an empty value.
+fn check_param_fallbacks(
+    jobs: &[JobFolder],
+    metas: &HashMap<String, job_config::job::JobMeta>,
+    metadata: &job_config::workflow::WorkflowMeta,
+    notes: &mut Vec<Finding>,
+) {
+    for job in jobs {
+        let meta = &metas[&job.name];
+        // The job's own declaration shadows the workflow's, as at run time.
+        let mut declared: HashMap<String, &toml::Value> = HashMap::new();
+        for (name, def) in metadata.params.iter().chain(&meta.params) {
+            declared.insert(name.to_uppercase(), &def.default);
+        }
+        for script in [&meta.scripts.pre, &meta.scripts.run, &meta.scripts.post] {
+            let Ok(content) = std::fs::read_to_string(job.path.join(script)) else {
+                continue;
+            };
+            let mut redundant: Vec<String> = content
+                .lines()
+                .filter(|line| !line.trim_start().starts_with('#'))
+                .flat_map(param_fallbacks)
+                .filter(|name| declared.get(name).is_some_and(|d| d.as_str() != Some("")))
+                .map(|name| format!("PARAM_{name}"))
+                .collect();
+            redundant.sort();
+            redundant.dedup();
+            if !redundant.is_empty() {
+                notes.push(
+                    Finding::new(
+                        "script",
+                        format!(
+                            "{}: declared, so a run always sets it and this fallback is a second \
+                             default that can drift from the declared one.",
+                            redundant.join(", ")
+                        ),
+                    )
+                    .at(format!("{}/{script}", job.name))
+                    .in_job(&job.name),
+                );
+            }
+        }
+    }
+}
+
+/// Notes a job using a format 1.1 field in a workflow that doesn't declare 1.1:
+/// a build that speaks only 1.0 would run it without the field, and say nothing.
+fn check_undeclared_format_fields(
+    jobs: &[JobFolder],
+    metas: &HashMap<String, job_config::job::JobMeta>,
+    metadata: &job_config::workflow::WorkflowMeta,
+    notes: &mut Vec<Finding>,
+) {
+    let declared = metadata
+        .schema_version
+        .as_deref()
+        .and_then(|v| v.split_once('.'))
+        .and_then(|(major, minor)| Some((major.parse::<u32>().ok()?, minor.parse::<u32>().ok()?)));
+    if declared.is_some_and(|v| v >= (1, 1)) {
+        return;
+    }
+    for job in jobs {
+        let meta = &metas[&job.name];
+        let used: Vec<&str> = [
+            ("`retry`", meta.retry.is_some()),
+            ("`timeout`", meta.timeout.is_some()),
+            ("`[resources]`", meta.resources.is_some()),
+        ]
+        .into_iter()
+        .filter_map(|(field, set)| set.then_some(field))
+        .collect();
+        if !used.is_empty() {
+            notes.push(
+                Finding::new(
+                    "job",
+                    format!(
+                        "uses format 1.1 ({}) without declaring it; add schema_version = \"1.1\" \
+                         to .chiral/workflow.toml so an older silva warns instead of silently \
+                         ignoring it.",
+                        used.join(", ")
+                    ),
+                )
+                .at(format!("{}/.chiral/job.toml", job.name))
+                .in_job(&job.name),
+            );
+        }
+    }
+}
+
+/// Notes `use_gpu` under `[container]`: it has been ignored since it was
+/// removed, and `[resources] gpu` is what now decides passthrough. Read from the
+/// raw TOML because the parsed struct drops unknown keys.
+fn check_leftover_use_gpu(jobs: &[JobFolder], notes: &mut Vec<Finding>) {
+    for job in jobs {
+        let Ok(text) = std::fs::read_to_string(&job.config_path) else {
+            continue;
+        };
+        let Ok(table) = text.parse::<toml::Table>() else {
+            continue;
+        };
+        let Some(value) = table.get("container").and_then(|c| c.get("use_gpu")) else {
+            continue;
+        };
+        notes.push(
+            Finding::new(
+                "job",
+                format!(
+                    "use_gpu = {value} is ignored; GPU passthrough is automatic, and \
+                     [resources] gpu = \"required\" or \"none\" overrides it (format 1.1)."
+                ),
+            )
+            .at(format!("{}/.chiral/job.toml", job.name))
+            .in_job(&job.name),
+        );
+    }
+}
+
+/// The `X` of every `${PARAM_X:-` or `${PARAM_X-` on a line.
+fn param_fallbacks(line: &str) -> Vec<String> {
+    line.split("${PARAM_")
+        .skip(1)
+        .filter_map(|rest| {
+            let end = rest
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                .unwrap_or(rest.len());
+            let after = &rest[end..];
+            (end > 0 && (after.starts_with(":-") || after.starts_with('-')))
+                .then(|| rest[..end].to_string())
+        })
+        .collect()
+}
+
+/// Every `inputs` pattern of a job must be able to match something one of its
+/// direct dependencies declares in `outputs`; otherwise the job starts without
+/// the file, silently.
+///
+/// Only provable misses are reported. A job is skipped when any dependency
+/// declares no `outputs`, since its script may write to `outputs/` directly.
+fn check_input_ports(
+    job_names: &[String],
+    metas: &HashMap<String, job_config::job::JobMeta>,
+    metadata: &job_config::workflow::WorkflowMeta,
+    findings: &mut Vec<Finding>,
+) {
+    for job in job_names {
+        let Some(meta) = metas.get(job) else { continue };
+        let deps = metadata.get_job_dependencies(job);
+        if meta.inputs.is_empty() || deps.is_empty() {
+            continue;
+        }
+        let Some(dep_metas) = deps
+            .iter()
+            .map(|d| metas.get(d).filter(|m| !m.outputs.is_empty()))
+            .collect::<Option<Vec<_>>>()
+        else {
+            continue;
+        };
+        // Collection flattens paths, so a dependent sees only the last component.
+        let outputs: Vec<&str> = dep_metas
+            .iter()
+            .flat_map(|m| &m.outputs)
+            .filter_map(|o| o.trim_end_matches('/').rsplit('/').next())
+            .filter(|o| !o.is_empty())
+            .collect();
+
+        for input in &meta.inputs {
+            let message = if input.contains('/') {
+                let name = input
+                    .trim_end_matches('/')
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(input);
+                format!(
+                    "input '{input}' contains a path, but inputs match file names only, \
+                     so it can never match; write '{name}'."
+                )
+            } else if !outputs.iter().any(|o| may_overlap(input, o)) {
+                format!(
+                    "input '{input}' matches none of the outputs declared by {}: {}.",
+                    deps.join(", "),
+                    outputs.join(", ")
+                )
+            } else {
+                continue;
+            };
+            findings.push(
+                Finding::new("ports", message)
+                    .at(format!("{job}/.chiral/job.toml"))
+                    .in_job(job),
+            );
+        }
+    }
+}
+
+/// Whether some file name could match both patterns. Exact for a literal
+/// against a glob; for two globs, `false` only when their literal prefixes or
+/// suffixes conflict, which every common match would have to carry.
+fn may_overlap(a: &str, b: &str) -> bool {
+    const META: &[char] = &['*', '?', '['];
+    let matches = |glob: &str, name: &str| {
+        globset::Glob::new(glob).map_or(true, |g| g.compile_matcher().is_match(name))
+    };
+    let prefix = |p: &str| -> String { p.split(META).next().unwrap_or("").to_string() };
+    let suffix = |p: &str| -> String { p.rsplit(['*', '?', ']']).next().unwrap_or("").to_string() };
+
+    expand_braces(a).iter().any(|a| {
+        expand_braces(b)
+            .iter()
+            .any(|b| match (a.contains(META), b.contains(META)) {
+                (false, _) => matches(b, a),
+                (_, false) => matches(a, b),
+                _ => {
+                    let (pa, pb, sa, sb) = (prefix(a), prefix(b), suffix(a), suffix(b));
+                    (pa.starts_with(&pb) || pb.starts_with(&pa))
+                        && (sa.ends_with(&sb) || sb.ends_with(&sa))
+                }
+            })
+    })
+}
+
+/// `x.{pdb,cif}` -> `x.pdb`, `x.cif`, innermost group first, so nesting works.
+fn expand_braces(pattern: &str) -> Vec<String> {
+    let Some(close) = pattern.find('}') else {
+        return vec![pattern.to_string()];
+    };
+    let Some(open) = pattern[..close].rfind('{') else {
+        return vec![pattern.to_string()];
+    };
+    pattern[open + 1..close]
+        .split(',')
+        .flat_map(|alt| {
+            expand_braces(&format!(
+                "{}{alt}{}",
+                &pattern[..open],
+                &pattern[close + 1..]
+            ))
+        })
+        .collect()
 }
 
 /// `[dependencies]` may name a job that does not exist — the topological sort
@@ -506,5 +903,342 @@ mod tests {
 
         assert!(json.contains("\"valid\": true"));
         assert!(json.contains("01-first"));
+    }
+
+    #[test]
+    fn a_future_major_schema_version_fails_and_says_to_upgrade() {
+        let dir = workflow("schema_version = \"2.0\"\n");
+        let report = validate_workflow(dir.path());
+
+        assert!(!report.is_valid());
+        assert_eq!(report.findings.len(), 1);
+        assert_eq!(report.findings[0].kind, "workflow");
+        assert!(report.findings[0].message.contains("upgrade silva"));
+    }
+
+    #[test]
+    fn a_future_minor_schema_version_passes_with_a_note() {
+        let dir = workflow("schema_version = \"1.2\"\n");
+        let report = validate_workflow(dir.path());
+
+        assert!(report.is_valid(), "{:?}", report.findings);
+        assert_eq!(report.notes.len(), 1);
+        assert!(report.render().contains("format 1.2"));
+        assert!(report.to_json().contains("\"notes\": ["));
+    }
+
+    fn with_retry_on_first_job(dir: &TempDir) {
+        let path = dir.path().join("01-first/.chiral/job.toml");
+        let toml = fs::read_to_string(&path).unwrap();
+        fs::write(path, format!("retry = 2\ntimeout = \"5m\"\n{toml}")).unwrap();
+    }
+
+    #[test]
+    fn a_1_1_field_without_a_1_1_declaration_is_noted() {
+        let dir = workflow("");
+        with_retry_on_first_job(&dir);
+        let report = validate_workflow(dir.path());
+
+        assert!(report.is_valid(), "{:?}", report.findings);
+        assert_eq!(report.notes.len(), 1, "{:?}", report.notes);
+        let note = &report.notes[0];
+        assert_eq!(note.job.as_deref(), Some("01-first"));
+        assert!(
+            note.message
+                .contains("uses format 1.1 (`retry`, `timeout`)"),
+            "{}",
+            note.message
+        );
+    }
+
+    fn append_to_first_job(dir: &TempDir, text: &str) {
+        let path = dir.path().join("01-first/.chiral/job.toml");
+        let toml = fs::read_to_string(&path).unwrap();
+        fs::write(path, format!("{toml}\n{text}")).unwrap();
+    }
+
+    #[test]
+    fn a_resources_block_without_a_1_1_declaration_is_noted() {
+        let dir = workflow("");
+        append_to_first_job(&dir, "[resources]\ncpus = 2\n");
+        let report = validate_workflow(dir.path());
+
+        assert!(report.is_valid(), "{:?}", report.findings);
+        assert_eq!(report.notes.len(), 1, "{:?}", report.notes);
+        assert!(
+            report.notes[0].message.contains("(`[resources]`)"),
+            "{}",
+            report.notes[0].message
+        );
+    }
+
+    #[test]
+    fn a_leftover_use_gpu_is_noted_on_its_job() {
+        let dir = workflow("");
+        let path = dir.path().join("02-second/.chiral/job.toml");
+        let toml = fs::read_to_string(&path).unwrap();
+        fs::write(
+            &path,
+            toml.replace(
+                "image = \"alpine:latest\"",
+                "image = \"alpine:latest\"\nuse_gpu = true",
+            ),
+        )
+        .unwrap();
+        let report = validate_workflow(dir.path());
+
+        assert!(report.is_valid(), "{:?}", report.findings);
+        assert_eq!(report.notes.len(), 1, "{:?}", report.notes);
+        let note = &report.notes[0];
+        assert_eq!(note.job.as_deref(), Some("02-second"));
+        assert!(
+            note.message.contains("use_gpu = true is ignored"),
+            "{}",
+            note.message
+        );
+    }
+
+    #[test]
+    fn a_1_1_field_under_a_1_1_declaration_passes_quietly() {
+        let dir = workflow("schema_version = \"1.1\"\n");
+        with_retry_on_first_job(&dir);
+        let report = validate_workflow(dir.path());
+
+        assert!(report.is_valid(), "{:?}", report.findings);
+        assert!(report.notes.is_empty(), "{:?}", report.notes);
+    }
+
+    #[test]
+    fn a_malformed_schema_version_is_reported() {
+        let dir = workflow("schema_version = \"v1\"\n");
+        let report = validate_workflow(dir.path());
+
+        assert!(!report.is_valid());
+        assert!(report.findings[0].message.contains("MAJOR.MINOR"));
+    }
+
+    #[test]
+    fn a_known_or_absent_schema_version_adds_nothing() {
+        for header in ["", "schema_version = \"1.0\"\n"] {
+            let report = validate_workflow(workflow(header).path());
+            assert!(report.is_valid(), "{:?}", report.findings);
+            assert!(report.notes.is_empty());
+        }
+    }
+
+    /// Gives `job` an `inputs` line, keeping the rest of the helper's job.toml.
+    fn set_inputs(dir: &TempDir, job: &str, inputs: &str) {
+        let path = dir.path().join(job).join(".chiral/job.toml");
+        let toml = fs::read_to_string(&path).unwrap();
+        fs::write(
+            &path,
+            toml.replace("outputs =", &format!("inputs = {inputs}\noutputs =")),
+        )
+        .unwrap();
+    }
+
+    fn ports(report: &Report) -> Vec<&Finding> {
+        report
+            .findings
+            .iter()
+            .filter(|f| f.kind == "ports")
+            .collect()
+    }
+
+    #[test]
+    fn an_input_an_upstream_output_can_satisfy_passes() {
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        set_inputs(&dir, "02-second", "[\"result.txt\", \"*.{txt,csv}\"]");
+
+        let report = validate_workflow(dir.path());
+        assert!(report.is_valid(), "{:?}", report.findings);
+    }
+
+    #[test]
+    fn an_input_no_upstream_output_can_satisfy_is_reported() {
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        set_inputs(&dir, "02-second", "[\"*.txt\", \"*.pdb\"]");
+
+        let report = validate_workflow(dir.path());
+        let ports = ports(&report);
+        assert_eq!(ports.len(), 1, "{:?}", report.findings);
+        assert!(ports[0].message.contains("'*.pdb'"));
+        assert_eq!(ports[0].job.as_deref(), Some("02-second"));
+        assert_eq!(ports[0].file.as_deref(), Some("02-second/.chiral/job.toml"));
+    }
+
+    #[test]
+    fn an_input_with_a_path_can_never_match_and_says_what_to_write() {
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        set_inputs(&dir, "02-second", "[\"results/a.txt\"]");
+
+        let report = validate_workflow(dir.path());
+        let ports = ports(&report);
+        assert_eq!(ports.len(), 1, "{:?}", report.findings);
+        assert!(ports[0].message.contains("write 'a.txt'"));
+    }
+
+    #[test]
+    fn a_dependency_without_declared_outputs_is_not_judged() {
+        // It may write into outputs/ directly, which nothing here can see.
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        let first = dir.path().join("01-first/.chiral/job.toml");
+        let toml = fs::read_to_string(&first).unwrap();
+        fs::write(&first, toml.replace("outputs = [\"*.txt\"]\n", "")).unwrap();
+        set_inputs(&dir, "02-second", "[\"*.pdb\"]");
+
+        let report = validate_workflow(dir.path());
+        assert!(report.is_valid(), "{:?}", report.findings);
+    }
+
+    #[test]
+    fn a_missing_run_script_is_reported() {
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        fs::remove_file(dir.path().join("02-second/run.sh")).unwrap();
+
+        let report = validate_workflow(dir.path());
+        let scripts = scripts(&report);
+        assert_eq!(scripts.len(), 1, "{:?}", report.findings);
+        assert_eq!(scripts[0].job.as_deref(), Some("02-second"));
+        assert_eq!(scripts[0].file.as_deref(), Some("02-second/run.sh"));
+    }
+
+    fn scripts(report: &Report) -> Vec<&Finding> {
+        report
+            .findings
+            .iter()
+            .filter(|f| f.kind == "script")
+            .collect()
+    }
+
+    fn append_line(dir: &TempDir, job: &str, line: &str) {
+        let path = dir.path().join(job).join("run.sh");
+        let script = fs::read_to_string(&path).unwrap();
+        fs::write(&path, format!("{script}{line}\n")).unwrap();
+    }
+
+    #[test]
+    fn each_install_command_is_its_own_finding_on_its_job() {
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        append_line(&dir, "01-first", "apt-get install -y cowsay");
+        append_line(&dir, "02-second", "pip install numpy");
+
+        let report = validate_workflow(dir.path());
+        let scripts = scripts(&report);
+        assert_eq!(scripts.len(), 2, "{:?}", report.findings);
+        assert_eq!(scripts[0].job.as_deref(), Some("01-first"));
+        assert_eq!(scripts[0].file.as_deref(), Some("01-first/run.sh"));
+        assert_eq!(
+            scripts[0].message,
+            "run.sh:3 — install command: apt-get install -y cowsay"
+        );
+        assert_eq!(scripts[1].job.as_deref(), Some("02-second"));
+
+        let json = report.to_json();
+        assert!(json.contains("\"job\": \"01-first\""));
+        assert!(json.contains("\"job\": \"02-second\""));
+    }
+
+    #[test]
+    fn a_sibling_path_names_its_job_file_and_line() {
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        append_line(&dir, "02-second", "cat ../01-first/out.txt");
+
+        let report = validate_workflow(dir.path());
+        let scripts = scripts(&report);
+        assert_eq!(scripts.len(), 1, "{:?}", report.findings);
+        assert_eq!(scripts[0].job.as_deref(), Some("02-second"));
+        assert_eq!(scripts[0].file.as_deref(), Some("02-second/run.sh"));
+        assert!(scripts[0].message.starts_with("run.sh:3 — sibling path:"));
+    }
+
+    #[test]
+    fn human_output_groups_one_convention_under_one_heading() {
+        let dir = workflow("[dependencies]\n02-second = [\"01-first\"]\n");
+        append_line(&dir, "01-first", "apt-get install -y cowsay");
+        append_line(&dir, "02-second", "pip install numpy");
+
+        let out = validate_workflow(dir.path()).render();
+        assert_eq!(out.matches("Install commands found").count(), 1, "{out}");
+        assert_eq!(
+            out.matches("Fix: Move install commands").count(),
+            1,
+            "{out}"
+        );
+        assert!(out.contains("[01-first/run.sh]") && out.contains("[02-second/run.sh]"));
+    }
+
+    #[test]
+    fn an_env_passthrough_entry_that_is_not_a_variable_name_is_reported() {
+        let dir = workflow("env_passthrough = [\"HF_TOKEN\", \"NGC-API-KEY\"]\n");
+
+        let report = validate_workflow(dir.path());
+        assert_eq!(report.findings.len(), 1, "{:?}", report.findings);
+        assert!(report.findings[0].message.contains("NGC-API-KEY"));
+    }
+
+    #[test]
+    fn globs_overlap_unless_their_literal_ends_conflict() {
+        assert!(may_overlap("*.pdb", "design_*.pdb"));
+        assert!(may_overlap("design_*_rank001.pdb", "design_*.pdb"));
+        assert!(may_overlap("ligand_library", "ligand_*"));
+        assert!(may_overlap("*.{fasta,fa}", "seq.fa"));
+        assert!(!may_overlap("*.pdb", "*.sdf"));
+        assert!(!may_overlap("a_*", "b_*"));
+        assert!(!may_overlap("model.pkl", "*.txt"));
+    }
+
+    #[test]
+    fn a_default_that_does_not_match_its_type_is_reported() {
+        let dir = workflow("[params.top_n]\ntype = \"integer\"\ndefault = \"20\"\nhint = \"h\"\n");
+        let report = validate_workflow(dir.path());
+        let params: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|f| f.kind == "params")
+            .collect();
+        assert_eq!(params.len(), 1, "{:?}", report.findings);
+        assert_eq!(params[0].file.as_deref(), Some(".chiral/workflow.toml"));
+        assert!(
+            params[0].message.contains("'top_n'"),
+            "{}",
+            params[0].message
+        );
+        // The fixture's job defaults (float 1.0) are well typed.
+        assert!(params.iter().all(|f| f.job.is_none()));
+    }
+
+    #[test]
+    fn a_fallback_on_a_declared_param_is_a_note_not_a_finding() {
+        let dir = workflow("");
+        fs::write(
+            dir.path().join("01-first/run.sh"),
+            "t=${PARAM_THRESHOLD:-0.5}\nu=${PARAM_THRESHOLD-0.5} ${PARAM_UNDECLARED:-x}\n# ${PARAM_THRESHOLD:-1}\n",
+        )
+        .unwrap();
+        let report = validate_workflow(dir.path());
+        assert!(report.is_valid(), "{:?}", report.findings);
+        assert_eq!(report.notes.len(), 1, "{:?}", report.notes);
+        let note = &report.notes[0];
+        assert_eq!(note.kind, "script");
+        assert_eq!(note.file.as_deref(), Some("01-first/run.sh"));
+        assert!(
+            note.message.starts_with("PARAM_THRESHOLD:"),
+            "{}",
+            note.message
+        );
+        assert!(!note.message.contains("UNDECLARED"));
+    }
+
+    #[test]
+    fn a_fallback_on_an_empty_default_is_not_noted() {
+        let dir = workflow("[params.hotspots]\ntype = \"string\"\ndefault = \"\"\nhint = \"h\"\n");
+        fs::write(
+            dir.path().join("01-first/run.sh"),
+            "h=${PARAM_HOTSPOTS:-A10}\n",
+        )
+        .unwrap();
+        let report = validate_workflow(dir.path());
+        assert!(report.notes.is_empty(), "{:?}", report.notes);
     }
 }

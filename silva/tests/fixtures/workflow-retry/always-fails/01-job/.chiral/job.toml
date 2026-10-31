@@ -1,0 +1,9 @@
+name = "Broken"
+description = "Fails every attempt"
+retry = 1
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"

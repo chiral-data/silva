@@ -1,0 +1,241 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JobMeta",
+  "description": "Main configuration structure for a computation job.\nMerges the former JobConfig and NodeMetadata into a single TOML file.\n\nNote: Job dependencies are now defined at the workflow level in WorkflowMetadata,\nnot in individual job configurations.",
+  "type": "object",
+  "properties": {
+    "container": {
+      "description": "Container configuration (image source).",
+      "$ref": "#/$defs/Container"
+    },
+    "description": {
+      "description": "Job description.",
+      "type": "string"
+    },
+    "inputs": {
+      "description": "List of input file patterns to copy from dependent jobs.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "name": {
+      "description": "Job name for display purposes.",
+      "type": "string"
+    },
+    "outputs": {
+      "description": "List of output file patterns to collect from the job.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "params": {
+      "description": "Parameter definitions for this job.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/ParamDefinition"
+      },
+      "default": {}
+    },
+    "resources": {
+      "description": "Limits and GPU for the job's container (format 1.1).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Resources"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "retry": {
+      "description": "Re-runs of the `run` script after it fails or times out (format 1.1).",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "maximum": 10,
+      "minimum": 0
+    },
+    "scripts": {
+      "description": "Scripts to execute.",
+      "$ref": "#/$defs/Scripts",
+      "default": {
+        "post": "./post_run.sh",
+        "pre": "./pre_run.sh",
+        "run": "./run.sh"
+      }
+    },
+    "timeout": {
+      "description": "Time limit on each attempt of the `run` script (format 1.1).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Timeout"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "name",
+    "description",
+    "container"
+  ],
+  "x-schema-version": "1.1",
+  "$defs": {
+    "Container": {
+      "description": "Represents the container configuration for a job.\nThe `image` field can be a Docker registry URL or a local file path (.tar or .sif).",
+      "type": "object",
+      "properties": {
+        "image": {
+          "description": "Docker image source: either a registry URL (e.g., \"ubuntu:22.04\")\nor a local file path (.tar for Docker, .sif for Singularity/Apptainer).",
+          "type": "string"
+        },
+        "registry": {
+          "description": "Optional registry hint. Set to `\"local\"` to bypass default_registry resolution\nfor images that are built locally and do not exist in any remote registry.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "image"
+      ]
+    },
+    "GpuMode": {
+      "description": "Whether a job's container gets the host GPU.",
+      "oneOf": [
+        {
+          "description": "Passed through when the host has a GPU runtime and the image is built for one.",
+          "type": "string",
+          "const": "auto"
+        },
+        {
+          "description": "Always passed through; a host without a GPU runtime refuses the workflow.",
+          "type": "string",
+          "const": "required"
+        },
+        {
+          "description": "Never passed through.",
+          "type": "string",
+          "const": "none"
+        }
+      ]
+    },
+    "Memory": {
+      "description": "A memory limit: a whole number with k, m or g, in binary units.",
+      "type": "string",
+      "pattern": "^[1-9][0-9]*[kmg]$"
+    },
+    "ParamDefinition": {
+      "description": "Represents a parameter definition in job.toml.",
+      "type": "object",
+      "properties": {
+        "default": {
+          "description": "Any TOML value here; `silva validate` checks it against `type`."
+        },
+        "enum_values": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "hint": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ParamType"
+        }
+      },
+      "required": [
+        "type",
+        "default",
+        "hint"
+      ]
+    },
+    "ParamType": {
+      "description": "Represents the type of a parameter.",
+      "type": "string",
+      "enum": [
+        "string",
+        "integer",
+        "float",
+        "boolean",
+        "file",
+        "directory",
+        "enum",
+        "array"
+      ]
+    },
+    "Resources": {
+      "description": "What a job's container may use (format 1.1). Every field is optional.",
+      "type": "object",
+      "properties": {
+        "cpus": {
+          "description": "CPUs the container may use; may be fractional.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "minimum": 0.01
+        },
+        "gpu": {
+          "description": "GPU passthrough; absent means `auto`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GpuMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "memory": {
+          "description": "Memory limit, with no swap on top.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Memory"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Scripts": {
+      "description": "Represents the scripts that will be executed for a job.\nAll fields are optional and have default values.",
+      "type": "object",
+      "properties": {
+        "post": {
+          "type": "string",
+          "default": "./post_run.sh"
+        },
+        "pre": {
+          "type": "string",
+          "default": "./pre_run.sh"
+        },
+        "run": {
+          "type": "string",
+          "default": "./run.sh"
+        }
+      }
+    },
+    "Timeout": {
+      "description": "A per-attempt time limit on the `run` script: a whole number with s, m or h.",
+      "type": "string",
+      "pattern": "^[1-9][0-9]*[smh]$"
+    }
+  }
+}

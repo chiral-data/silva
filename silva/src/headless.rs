@@ -9,8 +9,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
-use globset::GlobSetBuilder;
-
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 
@@ -21,8 +19,6 @@ use crate::components::docker::{
 };
 use crate::components::workflow::{JobFolder, JobScanner, WorkflowFolder};
 use crate::events::{Emitter, OutputFormat};
-use crate::utils::copy_dir_recursive;
-use job_config::job::JobMeta;
 
 /// Runs a workflow in headless mode, outputting logs to stdout/stderr.
 ///
@@ -88,20 +84,26 @@ pub async fn run_workflow(
 
     emitter.jobs_found(jobs.len());
 
-    // Load workflow metadata (dependencies are managed here, not in job.toml)
+    // Load workflow metadata (dependencies are managed here, not in job.toml).
+    // A missing file means "no dependencies"; a broken one must not, or the
+    // jobs would run in the wrong order.
     let workflow_metadata = workflow_folder
         .load_workflow_metadata()
-        .ok()
-        .flatten()
+        .map_err(|e| format!("Cannot read .chiral/workflow.toml: {e}"))?
         .unwrap_or_else(|| {
             job_config::workflow::WorkflowMeta::new(workflow_name.clone(), String::new())
         });
 
-    // Load workflow parameters
+    // Before the sort and prechecks: a newer major may change what they mean.
+    if let Some(note) = crate::precheck::check_schema_version(&workflow_metadata)? {
+        crate::note!("Note: {note}");
+    }
+
+    // Raw values only: run_job fills in the declared defaults. A broken file
+    // must not silently become "use the defaults".
     let workflow_params = workflow_folder
         .load_workflow_params()
-        .ok()
-        .flatten()
+        .map_err(|e| format!("Cannot read global_params.json: {e}"))?
         .unwrap_or_default();
 
     emitter.global_params_loaded(workflow_params.len());
@@ -115,15 +117,19 @@ pub async fn run_workflow(
     // Pre-checks: reject workflows that violate conventions
     crate::precheck::check_install_commands(&sorted_jobs)?;
     crate::precheck::check_cross_node_references(&sorted_jobs)?;
+    crate::precheck::check_run_scripts(&sorted_jobs)?;
     crate::precheck::check_input_files_folder(&workflow_path, &sorted_jobs, &workflow_metadata)?;
 
     // Copy input_files to all jobs without dependencies
-    copy_input_files_to_dependency_free_jobs(
+    let mut notices = Vec::new();
+    crate::staging::copy_input_files_to_dependency_free_jobs(
         &workflow_path,
         &temp_workflow_path,
         &sorted_jobs,
         &workflow_metadata,
+        &mut notices,
     );
+    print_notices(notices);
 
     // The started event waits until prechecks have passed and inputs are
     // staged, so a workflow rejected before this point never reports itself as
@@ -185,6 +191,16 @@ pub async fn run_workflow(
             }
         };
         docker_executor.detect_host_gpu().await;
+        if let Err(e) =
+            crate::precheck::check_gpu_required(&sorted_jobs_clone, docker_executor.host_has_gpu())
+        {
+            let log_line = LogLine::new(LogSource::Stderr, e.clone());
+            let _ = tx.send((0, JobStatus::Failed, log_line)).await;
+            let _ = tx
+                .send((jobs_len, JobStatus::Failed, LogLine::empty()))
+                .await;
+            return Err(e);
+        }
 
         // Build the local app images this workflow ships in apps/, if any.
         // Their tags exist in no registry, so pulling cannot satisfy them.
@@ -214,21 +230,32 @@ pub async fn run_workflow(
                 Ok(config) => {
                     docker_executor.set_job_idx(idx);
 
-                    let job_params = job
-                        .load_params()
-                        .ok()
-                        .flatten()
-                        .unwrap_or_else(|| config.generate_default_params());
+                    let job_params = match job.load_params() {
+                        Ok(params) => params.unwrap_or_default(),
+                        Err(e) => {
+                            let log_line = LogLine::new(
+                                LogSource::Stderr,
+                                format!("Cannot read {}/params.json: {e}", job.name),
+                            );
+                            let _ = tx.send((idx, JobStatus::Failed, log_line)).await;
+                            workflow_failed = true;
+                            break;
+                        }
+                    };
 
                     // Copy input files from dependencies before running
                     let job_deps = workflow_metadata.get_job_dependencies(&job.name);
-                    if let Err(e) = copy_input_files_from_dependencies(
+                    let mut notices = Vec::new();
+                    let copied = crate::staging::copy_input_files_from_dependencies(
                         &temp_workflow_path_clone,
                         job,
                         &sorted_jobs_clone,
                         &config,
                         job_deps,
-                    ) {
+                        &mut notices,
+                    );
+                    print_notices(notices);
+                    if let Err(e) = copied {
                         let log_line = LogLine::new(
                             LogSource::Stderr,
                             format!("Warning: Failed to copy input files: {e}"),
@@ -380,7 +407,10 @@ pub async fn run_workflow(
             );
         }
 
-        emitter.job_status_line(&job_name, &status);
+        // Cleanup lines after a failure arrive as `Completed`; the job still failed.
+        if !(status == JobStatus::Completed && open_job_failed.is_some()) {
+            emitter.job_status_line(&job_name, &status);
+        }
 
         if status == JobStatus::Failed {
             // Keep silva's own message as the reason, so a caller never has to
@@ -480,11 +510,12 @@ pub(crate) fn topological_sort_jobs(
         }
     }
 
-    // Kahn's algorithm
-    let mut queue: VecDeque<String> = in_degree
+    // Kahn's algorithm, seeded in scan (folder-name) order: seeding from the
+    // map would make the order of independent jobs vary from run to run.
+    let mut queue: VecDeque<String> = jobs
         .iter()
-        .filter(|&(_, &degree)| degree == 0)
-        .map(|(name, _)| name.clone())
+        .filter(|j| in_degree[&j.name] == 0)
+        .map(|j| j.name.clone())
         .collect();
 
     let mut sorted_jobs = Vec::new();
@@ -522,133 +553,14 @@ pub(crate) fn topological_sort_jobs(
     Ok(sorted_jobs)
 }
 
-/// Copies input files from dependency jobs' outputs to the current job's inputs folder.
-fn copy_input_files_from_dependencies(
-    workflow_path: &Path,
-    current_job: &JobFolder,
-    all_jobs: &[JobFolder],
-    config: &JobMeta,
-    dependencies: &[String],
-) -> Result<usize, String> {
-    use std::collections::HashSet;
-    use std::fs;
-
-    if dependencies.is_empty() {
-        return Ok(0);
-    }
-
-    // Copy to inputs/ subfolder for clear separation
-    let inputs_dir = workflow_path.join(&current_job.name).join("inputs");
-    fs::create_dir_all(&inputs_dir).map_err(|e| format!("Failed to create inputs dir: {e}"))?;
-
-    let mut copied_files: HashSet<String> = HashSet::new();
-
-    for dep_job_name in dependencies {
-        // Find the dependency job
-        let dep_job = all_jobs.iter().find(|j| &j.name == dep_job_name);
-        if dep_job.is_none() {
-            crate::note!("Warning: Dependency job '{dep_job_name}' not found");
-            continue;
-        }
-
-        // Look in @complete/ first (job already finished), fall back to original location
-        let complete_outputs_dir = workflow_path
-            .join("@complete")
-            .join(dep_job_name)
-            .join("outputs");
-        let dep_outputs_dir = if complete_outputs_dir.exists() {
-            complete_outputs_dir
-        } else {
-            workflow_path.join(dep_job_name).join("outputs")
-        };
-        if !dep_outputs_dir.exists() {
-            crate::note!("No outputs found for dependency '{dep_job_name}', skipping");
-            continue;
-        }
-
-        // Determine which files to copy
-        let files_to_copy: Vec<std::path::PathBuf> = if config.inputs.is_empty() {
-            // Copy all files from outputs/
-            match fs::read_dir(&dep_outputs_dir) {
-                Ok(entries) => entries.filter_map(|e| e.ok()).map(|e| e.path()).collect(),
-                Err(e) => {
-                    crate::note!("Error reading outputs from '{dep_job_name}': {e}");
-                    continue;
-                }
-            }
-        } else {
-            // Copy only matching files based on input patterns
-            let mut builder = GlobSetBuilder::new();
-            for pattern in &config.inputs {
-                match globset::Glob::new(pattern) {
-                    Ok(g) => {
-                        builder.add(g);
-                    }
-                    Err(e) => crate::note!("Invalid glob pattern '{pattern}': {e}"),
-                }
-            }
-            match builder.build() {
-                Ok(matcher) => match fs::read_dir(&dep_outputs_dir) {
-                    Ok(entries) => entries
-                        .filter_map(|e| e.ok())
-                        .map(|e| e.path())
-                        .filter(|p| p.file_name().map(|n| matcher.is_match(n)).unwrap_or(false))
-                        .collect(),
-                    Err(e) => {
-                        crate::note!("Error reading outputs from '{dep_job_name}': {e}");
-                        continue;
-                    }
-                },
-                Err(e) => {
-                    crate::note!("Failed to build glob matcher for '{dep_job_name}': {e}");
-                    continue;
-                }
-            }
-        };
-
-        // Copy files to inputs/ directory
-        for source_path in files_to_copy {
-            if let Some(filename) = source_path.file_name() {
-                let filename_str = filename.to_string_lossy().to_string();
-                let dest_path = inputs_dir.join(filename);
-
-                // Check for conflicts
-                if copied_files.contains(&filename_str) {
-                    crate::note!(
-                        "Warning: File '{filename_str}' already copied, skipping from '{dep_job_name}'"
-                    );
-                    continue;
-                }
-
-                // Copy the file or directory
-                if source_path.is_file() {
-                    match fs::copy(&source_path, &dest_path) {
-                        Ok(_) => {
-                            copied_files.insert(filename_str.clone());
-                            crate::note!("Copied '{filename_str}' from '{dep_job_name}'");
-                        }
-                        Err(e) => {
-                            crate::note!("Error copying '{filename_str}': {e}");
-                        }
-                    }
-                } else if source_path.is_dir() {
-                    match copy_dir_recursive(&source_path, &dest_path) {
-                        Ok(count) => {
-                            copied_files.insert(filename_str.clone());
-                            crate::note!(
-                                "Copied directory '{filename_str}/' ({count} files) from '{dep_job_name}'"
-                            );
-                        }
-                        Err(e) => {
-                            crate::note!("Error copying directory '{filename_str}': {e}");
-                        }
-                    }
-                }
-            }
+/// Prints staging notices as the staging code used to print them itself.
+fn print_notices(notices: Vec<crate::staging::Notice>) {
+    for notice in notices {
+        match notice.level {
+            crate::staging::Level::Info => crate::note!("{}", notice.text),
+            crate::staging::Level::Warning => crate::warn_note!("{}", notice.text),
         }
     }
-
-    Ok(copied_files.len())
 }
 
 /// Creates a temporary folder and copies the workflow contents to it.
@@ -693,234 +605,30 @@ fn move_job_to_complete(workflow_path: &Path, job_name: &str) -> Result<(), Stri
     Ok(())
 }
 
-/// Copies files from the workflow's `input_files/` folder to all jobs without dependencies.
-///
-/// If the `input_files/` folder exists, all its contents are copied to each dependency-free
-/// job's `inputs/` subfolder. If the folder doesn't exist, a hint is printed.
-fn copy_input_files_to_dependency_free_jobs(
-    workflow_path: &Path,
-    temp_workflow_path: &Path,
-    sorted_jobs: &[JobFolder],
-    workflow_metadata: &job_config::workflow::WorkflowMeta,
-) {
-    use std::fs;
-
-    let input_files_path = workflow_path.join("input_files");
-
-    if !input_files_path.is_dir() {
-        crate::note!("Hint: No 'input_files' folder found in workflow");
-        return;
-    }
-
-    // Find all jobs with no dependencies
-    let jobs_without_deps: Vec<&JobFolder> = sorted_jobs
-        .iter()
-        .filter(|job| workflow_metadata.get_job_dependencies(&job.name).is_empty())
-        .collect();
-
-    if jobs_without_deps.is_empty() {
-        crate::note!("Warning: No jobs to copy input files to");
-        return;
-    }
-
-    // Copy input_files to each job without dependencies
-    for job in &jobs_without_deps {
-        // Copy to inputs/ subfolder for clear separation
-        let inputs_dir = temp_workflow_path.join(&job.name).join("inputs");
-        if let Err(e) = fs::create_dir_all(&inputs_dir) {
-            crate::warn_note!("Error creating inputs folder for '{}': {e}", job.name);
-            continue;
-        }
-
-        // Read and copy all files from input_files/
-        let entries = match fs::read_dir(&input_files_path) {
-            Ok(entries) => entries,
-            Err(e) => {
-                crate::warn_note!("Error reading input_files folder: {e}");
-                return;
-            }
-        };
-
-        let mut copied_count = 0;
-        for entry in entries.flatten() {
-            let source = entry.path();
-            let dest = inputs_dir.join(entry.file_name());
-
-            let result = if source.is_file() {
-                fs::copy(&source, &dest).map(|_| ())
-            } else if source.is_dir() {
-                copy_dir_recursive(&source, &dest).map(|_| ())
-            } else {
-                continue;
-            };
-
-            match result {
-                Ok(()) => copied_count += 1,
-                Err(e) => crate::warn_note!(
-                    "Error copying '{}': {e}",
-                    entry.file_name().to_string_lossy()
-                ),
-            }
-        }
-
-        if copied_count > 0 {
-            crate::note!(
-                "Copied {} item(s) from 'input_files/' to '{}/inputs/'",
-                copied_count,
-                job.name
-            );
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use job_config::job::{Container, JobMeta, Scripts};
-    use std::collections::HashMap;
-    use std::fs;
 
-    fn make_job_meta(inputs: Vec<&str>) -> JobMeta {
-        JobMeta {
-            name: "test".to_string(),
-            description: String::new(),
-            container: Container::new("ubuntu:latest".to_string()),
-            scripts: Scripts {
-                pre: String::new(),
-                run: "run.sh".to_string(),
-                post: String::new(),
-            },
-            inputs: inputs.into_iter().map(String::from).collect(),
-            outputs: vec![],
-            params: HashMap::new(),
-        }
-    }
-
-    fn setup_dep_outputs(workflow: &Path, dep_name: &str, files: &[&str]) {
-        let outputs_dir = workflow.join(dep_name).join("outputs");
-        fs::create_dir_all(&outputs_dir).unwrap();
-        for f in files {
-            fs::write(outputs_dir.join(f), f).unwrap();
-        }
-    }
-
-    fn list_inputs(workflow: &Path, job_name: &str) -> Vec<String> {
-        let inputs_dir = workflow.join(job_name).join("inputs");
-        let mut names: Vec<String> = fs::read_dir(inputs_dir)
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .map(|e| e.file_name().to_string_lossy().to_string())
+    #[test]
+    fn independent_jobs_sort_in_folder_name_order_every_time() {
+        // Seeding from the in-degree map made this order vary between runs.
+        let names = [
+            "01-a", "02-b", "03-c", "04-d", "05-e", "06-f", "07-g", "08-h",
+        ];
+        let jobs: Vec<JobFolder> = names
+            .iter()
+            .map(|n| JobFolder::new(n.to_string(), std::path::PathBuf::from(n)))
             .collect();
-        names.sort();
-        names
-    }
+        let mut meta = job_config::workflow::WorkflowMeta::new("w".into(), String::new());
+        meta.dependencies.insert("08-h".into(), vec!["01-a".into()]);
 
-    #[test]
-    fn brace_pattern_copies_matching_extensions() {
-        let tmp = tempfile::tempdir().unwrap();
-        let wf = tmp.path();
-        setup_dep_outputs(
-            wf,
-            "01-produce",
-            &["seq.fasta", "ref.fa", "proteins.faa", "notes.txt"],
-        );
-
-        let producer = JobFolder::new("01-produce".to_string(), wf.join("01-produce"));
-        let consumer = JobFolder::new("02-consume".to_string(), wf.join("02-consume"));
-        let config = make_job_meta(vec!["*.{fasta,fa,faa}"]);
-
-        let n = copy_input_files_from_dependencies(
-            wf,
-            &consumer,
-            &[producer],
-            &config,
-            &["01-produce".to_string()],
-        )
-        .unwrap();
-
-        assert_eq!(n, 3);
-        assert_eq!(
-            list_inputs(wf, "02-consume"),
-            vec!["proteins.faa", "ref.fa", "seq.fasta"]
-        );
-    }
-
-    #[test]
-    fn brace_pattern_excludes_non_matching_files() {
-        let tmp = tempfile::tempdir().unwrap();
-        let wf = tmp.path();
-        setup_dep_outputs(wf, "01-produce", &["a.txt", "b.log", "c.fasta"]);
-
-        let producer = JobFolder::new("01-produce".to_string(), wf.join("01-produce"));
-        let consumer = JobFolder::new("02-consume".to_string(), wf.join("02-consume"));
-        let config = make_job_meta(vec!["*.{fasta,fa,faa}"]);
-
-        let n = copy_input_files_from_dependencies(
-            wf,
-            &consumer,
-            &[producer],
-            &config,
-            &["01-produce".to_string()],
-        )
-        .unwrap();
-
-        assert_eq!(n, 1);
-        assert_eq!(list_inputs(wf, "02-consume"), vec!["c.fasta"]);
-    }
-
-    #[test]
-    fn plain_pattern_still_works() {
-        let tmp = tempfile::tempdir().unwrap();
-        let wf = tmp.path();
-        setup_dep_outputs(
-            wf,
-            "01-produce",
-            &["data.csv", "metadata.json", "other.txt"],
-        );
-
-        let producer = JobFolder::new("01-produce".to_string(), wf.join("01-produce"));
-        let consumer = JobFolder::new("02-consume".to_string(), wf.join("02-consume"));
-        let config = make_job_meta(vec!["*.csv", "*.json"]);
-
-        let n = copy_input_files_from_dependencies(
-            wf,
-            &consumer,
-            &[producer],
-            &config,
-            &["01-produce".to_string()],
-        )
-        .unwrap();
-
-        assert_eq!(n, 2);
-        assert_eq!(
-            list_inputs(wf, "02-consume"),
-            vec!["data.csv", "metadata.json"]
-        );
-    }
-
-    #[test]
-    fn empty_inputs_copies_all_files() {
-        let tmp = tempfile::tempdir().unwrap();
-        let wf = tmp.path();
-        setup_dep_outputs(wf, "01-produce", &["a.txt", "b.csv", "c.fasta"]);
-
-        let producer = JobFolder::new("01-produce".to_string(), wf.join("01-produce"));
-        let consumer = JobFolder::new("02-consume".to_string(), wf.join("02-consume"));
-        let config = make_job_meta(vec![]);
-
-        let n = copy_input_files_from_dependencies(
-            wf,
-            &consumer,
-            &[producer],
-            &config,
-            &["01-produce".to_string()],
-        )
-        .unwrap();
-
-        assert_eq!(n, 3);
-        assert_eq!(
-            list_inputs(wf, "02-consume"),
-            vec!["a.txt", "b.csv", "c.fasta"]
-        );
+        for _ in 0..20 {
+            let order: Vec<String> = topological_sort_jobs(&jobs, &meta)
+                .unwrap()
+                .into_iter()
+                .map(|j| j.name)
+                .collect();
+            assert_eq!(order, names);
+        }
     }
 }

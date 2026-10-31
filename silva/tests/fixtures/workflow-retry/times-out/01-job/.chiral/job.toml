@@ -1,0 +1,9 @@
+name = "Slow"
+description = "Sleeps past its timeout"
+timeout = "2s"
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"

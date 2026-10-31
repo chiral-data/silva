@@ -14,6 +14,7 @@
 #   4. Publishes a .sha256 next to each archive, which is what silva's
 #      automatic update verifies a download against before installing it
 #   5. Uploads as release assets
+#   6. Publishes the workflow.toml / job.toml JSON Schemas from schema/
 
 name: Release
 
@@ -47,6 +48,31 @@ jobs:
           release_name: Release ${{ github.ref }}
           draft: false
           prerelease: false
+
+      # The committed schemas, not a fresh build: job_config's tests pin them
+      # to the structs, so at a tag they are what this release parses.
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Upload workflow schema
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./schema/workflow.schema.json
+          asset_name: workflow.schema.json
+          asset_content_type: application/schema+json
+
+      - name: Upload job schema
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./schema/job.schema.json
+          asset_name: job.schema.json
+          asset_content_type: application/schema+json
 
   build:
     name: Build ${{ matrix.target }}

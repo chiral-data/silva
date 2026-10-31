@@ -1,0 +1,8 @@
+name = "02-second"
+description = "d"
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"

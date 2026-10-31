@@ -81,22 +81,6 @@ impl JobFolder {
         save_job_params(self.params_path(), params)?;
         Ok(())
     }
-
-    /// Ensures params.toml exists with default values from job.toml.
-    pub fn ensure_default_params(&self) -> Result<JobParams, JobError> {
-        if let Some(params) = self.load_params()? {
-            return Ok(params);
-        }
-
-        // Get job metadata
-        let meta = self.load_meta()?;
-
-        // Generate default params
-        let params = meta.generate_default_params();
-
-        self.save_params(&params)?;
-        Ok(params)
-    }
 }
 
 /// Error types for job operations.

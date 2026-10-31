@@ -138,11 +138,12 @@ use futures_util::stream::StreamExt;
 use std::collections::HashMap;
 use std::default::Default;
 use std::path::Path;
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::components::workflow;
 use crate::components::workflow::LocalApp;
-use job_config::job::JobMeta;
+use job_config::job::{GpuMode, JobMeta, Resources};
 use job_config::workflow::WorkflowMeta;
 
 use super::error::DockerError;
@@ -199,6 +200,79 @@ pub enum GpuRuntime {
     None,
 }
 
+/// How one exec of a script ended.
+#[derive(Debug)]
+enum ExecOutcome {
+    Exited(i64),
+    TimedOut,
+    /// Never retried: the user asked the workflow to stop.
+    Cancelled,
+}
+
+/// The wait after failed attempt `attempt` (1-based) of `run`: 10 s, doubling.
+fn retry_backoff(attempt: u32) -> Duration {
+    Duration::from_secs(10 << (attempt - 1).min(job_config::job::MAX_RETRY))
+}
+
+/// The reuse-cache key: the image alone when a job declares nothing, so such
+/// jobs share a container as before; otherwise the image plus its resources.
+fn registry_key(image: &str, resources: Option<&Resources>) -> String {
+    let Some(resources) = resources else {
+        return image.to_string();
+    };
+    let mut parts = Vec::new();
+    if let Some(cpus) = resources.cpus {
+        parts.push(format!("cpus={cpus}"));
+    }
+    if let Some(memory) = &resources.memory {
+        parts.push(format!("memory={}", memory.bytes()));
+    }
+    match resources.gpu.unwrap_or_default() {
+        GpuMode::Auto => {}
+        gpu => parts.push(format!("gpu={gpu}")),
+    }
+    if parts.is_empty() {
+        image.to_string()
+    } else {
+        format!("{image}#{}", parts.join(","))
+    }
+}
+
+fn nano_cpus(cpus: f64) -> i64 {
+    (cpus * 1e9).round() as i64
+}
+
+/// Whether Docker recorded the limits asked for. A dropped swap cap is only a
+/// note: the memory limit itself still holds.
+fn limits_took(
+    requested: &Resources,
+    host_config: &bollard::models::HostConfig,
+) -> Result<Option<String>, String> {
+    if let Some(cpus) = requested.cpus {
+        let got = host_config.nano_cpus.unwrap_or(0);
+        if got != nano_cpus(cpus) {
+            return Err(format!(
+                "cpus = {cpus} was not applied: Docker recorded NanoCpus {got}"
+            ));
+        }
+    }
+    if let Some(memory) = &requested.memory {
+        let want = memory.bytes() as i64;
+        let got = host_config.memory.unwrap_or(0);
+        if got != want {
+            return Err(format!(
+                "memory = \"{memory}\" was not applied: Docker recorded Memory {got}"
+            ));
+        }
+        if host_config.memory_swap.unwrap_or(0) != want {
+            return Ok(Some(format!(
+                "this host does not cap swap, so the container may swap beyond memory = \"{memory}\""
+            )));
+        }
+    }
+    Ok(None)
+}
+
 /// Docker executor for building images and running jobs.
 pub struct DockerExecutor {
     client: Docker,
@@ -217,6 +291,23 @@ fn stream_error_message(err: &bollard::errors::Error) -> String {
         bollard::errors::Error::DockerStreamError { error } => error.trim().to_string(),
         other => other.to_string(),
     }
+}
+
+/// The parameter values a job runs with, by key, lowest layer first:
+/// workflow defaults, `global_params.json`, the job's defaults, its `params.json`.
+///
+/// A param the job declares itself shadows the workflow's, so a global value
+/// does not reach a job that redeclares it.
+pub fn resolve_params(
+    workflow_meta: &WorkflowMeta,
+    global_values: &job_config::params::WorkflowParams,
+    job_meta: &JobMeta,
+    job_values: &job_config::params::JobParams,
+) -> job_config::params::JobParams {
+    use job_config::params::with_defaults;
+    let mut merged = with_defaults(&workflow_meta.params, global_values);
+    merged.extend(with_defaults(&job_meta.params, job_values));
+    merged
 }
 
 impl DockerExecutor {
@@ -570,6 +661,9 @@ impl DockerExecutor {
     ///
     /// * `job_folder` - Path to the job folder (mounted as /workspace in container)
     /// * `config` - Job configuration specifying container image/Dockerfile and scripts
+    /// * `workflow_params`, `job_params` - the raw contents of `global_params.json`
+    ///   and `params.json` (empty when absent); declared defaults are filled in
+    ///   here by `resolve_params`, not by the caller
     /// * `cli_env_vars` - `KEY=VALUE` strings from `-e/--env`, injected unprefixed
     ///   regardless of `workflow_meta.env_passthrough`
     /// * `cancel_rx` - Channel receiver for cancellation signals
@@ -612,8 +706,268 @@ impl DockerExecutor {
         let image_name = &config.container.image;
         self.pull_image(image_name).await?;
 
-        // Check if we already have a container for this image
-        let container_id = if let Some(existing_id) = container_registry.get(image_name) {
+        let resources = config.resources.as_ref();
+        let key = registry_key(image_name, resources);
+        let mut container_id = Some(
+            self.reuse_or_create_container(
+                image_name,
+                (&key, resources),
+                workflow_folder,
+                container_registry,
+            )
+            .await?,
+        );
+
+        let merged_params = resolve_params(workflow_meta, workflow_params, config, job_params);
+
+        // Convert merged parameters to environment variables
+        let mut env_vars: Vec<String> = Vec::new();
+        for (param_name, param_value) in &merged_params {
+            // Convert JSON value to string
+            let value_str = match param_value {
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => n.to_string(),
+                serde_json::Value::Bool(b) => b.to_string(),
+                serde_json::Value::Null => "null".to_string(),
+                v => v.to_string(),
+            };
+            // Add with PARAM_ prefix to avoid conflicts
+            env_vars.push(format!("PARAM_{}={}", param_name.to_uppercase(), value_str));
+        }
+
+        // Forward selected host environment variables into the container exec environment.
+        for key in workflow_meta.env_passthrough.as_deref().unwrap_or(&[]) {
+            if let Ok(val) = std::env::var(key) {
+                env_vars.push(format!("{key}={val}"));
+            }
+        }
+
+        // Inject -e/--env CLI values unconditionally, unprefixed — independent of
+        // (and taking precedence over) the env_passthrough allowlist above.
+        for entry in cli_env_vars {
+            env_vars.push(entry.clone());
+        }
+
+        if !cli_env_vars.is_empty() {
+            let log_line = LogLine::new(
+                LogSource::Stdout,
+                format!("Setting {} CLI env var(s) via -e/--env", cli_env_vars.len()),
+            );
+            self.tx_send(JobStatus::CreatingContainer, log_line).await?;
+        }
+
+        if !env_vars.is_empty() {
+            let log_line = LogLine::new(
+                LogSource::Stdout,
+                format!(
+                    "Setting {} environment variable(s), {} of them PARAM_*",
+                    env_vars.len(),
+                    merged_params.len()
+                ),
+            );
+            self.tx_send(JobStatus::CreatingContainer, log_line).await?;
+        }
+
+        // Execute scripts sequentially; only `run` is retried and timed.
+        let scripts = vec![
+            ("pre_run.sh", &config.scripts.pre),
+            ("run.sh", &config.scripts.run),
+            ("post_run.sh", &config.scripts.post),
+        ];
+        let job_workdir = format!("{}/{}", work_dir, job.name);
+        let timeout_text = config
+            .timeout
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default();
+
+        let mut all_scripts_succeeded = true;
+        for (name, script) in scripts {
+            if ["pre_run.sh", "post_run.sh"].contains(&name)
+                && !workflow_folder.join(&job.name).join(script).exists()
+            {
+                let log_line = LogLine::new(
+                    LogSource::Stdout,
+                    format!("Script {script} not found ... skip"),
+                );
+                self.tx_send(JobStatus::Running, log_line).await?;
+                continue;
+            }
+
+            let (attempts, time_limit) = if name == "run.sh" {
+                (
+                    config.retry.unwrap_or(0) + 1,
+                    config.timeout.as_ref().map(|t| t.duration()),
+                )
+            } else {
+                (1, None)
+            };
+
+            let mut attempt = 1;
+            let outcome = loop {
+                let container = match &container_id {
+                    Some(id) => id.clone(),
+                    None => {
+                        let id = self
+                            .reuse_or_create_container(
+                                image_name,
+                                (&key, resources),
+                                workflow_folder,
+                                container_registry,
+                            )
+                            .await?;
+                        container_id = Some(id.clone());
+                        id
+                    }
+                };
+
+                let attempt_note = if attempts > 1 {
+                    format!(" (attempt {attempt} of {attempts})")
+                } else {
+                    String::new()
+                };
+                let log_line = LogLine::new(
+                    LogSource::Stdout,
+                    format!("Executing script: {script}{attempt_note}"),
+                );
+                self.tx_send(JobStatus::Running, log_line).await?;
+
+                let outcome = self
+                    .exec_script(
+                        &container,
+                        &job_workdir,
+                        script,
+                        &env_vars,
+                        time_limit,
+                        cancel_rx,
+                    )
+                    .await;
+
+                let failure = match &outcome {
+                    Ok(ExecOutcome::Exited(code)) if *code != 0 => {
+                        format!("exited with code {code}")
+                    }
+                    Ok(ExecOutcome::TimedOut) => {
+                        // The script is still running inside it, so the container goes.
+                        self.discard_container(&container).await;
+                        container_registry.remove(&key);
+                        container_id = None;
+                        format!("timed out after {timeout_text}")
+                    }
+                    _ => break outcome,
+                };
+                if attempt == attempts {
+                    break outcome;
+                }
+
+                let wait = retry_backoff(attempt);
+                let log_line = LogLine::new(
+                    LogSource::Stderr,
+                    format!(
+                        "Script {script} {failure} on attempt {attempt} of {attempts}; retrying in {}s",
+                        wait.as_secs()
+                    ),
+                );
+                self.tx_send(JobStatus::Running, log_line).await?;
+                tokio::select! {
+                    _ = tokio::time::sleep(wait) => {}
+                    _ = cancel_rx.recv() => break Ok(ExecOutcome::Cancelled),
+                }
+                attempt += 1;
+            };
+
+            let after = if attempt > 1 {
+                format!(" after {attempt} attempts")
+            } else {
+                String::new()
+            };
+            let failure = match outcome {
+                Ok(ExecOutcome::Exited(0)) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stdout,
+                        format!("Script {script} completed successfully"),
+                    );
+                    self.tx_send(JobStatus::Completed, log_line).await?;
+                    continue;
+                }
+                Ok(ExecOutcome::Exited(code)) => {
+                    format!("Script {script} failed with exit code {code}{after}")
+                }
+                Ok(ExecOutcome::TimedOut) => {
+                    format!("Script {script} timed out after {timeout_text}{after}")
+                }
+                Ok(ExecOutcome::Cancelled) => format!("Script {script} cancelled"),
+                Err(e) => format!("Error: {e}"),
+            };
+            let log_line = LogLine::new(LogSource::Stderr, failure);
+            self.tx_send(JobStatus::Failed, log_line).await?;
+            all_scripts_succeeded = false;
+            break;
+        }
+
+        // Collect output files if all scripts succeeded
+        if all_scripts_succeeded
+            && !config.outputs.is_empty()
+            && let Some(container_id) = &container_id
+        {
+            let log_line =
+                LogLine::new(LogSource::Stdout, "Collecting output files...".to_string());
+            self.tx_send(JobStatus::Running, log_line).await?;
+
+            match self
+                .collect_output_files(container_id, &job_workdir, &config.outputs, cancel_rx)
+                .await
+            {
+                Ok(file_count) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stdout,
+                        format!("Collected {file_count} output file(s) to outputs/ folder"),
+                    );
+                    self.tx_send(JobStatus::Completed, log_line).await?;
+                }
+                Err(e) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stderr,
+                        format!("Warning: Failed to collect output files: {e}"),
+                    );
+                    self.tx_send(JobStatus::Running, log_line).await?;
+                }
+            }
+        }
+
+        // Return container ID for cleanup later, or error if scripts failed
+        // A live container is already registered, so cleanup finds it either way.
+        match container_id {
+            Some(container_id) if all_scripts_succeeded => {
+                let log_line = LogLine::new(
+                    LogSource::Stdout,
+                    format!(
+                        "Job completed, container {container_id} will be cleaned up after workflow finishes"
+                    ),
+                );
+                self.tx_send(JobStatus::Completed, log_line).await?;
+                Ok(container_id)
+            }
+            _ => Err(DockerError::ScriptExecutionFailed {
+                script: "job scripts".to_string(),
+                exit_code: 1,
+            }),
+        }
+    }
+
+    /// Returns the container registered under `key`, or creates, starts and registers one
+    /// with the job's resources.
+    async fn reuse_or_create_container(
+        &self,
+        image_name: &str,
+        (key, resources): (&str, Option<&Resources>),
+        workflow_folder: &Path,
+        container_registry: &mut HashMap<String, String>,
+    ) -> Result<String, DockerError> {
+        let work_dir = "/workspace";
+
+        // Check if we already have a container for this image and resources
+        let container_id = if let Some(existing_id) = container_registry.get(key) {
             let log_line = LogLine::new(
                 LogSource::Stdout,
                 format!("Reusing existing container {existing_id} for image {image_name}"),
@@ -628,14 +982,34 @@ impl DockerExecutor {
             );
             self.tx_send(JobStatus::CreatingContainer, log_line).await?;
 
-            // Auto-detect GPU: check if image needs GPU and host has it
-            let image_gpu = self.detect_image_gpu(image_name).await;
-            let use_gpu = image_gpu != GpuRuntime::None && self.host_gpu != GpuRuntime::None;
+            // `auto` passes the GPU when the image needs one and the host has it.
+            let gpu_mode = resources.and_then(|r| r.gpu).unwrap_or_default();
+            let image_gpu = if gpu_mode == GpuMode::Auto {
+                self.detect_image_gpu(image_name).await
+            } else {
+                GpuRuntime::None
+            };
+            let use_gpu = match gpu_mode {
+                GpuMode::Auto => image_gpu != GpuRuntime::None && self.host_gpu != GpuRuntime::None,
+                GpuMode::Required => true,
+                GpuMode::None => false,
+            };
+            // The precheck refuses this before the first job; reaching it is a bug.
+            if use_gpu && self.host_gpu == GpuRuntime::None {
+                return Err(DockerError::ContainerCreateFailed(
+                    "gpu = \"required\" but the host has no GPU runtime".to_string(),
+                ));
+            }
 
             let mut host_config = if use_gpu && self.host_gpu == GpuRuntime::Nvidia {
                 let log_line = LogLine::new(
                     LogSource::Stdout,
-                    "GPU auto-detected: NVIDIA runtime on host, CUDA image — enabling GPU passthrough".to_string(),
+                    if gpu_mode == GpuMode::Required {
+                        "gpu = \"required\": NVIDIA runtime on host — enabling GPU passthrough"
+                            .to_string()
+                    } else {
+                        "GPU auto-detected: NVIDIA runtime on host, CUDA image — enabling GPU passthrough".to_string()
+                    },
                 );
                 self.tx_send(JobStatus::CreatingContainer, log_line).await?;
 
@@ -653,7 +1027,12 @@ impl DockerExecutor {
             } else if use_gpu && self.host_gpu == GpuRuntime::Rocm {
                 let log_line = LogLine::new(
                     LogSource::Stdout,
-                    "GPU auto-detected: AMD/ROCm runtime on host, ROCm image — enabling GPU passthrough".to_string(),
+                    if gpu_mode == GpuMode::Required {
+                        "gpu = \"required\": AMD/ROCm runtime on host — enabling GPU passthrough"
+                            .to_string()
+                    } else {
+                        "GPU auto-detected: AMD/ROCm runtime on host, ROCm image — enabling GPU passthrough".to_string()
+                    },
                 );
                 self.tx_send(JobStatus::CreatingContainer, log_line).await?;
 
@@ -696,6 +1075,15 @@ impl DockerExecutor {
             ];
             host_config.binds = Some(volume_binds);
 
+            // Swap equal to memory: no swap on top of the limit.
+            if let Some(resources) = resources {
+                host_config.nano_cpus = resources.cpus.map(nano_cpus);
+                if let Some(memory) = &resources.memory {
+                    host_config.memory = Some(memory.bytes() as i64);
+                    host_config.memory_swap = Some(memory.bytes() as i64);
+                }
+            }
+
             // Run container as host user to avoid permission issues on bind mounts
             #[cfg(unix)]
             let user = {
@@ -707,7 +1095,7 @@ impl DockerExecutor {
             let user: Option<String> = None;
 
             let container_config = Config {
-                image: Some(image_name.clone()),
+                image: Some(image_name.to_string()),
                 tty: Some(true),
                 attach_stdout: Some(true),
                 attach_stderr: Some(true),
@@ -737,6 +1125,15 @@ impl DockerExecutor {
                 ),
             );
             self.tx_send(JobStatus::CreatingContainer, log_line).await?;
+
+            for warning in &container.warnings {
+                let log_line =
+                    LogLine::new(LogSource::Stderr, format!("Docker warning: {warning}"));
+                self.tx_send(JobStatus::CreatingContainer, log_line).await?;
+            }
+            if let Some(resources) = resources {
+                self.check_limits(&container.id, resources).await?;
+            }
 
             // Start container
             self.client
@@ -768,170 +1165,61 @@ impl DockerExecutor {
             self.tx_send(JobStatus::Running, log_line).await?;
 
             // Register the new container in the registry
-            container_registry.insert(image_name.clone(), container.id.clone());
+            container_registry.insert(key.to_string(), container.id.clone());
             container.id
         };
+        Ok(container_id)
+    }
 
-        // Merge workflow parameters with job parameters
-        // Start with workflow params, then overlay job params (job params take precedence)
-        let mut merged_params = workflow_params.clone();
-        for (param_name, param_value) in job_params {
-            merged_params.insert(param_name.clone(), param_value.clone());
-        }
-
-        // Convert merged parameters to environment variables
-        let mut env_vars: Vec<String> = Vec::new();
-        for (param_name, param_value) in &merged_params {
-            // Convert JSON value to string
-            let value_str = match param_value {
-                serde_json::Value::String(s) => s.clone(),
-                serde_json::Value::Number(n) => n.to_string(),
-                serde_json::Value::Bool(b) => b.to_string(),
-                serde_json::Value::Null => "null".to_string(),
-                v => v.to_string(),
-            };
-            // Add with PARAM_ prefix to avoid conflicts
-            env_vars.push(format!("PARAM_{}={}", param_name.to_uppercase(), value_str));
-        }
-
-        // Forward selected host environment variables into the container exec environment.
-        for key in workflow_meta.env_passthrough.as_deref().unwrap_or(&[]) {
-            if let Ok(val) = std::env::var(key) {
-                env_vars.push(format!("{key}={val}"));
+    /// Fails the job, and removes the new container, when Docker dropped a
+    /// declared limit: a job must not run claiming a guarantee it does not have.
+    async fn check_limits(
+        &self,
+        container_id: &str,
+        resources: &Resources,
+    ) -> Result<(), DockerError> {
+        let inspected = self.client.inspect_container(container_id, None).await?;
+        match limits_took(resources, &inspected.host_config.unwrap_or_default()) {
+            Ok(None) => Ok(()),
+            Ok(Some(note)) => {
+                let log_line = LogLine::new(LogSource::Stderr, format!("Warning: {note}"));
+                self.tx_send(JobStatus::CreatingContainer, log_line).await
+            }
+            Err(e) => {
+                self.discard_container(container_id).await;
+                let log_line = LogLine::new(LogSource::Stderr, e.clone());
+                self.tx_send(JobStatus::Failed, log_line).await?;
+                Err(DockerError::ContainerCreateFailed(e))
             }
         }
+    }
 
-        // Inject -e/--env CLI values unconditionally, unprefixed — independent of
-        // (and taking precedence over) the env_passthrough allowlist above.
-        for entry in cli_env_vars {
-            env_vars.push(entry.clone());
-        }
+    /// Whether the host has a GPU runtime silva can pass through.
+    pub fn host_has_gpu(&self) -> bool {
+        self.host_gpu != GpuRuntime::None
+    }
 
-        if !cli_env_vars.is_empty() {
-            let log_line = LogLine::new(
+    /// Force-removes a container: the only way to stop an exec Docker can't kill.
+    async fn discard_container(&self, container_id: &str) {
+        let options = RemoveContainerOptions {
+            force: true,
+            ..Default::default()
+        };
+        let log_line = match self
+            .client
+            .remove_container(container_id, Some(options))
+            .await
+        {
+            Ok(_) => LogLine::new(
                 LogSource::Stdout,
-                format!("Setting {} CLI env var(s) via -e/--env", cli_env_vars.len()),
-            );
-            self.tx_send(JobStatus::CreatingContainer, log_line).await?;
-        }
-
-        if !env_vars.is_empty() {
-            let global_count = workflow_params.len();
-            let job_count = job_params.len();
-            let total_count = merged_params.len();
-            let log_line = LogLine::new(
-                LogSource::Stdout,
-                format!(
-                    "Setting {} parameter environment variable(s) ({} global + {} job = {} total)",
-                    env_vars.len(),
-                    global_count,
-                    job_count,
-                    total_count
-                ),
-            );
-            self.tx_send(JobStatus::CreatingContainer, log_line).await?;
-        }
-
-        // Execute scripts sequentially
-        let scripts = vec![
-            ("pre_run.sh", &config.scripts.pre),
-            ("run.sh", &config.scripts.run),
-            ("post_run.sh", &config.scripts.post),
-        ];
-
-        let mut all_scripts_succeeded = true;
-        for (name, script) in scripts {
-            if ["pre_run.sh", "post_run.sh"].contains(&name)
-                && !workflow_folder.join(&job.name).join(script).exists()
-            {
-                let log_line = LogLine::new(
-                    LogSource::Stdout,
-                    format!("Script {script} not found ... skip"),
-                );
-                self.tx_send(JobStatus::Running, log_line).await?;
-                continue;
-            }
-
-            let log_line = LogLine::new(LogSource::Stdout, format!("Executing script: {script}"));
-            self.tx_send(JobStatus::Running, log_line).await?;
-
-            let job_workdir = format!("{}/{}", work_dir, job.name);
-            match self
-                .exec_script(&container_id, &job_workdir, script, &env_vars, cancel_rx)
-                .await
-            {
-                Ok(exit_code) => {
-                    if exit_code != 0 {
-                        let log_line = LogLine::new(
-                            LogSource::Stderr,
-                            format!("Script {script} failed with exit code {exit_code}"),
-                        );
-                        self.tx_send(JobStatus::Failed, log_line).await?;
-                        all_scripts_succeeded = false;
-                        break;
-                    } else {
-                        let log_line = LogLine::new(
-                            LogSource::Stdout,
-                            format!("Script {script} completed successfully"),
-                        );
-                        self.tx_send(JobStatus::Completed, log_line).await?;
-                    }
-                }
-                Err(e) => {
-                    let log_line = LogLine::new(LogSource::Stderr, format!("Error: {e}"));
-                    self.tx_send(JobStatus::Failed, log_line).await?;
-                    all_scripts_succeeded = false;
-                    break;
-                }
-            }
-        }
-
-        // Collect output files if all scripts succeeded
-        if all_scripts_succeeded && !config.outputs.is_empty() {
-            let log_line =
-                LogLine::new(LogSource::Stdout, "Collecting output files...".to_string());
-            self.tx_send(JobStatus::Running, log_line).await?;
-
-            let job_workdir = format!("{}/{}", work_dir, job.name);
-            match self
-                .collect_output_files(&container_id, &job_workdir, &config.outputs, cancel_rx)
-                .await
-            {
-                Ok(file_count) => {
-                    let log_line = LogLine::new(
-                        LogSource::Stdout,
-                        format!("Collected {file_count} output file(s) to outputs/ folder"),
-                    );
-                    self.tx_send(JobStatus::Completed, log_line).await?;
-                }
-                Err(e) => {
-                    let log_line = LogLine::new(
-                        LogSource::Stderr,
-                        format!("Warning: Failed to collect output files: {e}"),
-                    );
-                    self.tx_send(JobStatus::Running, log_line).await?;
-                }
-            }
-        }
-
-        // Return container ID for cleanup later, or error if scripts failed
-        if all_scripts_succeeded {
-            let log_line = LogLine::new(
-                LogSource::Stdout,
-                format!(
-                    "Job completed, container {container_id} will be cleaned up after workflow finishes"
-                ),
-            );
-            self.tx_send(JobStatus::Completed, log_line).await?;
-            Ok(container_id)
-        } else {
-            // Register container for cleanup even on failure
-            container_registry.insert(image_name.clone(), container_id.clone());
-            Err(DockerError::ScriptExecutionFailed {
-                script: "job scripts".to_string(),
-                exit_code: 1,
-            })
-        }
+                format!("Removed container {container_id}"),
+            ),
+            Err(e) => LogLine::new(
+                LogSource::Stderr,
+                format!("Failed to remove container {container_id}: {e}"),
+            ),
+        };
+        let _ = self.tx_send(JobStatus::Running, log_line).await;
     }
 
     /// Cleans up (stops and removes) multiple containers.
@@ -1014,8 +1302,9 @@ impl DockerExecutor {
         job_work_dir: &str,
         script: &str,
         env_vars: &[String],
+        time_limit: Option<Duration>,
         cancel_rx: &mut mpsc::Receiver<()>,
-    ) -> Result<i64, DockerError> {
+    ) -> Result<ExecOutcome, DockerError> {
         // Convert relative script path to absolute path for reliable execution
         let script_path = if let Some(stripped) = script.strip_prefix("./") {
             format!("{job_work_dir}/{stripped}")
@@ -1054,6 +1343,14 @@ impl DockerExecutor {
         );
         self.tx_send(JobStatus::Running, log_line).await?;
 
+        let deadline = async {
+            match time_limit {
+                Some(limit) => tokio::time::sleep(limit).await,
+                None => std::future::pending().await,
+            }
+        };
+        tokio::pin!(deadline);
+
         match self.client.start_exec(&exec.id, None).await? {
             StartExecResults::Attached { mut output, .. } => {
                 loop {
@@ -1082,9 +1379,8 @@ impl DockerExecutor {
                                 _ => {}
                             }
                         }
-                        _ = cancel_rx.recv() => {
-                            break;
-                        }
+                        _ = cancel_rx.recv() => return Ok(ExecOutcome::Cancelled),
+                        _ = &mut deadline => return Ok(ExecOutcome::TimedOut),
                     }
                 }
             }
@@ -1099,7 +1395,7 @@ impl DockerExecutor {
         let inspect = self.client.inspect_exec(&exec.id).await?;
         let exit_code = inspect.exit_code.unwrap_or(1);
 
-        Ok(exit_code)
+        Ok(ExecOutcome::Exited(exit_code))
     }
 
     /// Collects output files from the container based on glob patterns.
@@ -1308,6 +1604,122 @@ impl DockerExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn metas(workflow_toml: &str, job_toml: &str) -> (WorkflowMeta, JobMeta) {
+        let job =
+            format!("name = \"j\"\ndescription = \"d\"\n[container]\nimage = \"i\"\n{job_toml}");
+        (
+            toml::from_str(&format!(
+                "name = \"w\"\ndescription = \"d\"\n{workflow_toml}"
+            ))
+            .unwrap(),
+            toml::from_str(&job).unwrap(),
+        )
+    }
+
+    fn resources(toml_body: &str) -> Resources {
+        toml::from_str(toml_body).unwrap()
+    }
+
+    #[test]
+    fn a_job_without_resources_keys_the_registry_by_image_alone() {
+        assert_eq!(registry_key("ubuntu", None), "ubuntu");
+        assert_eq!(registry_key("ubuntu", Some(&resources(""))), "ubuntu");
+        assert_eq!(
+            registry_key("ubuntu", Some(&resources("gpu = \"auto\""))),
+            "ubuntu"
+        );
+        assert_eq!(
+            registry_key(
+                "ubuntu",
+                Some(&resources("cpus = 0.5\nmemory = \"1g\"\ngpu = \"none\""))
+            ),
+            "ubuntu#cpus=0.5,memory=1073741824,gpu=none"
+        );
+        // The same limit spelt two ways shares a container.
+        assert_eq!(
+            registry_key("ubuntu", Some(&resources("memory = \"1024m\""))),
+            registry_key("ubuntu", Some(&resources("memory = \"1g\"")))
+        );
+    }
+
+    fn host_config(nano: i64, memory: i64, swap: i64) -> bollard::models::HostConfig {
+        bollard::models::HostConfig {
+            nano_cpus: Some(nano),
+            memory: Some(memory),
+            memory_swap: Some(swap),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_dropped_cpu_or_memory_limit_fails_and_a_dropped_swap_cap_is_a_note() {
+        let asked = resources("cpus = 0.5\nmemory = \"64m\"");
+        let mib64 = 64 << 20;
+        assert_eq!(
+            limits_took(&asked, &host_config(500_000_000, mib64, mib64)),
+            Ok(None)
+        );
+
+        let err = limits_took(&asked, &host_config(0, mib64, mib64)).unwrap_err();
+        assert!(err.contains("cpus = 0.5 was not applied"), "{err}");
+        let err = limits_took(&asked, &host_config(500_000_000, 0, 0)).unwrap_err();
+        assert!(err.contains("memory = \"64m\" was not applied"), "{err}");
+
+        let note = limits_took(&asked, &host_config(500_000_000, mib64, -1)).unwrap();
+        assert!(note.is_some_and(|n| n.contains("does not cap swap")));
+        assert_eq!(
+            limits_took(&resources("gpu = \"none\""), &Default::default()),
+            Ok(None)
+        );
+    }
+
+    #[test]
+    fn retry_backoff_starts_at_ten_seconds_and_doubles() {
+        let waits: Vec<u64> = (1..=4).map(|a| retry_backoff(a).as_secs()).collect();
+        assert_eq!(waits, vec![10, 20, 40, 80]);
+    }
+
+    fn param(name: &str, default: &str) -> String {
+        format!("[params.{name}]\ntype = \"string\"\ndefault = \"{default}\"\nhint = \"h\"\n")
+    }
+
+    #[test]
+    fn every_declared_param_resolves_even_from_a_partial_params_json() {
+        let (workflow, job) = metas(
+            &(param("greeting", "Hello") + &param("name", "you")),
+            &(param("suffix", "!") + &param("mode", "fast")),
+        );
+        let global = HashMap::from([("name".to_string(), serde_json::json!("Ada"))]);
+        let local = HashMap::from([
+            ("mode".to_string(), serde_json::json!("slow")),
+            ("extra".to_string(), serde_json::json!(1)),
+        ]);
+
+        let resolved = resolve_params(&workflow, &global, &job, &local);
+        assert_eq!(resolved["greeting"], "Hello", "workflow default");
+        assert_eq!(resolved["name"], "Ada", "global_params.json");
+        assert_eq!(resolved["suffix"], "!", "job default");
+        assert_eq!(resolved["mode"], "slow", "params.json");
+        assert_eq!(resolved["extra"], 1, "undeclared keys pass through");
+        assert_eq!(resolved.len(), 5);
+    }
+
+    #[test]
+    fn a_job_declaration_shadows_the_global_value() {
+        // workflow-029: 05_prodigy_score redeclares receptor_chain as "B" on purpose.
+        let (workflow, job) = metas(&param("receptor_chain", "A"), &param("receptor_chain", "B"));
+        let global = HashMap::from([("receptor_chain".to_string(), serde_json::json!("C"))]);
+
+        let resolved = resolve_params(&workflow, &global, &job, &HashMap::new());
+        assert_eq!(resolved["receptor_chain"], "B");
+
+        let local = HashMap::from([("receptor_chain".to_string(), serde_json::json!("D"))]);
+        assert_eq!(
+            resolve_params(&workflow, &global, &job, &local)["receptor_chain"],
+            "D"
+        );
+    }
 
     #[test]
     fn test_stream_error_message_recovers_the_discarded_string() {

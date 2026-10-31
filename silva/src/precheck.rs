@@ -4,6 +4,9 @@
 //! - Rejects scripts containing install commands (should be in Docker images)
 //! - Requires `input_files/` folder when dependency-free jobs exist
 //! - Rejects scripts with cross-node `../` path references
+//!
+//! Each script check has a collector, which `silva validate` reports one
+//! finding per offence from, and a `check_*` that folds them into one message.
 
 use std::fs;
 use std::path::Path;
@@ -11,12 +14,36 @@ use std::path::Path;
 use crate::components::workflow::JobFolder;
 
 /// A single violation found in a script.
-struct Violation {
-    job_name: String,
-    script_name: String,
-    line_number: usize,
-    line_content: String,
+pub(crate) struct Violation {
+    pub job_name: String,
+    pub script_name: String,
+    pub line_number: usize,
+    pub line_content: String,
 }
+
+/// What every report of one script convention says around its offences.
+#[derive(Debug, PartialEq)]
+pub(crate) struct ScriptConvention {
+    pub heading: &'static str,
+    pub fix: &'static str,
+}
+
+pub(crate) const INSTALL_COMMANDS: ScriptConvention = ScriptConvention {
+    heading: "Install commands found in workflow scripts.\n\
+              Dependencies must be pre-baked into Docker images.",
+    fix: "Move install commands into Dockerfiles and rebuild the images.",
+};
+
+pub(crate) const CROSS_NODE_REFERENCES: ScriptConvention = ScriptConvention {
+    heading: "Cross-node path references found in workflow scripts.\n\
+              Jobs must use the inputs/ folder, not relative paths to siblings.",
+    fix: "Use files from the inputs/ directory instead of ../",
+};
+
+pub(crate) const RUN_SCRIPTS: ScriptConvention = ScriptConvention {
+    heading: "Run script not found:",
+    fix: "Add the script, or point [scripts] run at the one the job uses.",
+};
 
 /// Install command patterns to detect: (command, subcommand).
 const INSTALL_PATTERNS: &[(&str, &str)] = &[
@@ -42,86 +69,88 @@ fn line_has_install_command(line: &str) -> bool {
     false
 }
 
+/// Every script line that installs a package, across all jobs.
+pub(crate) fn install_command_violations(jobs: &[JobFolder]) -> Vec<Violation> {
+    scan_jobs(jobs, line_has_install_command)
+}
+
 /// Checks all job scripts for install commands.
 ///
 /// Returns `Ok(())` if no install commands are found, or `Err(message)`
 /// with a formatted error listing all violations.
 pub fn check_install_commands(jobs: &[JobFolder]) -> Result<(), String> {
-    let mut violations = Vec::new();
+    violations_message(&INSTALL_COMMANDS, &install_command_violations(jobs))
+}
 
-    for job in jobs {
-        let job_dir = &job.path;
+/// Every script line that reaches a sibling job through `../`, across all jobs.
+pub(crate) fn cross_node_violations(jobs: &[JobFolder]) -> Vec<Violation> {
+    scan_jobs(jobs, |line| line.contains("../"))
+}
 
-        // Load job meta to find configured script names
-        let script_names = match job.load_meta() {
-            Ok(meta) => vec![meta.scripts.pre, meta.scripts.run, meta.scripts.post],
-            Err(_) => vec![
-                "pre_run.sh".to_string(),
-                "run.sh".to_string(),
-                "post_run.sh".to_string(),
-            ],
-        };
+/// Checks all job scripts for cross-node `../` path references.
+///
+/// Jobs must use their `inputs/` folder instead of relative paths to siblings.
+/// Returns `Err` listing all violations if any are found.
+pub fn check_cross_node_references(jobs: &[JobFolder]) -> Result<(), String> {
+    violations_message(&CROSS_NODE_REFERENCES, &cross_node_violations(jobs))
+}
 
-        for script_name in &script_names {
-            let script_path = job_dir.join(script_name);
-            if let Some(mut script_violations) = scan_script(&job.name, script_name, &script_path) {
-                violations.append(&mut script_violations);
-            }
-        }
-    }
-
+fn violations_message(
+    convention: &ScriptConvention,
+    violations: &[Violation],
+) -> Result<(), String> {
     if violations.is_empty() {
         return Ok(());
     }
 
-    let mut msg = String::from(
-        "Install commands found in workflow scripts.\n\
-         Dependencies must be pre-baked into Docker images.\n",
-    );
-
-    for v in &violations {
+    let mut msg = format!("{}\n", convention.heading);
+    for v in violations {
         msg.push_str(&format!(
             "\n  [{}] {}:{} — {}",
-            v.job_name,
-            v.script_name,
-            v.line_number,
-            v.line_content.trim()
+            v.job_name, v.script_name, v.line_number, v.line_content
         ));
     }
-
-    msg.push_str("\n\nFix: Move install commands into Dockerfiles and rebuild the images.");
+    msg.push_str(&format!("\n\nFix: {}", convention.fix));
 
     Err(msg)
 }
 
-/// Scans a single script file for install command patterns.
-fn scan_script(job_name: &str, script_name: &str, path: &Path) -> Option<Vec<Violation>> {
-    let content = fs::read_to_string(path).ok()?;
+/// The job's configured scripts, or the defaults when its job.toml won't load.
+fn script_names(job: &JobFolder) -> Vec<String> {
+    match job.load_meta() {
+        Ok(meta) => vec![meta.scripts.pre, meta.scripts.run, meta.scripts.post],
+        Err(_) => vec![
+            "pre_run.sh".to_string(),
+            "run.sh".to_string(),
+            "post_run.sh".to_string(),
+        ],
+    }
+}
+
+/// Scans every job's scripts, line by line, skipping comments.
+fn scan_jobs(jobs: &[JobFolder], offends: impl Fn(&str) -> bool) -> Vec<Violation> {
     let mut violations = Vec::new();
 
-    for (line_idx, line) in content.lines().enumerate() {
-        let trimmed = line.trim();
-
-        // Skip comments
-        if trimmed.starts_with('#') {
-            continue;
-        }
-
-        if line_has_install_command(trimmed) {
-            violations.push(Violation {
-                job_name: job_name.to_string(),
-                script_name: script_name.to_string(),
-                line_number: line_idx + 1,
-                line_content: trimmed.to_string(),
-            });
+    for job in jobs {
+        for script_name in script_names(job) {
+            let Ok(content) = fs::read_to_string(job.path.join(&script_name)) else {
+                continue;
+            };
+            for (line_idx, line) in content.lines().enumerate() {
+                let trimmed = line.trim();
+                if !trimmed.starts_with('#') && offends(trimmed) {
+                    violations.push(Violation {
+                        job_name: job.name.clone(),
+                        script_name: script_name.clone(),
+                        line_number: line_idx + 1,
+                        line_content: trimmed.to_string(),
+                    });
+                }
+            }
         }
     }
 
-    if violations.is_empty() {
-        None
-    } else {
-        Some(violations)
-    }
+    violations
 }
 
 /// Checks that an `input_files/` folder exists at the workflow root when
@@ -162,90 +191,90 @@ pub fn check_input_files_folder(
     ))
 }
 
-/// Checks all job scripts for cross-node `../` path references.
+/// Every job whose relative `run` script is missing, as (job, script).
+pub(crate) fn missing_run_scripts(jobs: &[JobFolder]) -> Vec<(String, String)> {
+    jobs.iter()
+        .filter_map(|job| {
+            let run = job.load_meta().ok()?.scripts.run;
+            let relative = !Path::new(&run).is_absolute();
+            (relative && !job.path.join(&run).is_file()).then(|| (job.name.clone(), run))
+        })
+        .collect()
+}
+
+/// Checks that every job's `run` script exists.
 ///
-/// Jobs must use their `inputs/` folder instead of relative paths to siblings.
-/// Returns `Err` listing all violations if any are found.
-pub fn check_cross_node_references(jobs: &[JobFolder]) -> Result<(), String> {
-    let mut violations = Vec::new();
+/// A missing `run` script is otherwise invisible: the script is piped into
+/// bash, which reads nothing and exits 0, so the job "succeeds" doing nothing.
+/// Absolute paths name a file inside the image and are not checked. Missing
+/// `pre`/`post` scripts are a legitimate skip.
+pub fn check_run_scripts(jobs: &[JobFolder]) -> Result<(), String> {
+    let missing: Vec<String> = missing_run_scripts(jobs)
+        .into_iter()
+        .map(|(job, run)| format!("[{job}] {run}"))
+        .collect();
 
-    for job in jobs {
-        let job_dir = &job.path;
-
-        let script_names = match job.load_meta() {
-            Ok(meta) => vec![meta.scripts.pre, meta.scripts.run, meta.scripts.post],
-            Err(_) => vec![
-                "pre_run.sh".to_string(),
-                "run.sh".to_string(),
-                "post_run.sh".to_string(),
-            ],
-        };
-
-        for script_name in &script_names {
-            let script_path = job_dir.join(script_name);
-            if let Some(mut script_violations) =
-                scan_script_for_cross_node_refs(&job.name, script_name, &script_path)
-            {
-                violations.append(&mut script_violations);
-            }
-        }
-    }
-
-    if violations.is_empty() {
+    if missing.is_empty() {
         return Ok(());
     }
 
-    let mut msg = String::from(
-        "Cross-node path references found in workflow scripts.\n\
-         Jobs must use the inputs/ folder, not relative paths to siblings.\n",
-    );
-
-    for v in &violations {
-        msg.push_str(&format!(
-            "\n  [{}] {}:{} — {}",
-            v.job_name,
-            v.script_name,
-            v.line_number,
-            v.line_content.trim()
-        ));
-    }
-
-    msg.push_str("\n\nFix: Use files from the inputs/ directory instead of ../");
-
-    Err(msg)
+    Err(format!(
+        "{}\n\n  {}\n\nFix: {}",
+        RUN_SCRIPTS.heading,
+        missing.join("\n  "),
+        RUN_SCRIPTS.fix
+    ))
 }
 
-/// Scans a single script file for `../` path patterns.
-fn scan_script_for_cross_node_refs(
-    job_name: &str,
-    script_name: &str,
-    path: &Path,
-) -> Option<Vec<Violation>> {
-    let content = fs::read_to_string(path).ok()?;
-    let mut violations = Vec::new();
-
-    for (line_idx, line) in content.lines().enumerate() {
-        let trimmed = line.trim();
-
-        // Skip comments
-        if trimmed.starts_with('#') {
-            continue;
-        }
-
-        if trimmed.contains("../") {
-            violations.push(Violation {
-                job_name: job_name.to_string(),
-                script_name: script_name.to_string(),
-                line_number: line_idx + 1,
-                line_content: trimmed.to_string(),
-            });
-        }
+/// Refuses a workflow whose job declares `gpu = "required"` on a host with no
+/// GPU runtime, before anything runs: falling back to CPU after a long queue is
+/// what the field exists to prevent.
+pub fn check_gpu_required(jobs: &[JobFolder], host_has_gpu: bool) -> Result<(), String> {
+    if host_has_gpu {
+        return Ok(());
     }
+    let required: Vec<String> = jobs
+        .iter()
+        .filter(|job| {
+            job.load_meta().is_ok_and(|meta| {
+                meta.resources.and_then(|r| r.gpu) == Some(job_config::job::GpuMode::Required)
+            })
+        })
+        .map(|job| job.name.clone())
+        .collect();
+    if required.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "This host has no GPU runtime, but these jobs declare gpu = \"required\":\n\n  {}\n\n\
+         Fix: run on a host with a GPU, or set gpu = \"auto\" to fall back to CPU.",
+        required.join("\n  ")
+    ))
+}
 
-    if violations.is_empty() {
-        None
-    } else {
-        Some(violations)
+/// Checks the declared format version, the same way for `validate`, `run` and
+/// the TUI. A newer major may change what fields mean, so it is refused; a
+/// newer minor only adds fields an older silva can skip, so it is a note.
+///
+/// Returns `Err` to refuse, `Ok(Some(note))` to run with a note, `Ok(None)` otherwise.
+pub fn check_schema_version(
+    metadata: &job_config::workflow::WorkflowMeta,
+) -> Result<Option<String>, String> {
+    use job_config::workflow::{SCHEMA_VERSION, SchemaCompat};
+
+    let major = SCHEMA_VERSION.split('.').next().unwrap_or(SCHEMA_VERSION);
+    match metadata.schema_compat() {
+        SchemaCompat::Supported => Ok(None),
+        SchemaCompat::NewerMinor(v) => Ok(Some(format!(
+            "workflow targets format {v}; this silva speaks {SCHEMA_VERSION}, \
+             so features newer than {SCHEMA_VERSION} are ignored."
+        ))),
+        SchemaCompat::UnsupportedMajor(v) => Err(format!(
+            "workflow requires format {v}; this silva speaks {major}.x — upgrade silva."
+        )),
+        SchemaCompat::Malformed(v) => Err(format!(
+            "schema_version \"{v}\" is not a format version; write MAJOR.MINOR, e.g. \"{SCHEMA_VERSION}\"."
+        )),
     }
 }
 
@@ -483,5 +512,81 @@ run = "run.sh"
         let err = check_cross_node_references(&[job1, job2]).unwrap_err();
         assert!(err.contains("[02-analysis]"));
         assert!(err.contains("[03-report]"));
+    }
+
+    #[test]
+    fn a_missing_run_script_is_reported() {
+        let tmp = TempDir::new().unwrap();
+        let present = create_job(tmp.path(), "01-present", "echo hi\n");
+        let missing = create_job(tmp.path(), "02-missing", "echo hi\n");
+        fs::remove_file(missing.path.join("run.sh")).unwrap();
+
+        let err = check_run_scripts(&[present, missing]).unwrap_err();
+        assert!(err.contains("[02-missing] run.sh"), "{err}");
+        assert!(!err.contains("01-present"), "{err}");
+    }
+
+    #[test]
+    fn present_run_scripts_pass() {
+        let tmp = TempDir::new().unwrap();
+        let job = create_job(tmp.path(), "01-job", "echo hi\n");
+        assert!(check_run_scripts(&[job]).is_ok());
+    }
+
+    fn with_gpu(job: &JobFolder, gpu: &str) {
+        let path = job.path.join(".chiral/job.toml");
+        let toml = fs::read_to_string(&path).unwrap();
+        fs::write(path, format!("{toml}\n[resources]\ngpu = \"{gpu}\"\n")).unwrap();
+    }
+
+    #[test]
+    fn gpu_required_is_refused_on_a_host_without_one_and_names_the_job() {
+        let tmp = TempDir::new().unwrap();
+        let cpu = create_job(tmp.path(), "01-cpu", "echo hi\n");
+        let gpu = create_job(tmp.path(), "02-gpu", "echo hi\n");
+        with_gpu(&gpu, "required");
+        let jobs = [cpu, gpu];
+
+        let err = check_gpu_required(&jobs, false).unwrap_err();
+        assert!(err.contains("no GPU runtime"), "{err}");
+        assert!(err.contains("02-gpu") && !err.contains("01-cpu"), "{err}");
+        assert!(check_gpu_required(&jobs, true).is_ok());
+    }
+
+    #[test]
+    fn gpu_auto_or_none_never_needs_a_gpu_host() {
+        let tmp = TempDir::new().unwrap();
+        let auto = create_job(tmp.path(), "01-auto", "echo hi\n");
+        with_gpu(&auto, "auto");
+        let none = create_job(tmp.path(), "02-none", "echo hi\n");
+        with_gpu(&none, "none");
+        assert!(check_gpu_required(&[auto, none], false).is_ok());
+    }
+
+    fn workflow_with_version(version: &str) -> job_config::workflow::WorkflowMeta {
+        toml::from_str(&format!(
+            "name = \"t\"\ndescription = \"t\"\nschema_version = \"{version}\"\n"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn schema_version_refuses_a_newer_major_or_a_malformed_value() {
+        let err = check_schema_version(&workflow_with_version("2.0")).unwrap_err();
+        assert!(err.contains("upgrade silva"), "{err}");
+        let err = check_schema_version(&workflow_with_version("v1")).unwrap_err();
+        assert!(err.contains("MAJOR.MINOR"), "{err}");
+    }
+
+    #[test]
+    fn schema_version_notes_a_newer_minor_and_passes_a_known_one() {
+        let note = check_schema_version(&workflow_with_version("1.2")).unwrap();
+        assert!(note.is_some_and(|n| n.contains("format 1.2")));
+        for known in ["1.0", "1.1"] {
+            assert_eq!(
+                check_schema_version(&workflow_with_version(known)),
+                Ok(None)
+            );
+        }
     }
 }

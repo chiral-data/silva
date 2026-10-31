@@ -9,7 +9,7 @@ use tempfile::TempDir;
 use tokio::sync::mpsc;
 
 use crate::components::workflow::{self, JobFolder};
-use crate::utils::copy_dir_recursive;
+use crate::headless::topological_sort_jobs;
 
 use super::{
     executor::DockerExecutor,
@@ -110,7 +110,11 @@ impl State {
             && let Ok((idx, status, log_line)) = rx.try_recv()
         {
             if let Some(job_entry) = self.job_entries.get_mut(idx) {
-                job_entry.status = status;
+                // A failure is final for this run: cleanup lines that follow it
+                // arrive as `Completed` and must not turn the job ✓.
+                if job_entry.status != JobStatus::Failed {
+                    job_entry.status = status;
+                }
                 job_entry.logs.push(log_line);
 
                 // Auto-scroll to bottom if enabled and this is the selected job
@@ -132,6 +136,10 @@ impl State {
         };
 
         self.is_executing_workflow = true;
+        // A failure from the previous run must not stick to this one.
+        for entry in &mut self.job_entries {
+            entry.status = JobStatus::Idle;
+        }
         self.select_next_job();
 
         // Clear previous temp path
@@ -195,24 +203,62 @@ impl State {
                 }
             };
 
-            // Load workflow metadata (contains dependencies and param definitions)
-            let workflow_metadata = workflow_folder
-                .load_workflow_metadata()
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| {
+            // Load workflow metadata (contains dependencies and param definitions).
+            // A missing file means "no dependencies"; a broken one must not, or
+            // the jobs would run in the wrong order.
+            let workflow_metadata = match workflow_folder.load_workflow_metadata() {
+                Ok(meta) => meta.unwrap_or_else(|| {
                     job_config::workflow::WorkflowMeta::new(
                         workflow_folder.name.clone(),
                         String::new(),
                     )
-                });
+                }),
+                Err(e) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stderr,
+                        format!("Cannot read .chiral/workflow.toml: {e}"),
+                    );
+                    tx.send((0, JobStatus::Failed, log_line)).await.unwrap();
+                    tx.send((jobs.len(), JobStatus::Failed, LogLine::empty()))
+                        .await
+                        .unwrap();
+                    return;
+                }
+            };
 
-            // Load workflow parameters (global parameters)
-            let workflow_params = workflow_folder
-                .load_workflow_params()
-                .ok()
-                .flatten()
-                .unwrap_or_default();
+            // Before the sort and prechecks: a newer major may change what they mean.
+            match crate::precheck::check_schema_version(&workflow_metadata) {
+                Ok(None) => {}
+                Ok(Some(note)) => {
+                    let log_line = LogLine::new(LogSource::Stdout, format!("Note: {note}"));
+                    tx.send((0, JobStatus::Idle, log_line)).await.unwrap();
+                }
+                Err(e) => {
+                    let log_line = LogLine::new(LogSource::Stderr, e);
+                    tx.send((0, JobStatus::Failed, log_line)).await.unwrap();
+                    tx.send((jobs.len(), JobStatus::Failed, LogLine::empty()))
+                        .await
+                        .unwrap();
+                    return;
+                }
+            }
+
+            // Raw values only: run_job fills in the declared defaults. A broken
+            // file must not silently become "use the defaults".
+            let workflow_params = match workflow_folder.load_workflow_params() {
+                Ok(params) => params.unwrap_or_default(),
+                Err(e) => {
+                    let log_line = LogLine::new(
+                        LogSource::Stderr,
+                        format!("Cannot read global_params.json: {e}"),
+                    );
+                    tx.send((0, JobStatus::Failed, log_line)).await.unwrap();
+                    tx.send((jobs.len(), JobStatus::Failed, LogLine::empty()))
+                        .await
+                        .unwrap();
+                    return;
+                }
+            };
 
             if !workflow_params.is_empty() {
                 let log_line = LogLine::new(
@@ -257,6 +303,8 @@ impl State {
             for check_result in [
                 crate::precheck::check_install_commands(&sorted_jobs),
                 crate::precheck::check_cross_node_references(&sorted_jobs),
+                crate::precheck::check_run_scripts(&sorted_jobs),
+                crate::precheck::check_gpu_required(&sorted_jobs, docker_executor.host_has_gpu()),
                 crate::precheck::check_input_files_folder(
                     &workflow_folder.path,
                     &sorted_jobs,
@@ -301,6 +349,17 @@ impl State {
                 .map(|(idx, job)| (job.name.clone(), idx))
                 .collect();
 
+            // Same staging as `silva run`: input_files/ into each dependency-free job's inputs/.
+            let mut notices = Vec::new();
+            crate::staging::copy_input_files_to_dependency_free_jobs(
+                &workflow_folder.path,
+                &temp_workflow_dir,
+                &sorted_jobs,
+                &workflow_metadata,
+                &mut notices,
+            );
+            send_notices(&tx, notices, &job_name_to_idx).await;
+
             // Container registry: image_name -> container_id (for reusing containers)
             let mut container_registry: HashMap<String, String> = HashMap::new();
             let mut workflow_failed = false;
@@ -313,21 +372,38 @@ impl State {
                     Ok(config) => {
                         docker_executor.set_job_idx(idx);
 
-                        // Load job parameters (if they exist)
-                        let job_params = job.load_params().ok().flatten().unwrap_or_default();
+                        let job_params = match job.load_params() {
+                            Ok(params) => params.unwrap_or_default(),
+                            Err(e) => {
+                                let log_line = LogLine::new(
+                                    LogSource::Stderr,
+                                    format!("Cannot read {}/params.json: {e}", job.name),
+                                );
+                                tx.send((idx, JobStatus::Failed, log_line)).await.unwrap();
+                                workflow_failed = true;
+                                break;
+                            }
+                        };
 
                         // Copy input files from dependencies before running the job
                         let job_deps = workflow_metadata.get_job_dependencies(&job.name);
-                        copy_input_files_from_dependencies(
+                        let mut notices = Vec::new();
+                        let copied = crate::staging::copy_input_files_from_dependencies(
                             &temp_workflow_dir,
                             job,
                             &jobs,
                             &config,
                             job_deps,
-                            &tx,
-                            idx,
-                        )
-                        .await;
+                            &mut notices,
+                        );
+                        send_notices(&tx, notices, &job_name_to_idx).await;
+                        if let Err(e) = copied {
+                            let log_line = LogLine::new(
+                                LogSource::Stderr,
+                                format!("Warning: Failed to copy input files: {e}"),
+                            );
+                            tx.send((idx, JobStatus::Running, log_line)).await.unwrap();
+                        }
 
                         match docker_executor
                             .run_job(
@@ -547,327 +623,26 @@ impl State {
     }
 }
 
-/// Performs topological sort on jobs based on their dependencies.
-///
-/// # Arguments
-///
-/// * `jobs` - List of jobs to sort
-///
-/// # Returns
-///
-/// * `Ok(Vec<JobFolder>)` - Jobs sorted in dependency order (dependencies first)
-/// * `Err(String)` - Error message if circular dependency detected or invalid dependency
-///
-/// # Algorithm
-///
-/// Uses Kahn's algorithm for topological sorting:
-/// 1. Build dependency graph and calculate in-degrees
-/// 2. Start with jobs that have no dependencies (in-degree = 0)
-/// 3. Process jobs in order, removing edges as we go
-/// 4. If we can't process all jobs, there's a cycle
-fn topological_sort_jobs(
-    jobs: &[JobFolder],
-    workflow_metadata: &job_config::workflow::WorkflowMeta,
-) -> Result<Vec<JobFolder>, String> {
-    use std::collections::{HashMap, VecDeque};
-
-    if jobs.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Build a map of job names to job data for quick lookup
-    let job_map: HashMap<String, JobFolder> =
-        jobs.iter().map(|j| (j.name.clone(), j.clone())).collect();
-
-    // Build dependency graph: job_name -> Vec<jobs that depend on it>
-    let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
-    let mut in_degree: HashMap<String, usize> = HashMap::new();
-
-    // Initialize all jobs with in-degree 0
-    for job in jobs {
-        in_degree.insert(job.name.clone(), 0);
-        dependents.entry(job.name.clone()).or_default();
-    }
-
-    // Build the graph using dependencies from workflow metadata
-    for job in jobs {
-        let job_deps = workflow_metadata.get_job_dependencies(&job.name);
-
-        for dep_name in job_deps {
-            // Validate that the dependency exists
-            if !job_map.contains_key(dep_name) {
-                return Err(format!(
-                    "Job '{}' depends on '{}', but '{}' does not exist in the workflow",
-                    job.name, dep_name, dep_name
-                ));
-            }
-
-            // Add edge: dep_name -> job.name
-            dependents
-                .entry(dep_name.clone())
-                .or_default()
-                .push(job.name.clone());
-
-            // Increment in-degree of current job
-            *in_degree.get_mut(&job.name).unwrap() += 1;
-        }
-    }
-
-    // Kahn's algorithm: start with jobs that have no dependencies
-    let mut queue: VecDeque<String> = in_degree
-        .iter()
-        .filter(|&(_, &degree)| degree == 0)
-        .map(|(name, _)| name.clone())
-        .collect();
-
-    let mut sorted_jobs = Vec::new();
-
-    while let Some(job_name) = queue.pop_front() {
-        // Add this job to the sorted list
-        if let Some(job) = job_map.get(&job_name) {
-            sorted_jobs.push(job.clone());
-        }
-
-        // Process all jobs that depend on this one
-        if let Some(deps) = dependents.get(&job_name) {
-            for dependent in deps {
-                // Decrease in-degree
-                let degree = in_degree.get_mut(dependent).unwrap();
-                *degree -= 1;
-
-                // If in-degree becomes 0, add to queue
-                if *degree == 0 {
-                    queue.push_back(dependent.clone());
-                }
-            }
-        }
-    }
-
-    // Check if all jobs were processed (no cycles)
-    if sorted_jobs.len() != jobs.len() {
-        // Find jobs that are part of the cycle
-        let processed: std::collections::HashSet<_> = sorted_jobs.iter().map(|j| &j.name).collect();
-        let unprocessed: Vec<_> = jobs
-            .iter()
-            .filter(|j| !processed.contains(&j.name))
-            .map(|j| j.name.as_str())
-            .collect();
-
-        return Err(format!(
-            "Circular dependency detected involving jobs: {}",
-            unprocessed.join(", ")
-        ));
-    }
-
-    Ok(sorted_jobs)
-}
-
-/// Helper function to copy input files from dependency jobs' outputs to the current job folder.
-///
-/// # Arguments
-///
-/// * `temp_workflow_dir` - The temporary workflow directory containing all job folders
-/// * `current_job` - The current job that needs input files
-/// * `all_jobs` - List of all jobs in the workflow (to look up dependencies by name)
-/// * `config` - The job configuration containing input patterns
-/// * `dependencies` - List of job names this job depends on (from WorkflowMeta)
-/// * `tx` - Message channel for logging
-/// * `job_idx` - Current job index for message tagging
-///
-/// # Behavior
-///
-/// For each dependency:
-/// - Looks for the dependency's outputs/ folder
-/// - If config.inputs is specified: copies only matching files (supports globs)
-/// - If config.inputs is empty: copies all files from dependency outputs
-/// - Handles conflicts: uses first match and sends warning
-async fn copy_input_files_from_dependencies(
-    temp_workflow_dir: &Path,
-    current_job: &JobFolder,
-    all_jobs: &[JobFolder],
-    config: &job_config::job::JobMeta,
-    dependencies: &[String],
+/// Logs staging notices under the job each one is about, or the first job.
+async fn send_notices(
     tx: &mpsc::Sender<(usize, JobStatus, LogLine)>,
-    job_idx: usize,
+    notices: Vec<crate::staging::Notice>,
+    job_index: &HashMap<String, usize>,
 ) {
-    use globset::GlobSetBuilder;
-    use std::collections::HashSet;
-    use std::fs;
-    use std::path::PathBuf;
-
-    if dependencies.is_empty() {
-        return;
-    }
-
-    let current_job_dir = temp_workflow_dir.join(&current_job.name);
-    let mut copied_files: HashSet<String> = HashSet::new();
-
-    for dep_job_name in dependencies {
-        // Find the dependency job
-        let dep_job = all_jobs.iter().find(|j| &j.name == dep_job_name);
-        if dep_job.is_none() {
-            let log_line = LogLine::new(
-                LogSource::Stderr,
-                format!("Warning: Dependency job '{dep_job_name}' not found"),
-            );
-            let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
-            continue;
-        }
-
-        let dep_outputs_dir = temp_workflow_dir.join(dep_job_name).join("outputs");
-        if !dep_outputs_dir.exists() {
-            let log_line = LogLine::new(
-                LogSource::Stdout,
-                format!("No outputs found for dependency '{dep_job_name}', skipping"),
-            );
-            let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
-            continue;
-        }
-
-        // Determine which files to copy
-        let files_to_copy: Vec<PathBuf> = if config.inputs.is_empty() {
-            // Copy all files from outputs/
-            match fs::read_dir(&dep_outputs_dir) {
-                Ok(entries) => entries.filter_map(|e| e.ok()).map(|e| e.path()).collect(),
-                Err(e) => {
-                    let log_line = LogLine::new(
-                        LogSource::Stderr,
-                        format!("Error reading outputs from '{dep_job_name}': {e}"),
-                    );
-                    let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
-                    continue;
-                }
-            }
-        } else {
-            // Copy only matching files based on input patterns
-            let mut builder = GlobSetBuilder::new();
-            for pattern in &config.inputs {
-                match globset::Glob::new(pattern) {
-                    Ok(g) => {
-                        builder.add(g);
-                    }
-                    Err(e) => {
-                        let log_line = LogLine::new(
-                            LogSource::Stderr,
-                            format!("Invalid glob pattern '{pattern}': {e}"),
-                        );
-                        let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
-                    }
-                }
-            }
-            match builder.build() {
-                Ok(matcher) => match fs::read_dir(&dep_outputs_dir) {
-                    Ok(entries) => entries
-                        .filter_map(|e| e.ok())
-                        .map(|e| e.path())
-                        .filter(|p| p.file_name().map(|n| matcher.is_match(n)).unwrap_or(false))
-                        .collect(),
-                    Err(e) => {
-                        let log_line = LogLine::new(
-                            LogSource::Stderr,
-                            format!("Error reading outputs from '{dep_job_name}': {e}"),
-                        );
-                        let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
-                        continue;
-                    }
-                },
-                Err(e) => {
-                    let log_line = LogLine::new(
-                        LogSource::Stderr,
-                        format!("Failed to build glob matcher for '{dep_job_name}': {e}"),
-                    );
-                    let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
-                    continue;
-                }
-            }
+    for notice in notices {
+        let idx = notice
+            .job
+            .as_ref()
+            .and_then(|name| job_index.get(name))
+            .copied()
+            .unwrap_or(0);
+        let source = match notice.level {
+            crate::staging::Level::Info => LogSource::Stdout,
+            crate::staging::Level::Warning => LogSource::Stderr,
         };
-
-        // Copy files to current job directory
-        for source_path in files_to_copy {
-            if let Some(filename) = source_path.file_name() {
-                let filename_str = filename.to_string_lossy().to_string();
-                let dest_path = current_job_dir.join(filename);
-
-                // Check for conflicts
-                if copied_files.contains(&filename_str) {
-                    let log_line = LogLine::new(
-                        LogSource::Stderr,
-                        format!(
-                            "Warning: File '{filename_str}' already copied from another dependency, skipping from '{dep_job_name}'"
-                        ),
-                    );
-                    let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
-                    continue;
-                }
-
-                // Copy the file or directory
-                if source_path.is_file() {
-                    // Copy single file
-                    match fs::copy(&source_path, &dest_path) {
-                        Ok(_) => {
-                            copied_files.insert(filename_str.clone());
-                            let log_line = LogLine::new(
-                                LogSource::Stdout,
-                                format!("Copied file '{filename_str}' from '{dep_job_name}'"),
-                            );
-                            let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
-                        }
-                        Err(e) => {
-                            let log_line = LogLine::new(
-                                LogSource::Stderr,
-                                format!(
-                                    "Error copying file '{filename_str}' from '{dep_job_name}': {e}"
-                                ),
-                            );
-                            let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
-                        }
-                    }
-                } else if source_path.is_dir() {
-                    // Copy directory recursively
-                    match copy_dir_recursive(&source_path, &dest_path) {
-                        Ok(file_count) => {
-                            copied_files.insert(filename_str.clone());
-                            let log_line = LogLine::new(
-                                LogSource::Stdout,
-                                format!(
-                                    "Copied directory '{filename_str}/' ({file_count} file(s)) from '{dep_job_name}'"
-                                ),
-                            );
-                            let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
-                        }
-                        Err(e) => {
-                            let log_line = LogLine::new(
-                                LogSource::Stderr,
-                                format!(
-                                    "Error copying directory '{filename_str}/' from '{dep_job_name}': {e}"
-                                ),
-                            );
-                            let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
-                        }
-                    }
-                } else {
-                    // Not a regular file or directory (e.g., symlink)
-                    let log_line = LogLine::new(
-                        LogSource::Stderr,
-                        format!(
-                            "Warning: Skipping '{filename_str}' from '{dep_job_name}' (not a regular file or directory)"
-                        ),
-                    );
-                    let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
-                }
-            }
-        }
-    }
-
-    if !copied_files.is_empty() {
-        let log_line = LogLine::new(
-            LogSource::Stdout,
-            format!(
-                "Copied {} input file(s) from dependencies",
-                copied_files.len()
-            ),
-        );
-        let _ = tx.send((job_idx, JobStatus::Running, log_line)).await;
+        let _ = tx
+            .send((idx, JobStatus::Running, LogLine::new(source, notice.text)))
+            .await;
     }
 }
 
@@ -875,6 +650,80 @@ async fn copy_input_files_from_dependencies(
 mod tests {
     use super::*;
     use crate::components::docker::job::JobStatus;
+
+    fn state_with_jobs(names: &[&str]) -> (State, mpsc::Sender<(usize, JobStatus, LogLine)>) {
+        let (tx, rx) = mpsc::channel(32);
+        let state = State {
+            job_entries: names.iter().map(|n| JobEntry::new(n.to_string())).collect(),
+            rx: Some(rx),
+            ..Default::default()
+        };
+        (state, tx)
+    }
+
+    fn deliver(
+        state: &mut State,
+        tx: &mpsc::Sender<(usize, JobStatus, LogLine)>,
+        status: JobStatus,
+        text: &str,
+    ) {
+        tx.try_send((0, status, LogLine::new(LogSource::Stdout, text.to_string())))
+            .unwrap();
+        state.update();
+    }
+
+    #[test]
+    fn a_failed_job_stays_failed_through_the_cleanup_lines() {
+        let (mut state, tx) = state_with_jobs(&["02-pocket"]);
+        deliver(
+            &mut state,
+            &tx,
+            JobStatus::Running,
+            "Executing script: run.sh",
+        );
+        deliver(
+            &mut state,
+            &tx,
+            JobStatus::Failed,
+            "Script run.sh failed with exit code 1",
+        );
+        deliver(
+            &mut state,
+            &tx,
+            JobStatus::Completed,
+            "Cleaning up 1 container(s)...",
+        );
+
+        let entry = &state.job_entries[0];
+        assert_eq!(entry.status, JobStatus::Failed);
+        assert!(
+            entry
+                .logs
+                .lines()
+                .iter()
+                .any(|l| l.content.starts_with("Cleaning up")),
+            "the cleanup line is still logged"
+        );
+    }
+
+    #[test]
+    fn a_completed_script_does_not_freeze_the_job() {
+        // The executor reports `Completed` after each script, then runs the next one.
+        let (mut state, tx) = state_with_jobs(&["01-job"]);
+        deliver(
+            &mut state,
+            &tx,
+            JobStatus::Completed,
+            "Script pre_run.sh completed successfully",
+        );
+        deliver(
+            &mut state,
+            &tx,
+            JobStatus::Running,
+            "Executing script: run.sh",
+        );
+        assert_eq!(state.job_entries[0].status, JobStatus::Running);
+    }
 
     #[test]
     fn test_job_status_as_str() {

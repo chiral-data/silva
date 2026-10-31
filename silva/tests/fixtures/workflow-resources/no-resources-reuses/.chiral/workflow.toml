@@ -1,0 +1,6 @@
+schema_version = "1.1"
+name = "no-resources-reuses"
+description = "resources fixture"
+
+[dependencies]
+02-second = ["01-first"]

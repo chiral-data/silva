@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.6.0]
+
+### Added
+
+- `[resources]` on `job.toml` (#121), the last field of format 1.1: `cpus` (may be fractional), `memory` (`k`, `m` or `g`, with no swap on top) and `gpu` (`"auto"`, `"required"` or `"none"`). Limits are set on the job's container, and silva inspects each new container and fails the job if Docker didn't apply a `cpus` or `memory` limit. A dropped swap cap is logged instead, because the memory limit still holds. Containers are now reused per image *and* resources, so jobs that declare nothing share a container exactly as before. `gpu = "required"` passes the GPU through even for an image without CUDA/ROCm markers, and a host with no GPU runtime refuses the workflow before the first job. `none` never passes it through. Malformed values fail `job.toml` parsing. `silva validate` notes a `[resources]` block in a workflow that doesn't declare `schema_version = "1.1"`, and notes a leftover `use_gpu`, which is still ignored.
+
+- `retry` and `timeout` on `job.toml` (#120), the first fields of format 1.1, so `SCHEMA_VERSION` is now `1.1`. `retry = 2` re-runs the `run` script up to twice after it fails or times out, waiting 10 s and then doubling. `timeout = "30m"` limits each attempt, and an attempt that runs over has its container removed, because Docker can't stop the script any other way. `pre` and `post` run once. A value out of range (`retry` above 10, a `timeout` that isn't a whole number with s, m or h) fails `job.toml` parsing. `silva validate` notes a job that uses either field in a workflow that doesn't declare `schema_version = "1.1"`. Cancelling a run is no longer reported as the script failing with exit code 1, and a cancel is never retried.
+
+- `schema_version` on `workflow.toml` (#114): a workflow can now state which version of the Silva Workflow Format it is written for. It is optional and independent of silva's version; absent means `1.0`, so no existing workflow changes, and a save omits it when unset. `job_config` exports `SCHEMA_VERSION` and `WorkflowMeta::schema_compat()` so every consumer classifies it the same way.
+
+  `silva validate` fails a newer major version ("workflow requires format 2.0; this silva speaks 1.x — upgrade silva") or a value that is not `MAJOR.MINOR`. A newer minor version is reported as a **note** and stays valid: unknown keys already parse harmlessly, so a 1.1 workflow does run on a 1.0 build, minus the new behaviour. Notes are new — human output lists them after the result, and `--json` gains a `"notes"` array alongside `"findings"`.
+
+- A JSON Schema for `workflow.toml` and `job.toml` (#115), generated from `job_config`'s structs with `schemars`: `silva schema workflow|job` prints it, `schema/` holds the committed copies, and each release publishes both as assets. A `job_config` test compares the committed files with the generated output, so a struct change that skips regeneration fails `cargo test`. The schema is stamped with `"x-schema-version": "1.0"`, and `schema_version` carries its `MAJOR.MINOR` pattern. The derive sits behind a default-on `schema` feature, so a consumer that only parses can build `job_config` without `schemars`.
+
+- `silva validate` checks that every `inputs` pattern can be fed by a direct dependency (#117), as a new `ports` finding. Previously an unmatched pattern was silent at run time and the job just started without the file. A pattern containing `/` can never match, because `inputs` match file names only, so it is reported with the name to write instead. Only provable misses are reported: two globs count as overlapping unless their literal prefixes or suffixes conflict, and a job is not judged when a dependency declares no `outputs`, since its script may write into `outputs/` directly. Over collab-workflows this finds 11 real misses in workflow-002, 019 and 029, taking the passing count from 19 of 33 to 17. `validate` also rejects `env_passthrough` entries that are not environment variable names.
+
+- `silva validate` checks each declared param `default` against its own `type` (#118), one `params` finding per param. Defaults now reach every run, so a mistyped one is a real value. Over collab-workflows this finds two, in workflow-023 and 024, which already failed. It also notes, without failing, a `${PARAM_X:-…}` fallback in a job script when `X` is declared for that job: a run always sets it, so the fallback is a second default that can drift from the declared one. A declared `""` is exempt, since `:-` still fires on an empty value. 22 corpus scripts carry such fallbacks.
+
+### Changed
+
+- A `global_params.json` or `params.json` that does not parse fails `silva run` and the TUI (#118). It used to be ignored, so the run went ahead on whatever values were left.
+
+- `silva validate` reports each script-convention offence on its own job (#135): every install command, `../` reference and missing `run` script is one `script` finding with `job` and `file` (`<job>/run.sh`) set, so `--json` callers no longer parse the job out of the message. Human output still groups each convention under one heading and `Fix:` line. `silva run` and the TUI print the same messages as before.
+
+- A job whose `run` script is missing is refused before anything runs (#117), by `silva run`, the TUI and `silva validate` alike, through a new `check_run_scripts` precheck. The script is piped into bash, which reads nothing from a missing file and exits 0, so such a job used to "complete" having done nothing. A missing `pre` or `post` script is still skipped.
+
+- The workflow docs are one spec and one tutorial (#116). `doc/format.md` is normative. It leaves field lists to the schema and states the behaviour the schema cannot express, each rule tied to the function that implements it. Above all, it documents that an empty `inputs` copies **every** dependency output into `inputs/`, which several workflows rely on and no doc mentioned. `doc/tutorial.md` builds and runs a two-job workflow from an empty folder.
+
+  They replace three copies that disagreed with the code and with each other: `doc/workflows.md`, the workflow half of `README.md`, and `GET_STARTED.md`. These still documented `@job.toml`, `depends_on` and `docker_image`, a promised alphabetical job order, and `job.toml` examples without the required `description`. `readme.md`, which differed from `README.md` only in case, is merged into it. Behaviour the spec marks as unspecified or TUI-divergent is filed as #128, #129 and #130.
+
+### Fixed
+
+- The TUI stages a job's inputs exactly as `silva run` does (#129): dependency outputs land in `<job>/inputs/` instead of the job folder, and `input_files/` is copied into each dependency-free job's `inputs/`, which the TUI never did although its precheck required the folder. Both now call the same staging code, so they can't drift again. A script reading `inputs/…` used to work only headless; workflow-007, for one, failed in the TUI at its second job. The staging code returns its messages instead of printing them, so the TUI shows them in the job's log, and `silva run` prints exactly what it did before.
+
+- A job that fails stays failed in the TUI (#140). Container cleanup after a failure sent its log lines as "completed" under that job, and the TUI shows the last status it received, so the failed job turned ✓. Plain `silva run` output printed `[job] Completed` after `[job] Failed` for the same reason; those lines are gone, and `--json` output is unchanged. Starting a run in the TUI now resets every job to idle, so a failure from the previous run doesn't carry over.
+
+- `silva run` and the TUI now read `schema_version` (#137), as `silva validate` already did. A workflow written for a newer major format (`2.0`) or with a malformed version is refused before any image is pulled or container started, with the same message `validate` gives; a newer minor (`1.1`) runs with a note, sent as a `note` event under `--json`. Previously both run paths ignored the field, so a `2.0` workflow ran on a 1.x silva without a word. The check comes first, ahead of the dependency sort and the prechecks, because a newer major may change what they mean.
+
+- Every declared param reaches every run, and `silva run` and the TUI give a job the same values (#118). The merge happens once, inside the executor, per key: the workflow's default, then `global_params.json`, then the job's default, then `params.json`. A param a job redeclares belongs to that job, so a global value does not override it, as headless runs already behaved. Previously a workflow-level default was never used, a `params.json` naming some keys dropped the defaults of the others, and the TUI used no defaults at all. On collab-workflows, nine workflows declare workflow params that no file sets, and the TUI ran 86 jobs without their defaults. Undeclared keys still pass through. `job_config` gains `params::with_defaults`, which the params editor now shares, and silva's unused `JobFolder::ensure_default_params` is deleted.
+
+- Jobs with no dependencies between them now run in folder-name order every time (#128). The topological sort seeded its queue from a `HashMap`, so a workflow without `[dependencies]` ran in a different order on each run. 20 runs of `silva validate` on a five-job folder used to give 17 different orders; they now give one. The TUI's copy of the sort, with its own error wording, is deleted, so `silva run`, the TUI and `validate` share one implementation.
+
+- A `.chiral/workflow.toml` that does not parse now fails `silva run` and the TUI with the parse error (#117). It used to be swallowed into an empty workflow, so the run went ahead with no dependencies and jobs in the wrong order. A missing file still means "no dependencies".
+
 ## [0.5.15]
 
 ### Removed

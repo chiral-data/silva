@@ -1,0 +1,12 @@
+name = "01-limited"
+description = "d"
+
+[container]
+image = "ubuntu:latest"
+
+[scripts]
+run = "run.sh"
+
+[resources]
+cpus = 0.5
+memory = "64m"
