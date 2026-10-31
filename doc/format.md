@@ -90,8 +90,6 @@ Three conventions are enforced before anything runs, by `silva run`, the TUI and
 
 Jobs with no dependencies instead receive the contents of the workflow's `input_files/`, also in their `inputs/` folder (`copy_input_files_to_dependency_free_jobs`).
 
-In the TUI, inputs land in the job folder itself rather than in `inputs/`, and `input_files/` is not copied ([#129](https://github.com/chiral-data/silva/issues/129)).
-
 **Out of a job, after it succeeds** (`collect_output_files`):
 
 - `outputs` is optional. Each entry is a bash glob evaluated in the job folder, and every match is copied into the job's `outputs/` folder. Paths are flattened: `results/a.json` becomes `outputs/a.json`, and same-named files overwrite each other ([#130](https://github.com/chiral-data/silva/issues/130)).

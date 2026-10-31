@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The TUI stages a job's inputs exactly as `silva run` does (#129): dependency outputs land in `<job>/inputs/` instead of the job folder, and `input_files/` is copied into each dependency-free job's `inputs/`, which the TUI never did although its precheck required the folder. Both now call the same staging code, so they can't drift again. A script reading `inputs/…` used to work only headless; workflow-007, for one, failed in the TUI at its second job. The staging code returns its messages instead of printing them, so the TUI shows them in the job's log, and `silva run` prints exactly what it did before.
+
 - A job that fails stays failed in the TUI (#140). Container cleanup after a failure sent its log lines as "completed" under that job, and the TUI shows the last status it received, so the failed job turned ✓. Plain `silva run` output printed `[job] Completed` after `[job] Failed` for the same reason; those lines are gone, and `--json` output is unchanged. Starting a run in the TUI now resets every job to idle, so a failure from the previous run doesn't carry over.
 
 - `silva run` and the TUI now read `schema_version` (#137), as `silva validate` already did. A workflow written for a newer major format (`2.0`) or with a malformed version is refused before any image is pulled or container started, with the same message `validate` gives; a newer minor (`1.1`) runs with a note, sent as a `note` event under `--json`. Previously both run paths ignored the field, so a `2.0` workflow ran on a 1.x silva without a word. The check comes first, ahead of the dependency sort and the prechecks, because a newer major may change what they mean.
