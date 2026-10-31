@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0]
+
 ### Added
 
 - `[resources]` on `job.toml` (#121), the last field of format 1.1: `cpus` (may be fractional), `memory` (`k`, `m` or `g`, with no swap on top) and `gpu` (`"auto"`, `"required"` or `"none"`). Limits are set on the job's container, and silva inspects each new container and fails the job if Docker didn't apply a `cpus` or `memory` limit. A dropped swap cap is logged instead, because the memory limit still holds. Containers are now reused per image *and* resources, so jobs that declare nothing share a container exactly as before. `gpu = "required"` passes the GPU through even for an image without CUDA/ROCm markers, and a host with no GPU runtime refuses the workflow before the first job. `none` never passes it through. Malformed values fail `job.toml` parsing. `silva validate` notes a `[resources]` block in a workflow that doesn't declare `schema_version = "1.1"`, and notes a leftover `use_gpu`, which is still ignored.
